@@ -34,15 +34,9 @@ final class VisionIOSUITests: XCTestCase {
 
         let addressField = app.textFields["addressBarField"]
         XCTAssertTrue(addressField.waitForExistence(timeout: 5))
-        addressField.tap()
-        addressField.typeText("example.com\n")
+        navigate(app: app, addressField: addressField, to: "example.com")
 
-        // WKWebView navigation is real and async (a genuine network load in
-        // the simulator) — wait for the address bar to reflect the resolved
-        // destination rather than asserting immediately.
-        let predicate = NSPredicate(format: "value == %@", "https://example.com")
-        let expectation = XCTNSPredicateExpectation(predicate: predicate, object: addressField)
-        XCTAssertEqual(XCTWaiter().wait(for: [expectation], timeout: 15), .completed)
+        assertAddressBarEventuallyShows(addressField, "https://example.com", in: self)
     }
 
     /// The real persistence proof this phase's verification plan calls
@@ -62,12 +56,8 @@ final class VisionIOSUITests: XCTestCase {
 
         let addressField = app.textFields["addressBarField"]
         XCTAssertTrue(addressField.waitForExistence(timeout: 5))
-        addressField.tap()
-        addressField.typeText("example.com\n")
-
-        let loadedPredicate = NSPredicate(format: "value == %@", testURL)
-        let loadedExpectation = XCTNSPredicateExpectation(predicate: loadedPredicate, object: addressField)
-        XCTAssertEqual(XCTWaiter().wait(for: [loadedExpectation], timeout: 15), .completed)
+        navigate(app: app, addressField: addressField, to: "example.com")
+        assertAddressBarEventuallyShows(addressField, testURL, in: self)
 
         let bookmarkButton = app.buttons["bookmarkButton"]
         XCTAssertTrue(bookmarkButton.waitForExistence(timeout: 5))
@@ -92,6 +82,54 @@ final class VisionIOSUITests: XCTestCase {
         XCTAssertTrue(
             bookmarkRow.waitForExistence(timeout: 5),
             "the bookmark saved before termination should be read back from the real, persisted database on relaunch"
+        )
+    }
+
+    // MARK: - Helpers
+
+    /// Types into the address bar and submits it. A first CI run revealed a
+    /// real, well-documented XCUITest gotcha: embedding "\n" inside
+    /// `typeText` doesn't reliably trigger a SwiftUI TextField's submit
+    /// action the way an explicit on-screen "Return"/"Go" key tap does —
+    /// so this taps the real keyboard key instead of relying on an escape
+    /// character, with a fallback to the embedded "\n" only if no such key
+    /// is found (keeps this from silently doing nothing on an unexpected
+    /// keyboard layout).
+    private func navigate(app: XCUIApplication, addressField: XCUIElement, to text: String) {
+        addressField.tap()
+        addressField.typeText(text)
+
+        let returnKey = app.keyboards.buttons["Return"]
+        let goKey = app.keyboards.buttons["Go"]
+        if returnKey.waitForExistence(timeout: 3) {
+            returnKey.tap()
+        } else if goKey.exists {
+            goKey.tap()
+        } else {
+            addressField.typeText("\n")
+        }
+    }
+
+    /// Waits for the address bar to show the expected resolved URL, and on
+    /// failure attaches a screenshot plus the field's actual value to the
+    /// test's own failure output — real diagnostics for the next run
+    /// instead of a bare timeout with no further information.
+    private func assertAddressBarEventuallyShows(_ addressField: XCUIElement, _ expected: String, in testCase: XCTestCase) {
+        let predicate = NSPredicate(format: "value == %@", expected)
+        let expectation = XCTNSPredicateExpectation(predicate: predicate, object: addressField)
+        let result = XCTWaiter().wait(for: [expectation], timeout: 15)
+
+        if result != .completed {
+            let screenshot = XCUIScreen.main.screenshot()
+            let attachment = XCTAttachment(screenshot: screenshot)
+            attachment.name = "address-bar-timeout"
+            attachment.lifetime = .keepAlways
+            testCase.add(attachment)
+        }
+
+        XCTAssertEqual(
+            result, .completed,
+            "expected address bar to show \"\(expected)\" but it read \"\(addressField.value ?? "<nil>")\" after 15s"
         )
     }
 }
