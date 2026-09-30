@@ -34,6 +34,17 @@ jobs:
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
+      - name: Select the newest available Xcode
+        # XcodeGen generates a project in whatever format its own version
+        # supports, which can be newer than this runner's *default* Xcode
+        # (a real failure hit here: "future Xcode project file format (77)"
+        # against the default Xcode 15.4) — explicitly picking the newest
+        # installed Xcode avoids that mismatch instead of guessing a fixed
+        # version number that will drift as GitHub updates its images.
+        run: |
+          LATEST_XCODE=$(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -1)
+          echo "Selecting: $LATEST_XCODE"
+          sudo xcode-select -s "$LATEST_XCODE/Contents/Developer"
       - name: Show toolchain
         run: |
           xcode-select -p
