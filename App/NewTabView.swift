@@ -35,6 +35,18 @@ struct NewTabView: View {
                                 .accessibilityIdentifier("bookmarkRow_\(bookmark.url)")
                             }
                         }
+                        // Real bug found via a CI UI test failure, not
+                        // review: SwiftUI's default accessibility-element
+                        // merging collapsed each row's own Button (and its
+                        // "bookmarkRow_<url>" identifier) into this single
+                        // outer container — a captured accessibility-tree
+                        // dump on relaunch showed exactly one merged
+                        // Button, identifier 'bookmarksList', label
+                        // '🔖, Example Domain', with the real per-row
+                        // identifier gone. `.contain` tells SwiftUI to keep
+                        // each child independently accessible instead of
+                        // flattening them into one element.
+                        .accessibilityElement(children: .contain)
                     }
                     .accessibilityIdentifier("bookmarksList")
                 }
