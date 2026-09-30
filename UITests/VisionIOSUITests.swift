@@ -85,9 +85,13 @@ final class VisionIOSUITests: XCTestCase {
         // real bookmarks row, sourced from BookmarkStore.list()) should be
         // showing again.
         let bookmarkRow = relaunched.buttons[bookmarkRowIdentifier]
+        if !bookmarkRow.waitForExistence(timeout: 8) {
+            attachDiagnostics(app: relaunched, name: "bookmark-not-found-after-relaunch")
+        }
         XCTAssertTrue(
-            bookmarkRow.waitForExistence(timeout: 5),
-            "the bookmark saved before termination should be read back from the real, persisted database on relaunch"
+            bookmarkRow.exists,
+            "the bookmark saved before termination should be read back from the real, persisted database on relaunch " +
+            "(empty-state showing instead: \(relaunched.otherElements["emptyBookmarksState"].exists))"
         )
     }
 
@@ -126,16 +130,30 @@ final class VisionIOSUITests: XCTestCase {
         let result = XCTWaiter().wait(for: [expectation], timeout: 15)
 
         if result != .completed {
-            let screenshot = XCUIScreen.main.screenshot()
-            let attachment = XCTAttachment(screenshot: screenshot)
-            attachment.name = "address-bar-timeout"
-            attachment.lifetime = .keepAlways
-            testCase.add(attachment)
+            attachDiagnostics(app: XCUIApplication(), name: "address-bar-timeout")
         }
 
         XCTAssertEqual(
             result, .completed,
             "expected address bar to show \"\(expected)\" but it read \"\(addressField.value ?? "<nil>")\" after 15s"
         )
+    }
+
+    /// Attaches a screenshot AND the full real accessibility tree
+    /// (`app.debugDescription`, plain text — no image/video decoding needed
+    /// to read it back afterward) to the test's failure output. A first CI
+    /// failure with only a screenshot attached turned out to need more than
+    /// that to diagnose without guessing, so this captures both up front.
+    private func attachDiagnostics(app: XCUIApplication, name: String) {
+        let screenshot = XCUIScreen.main.screenshot()
+        let screenshotAttachment = XCTAttachment(screenshot: screenshot)
+        screenshotAttachment.name = "\(name)-screenshot"
+        screenshotAttachment.lifetime = .keepAlways
+        add(screenshotAttachment)
+
+        let hierarchyAttachment = XCTAttachment(string: app.debugDescription)
+        hierarchyAttachment.name = "\(name)-hierarchy"
+        hierarchyAttachment.lifetime = .keepAlways
+        add(hierarchyAttachment)
     }
 }
