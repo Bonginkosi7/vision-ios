@@ -56,17 +56,21 @@ jobs:
       - name: Pick an available iPhone simulator
         id: sim
         run: |
-          # Real bug caught here on the first CI run: a `simctl list`
-          # device line has two parenthetical groups — the UDID, then the
-          # boot state, e.g. "iPhone 15 Pro (E3BB...) (Shutdown)" — and a
-          # greedy `s/^ *(.*) \(.*/\1/` captured the UDID along with the
-          # name instead of stopping at the first "(". Fixed by trimming
-          # from the first " (" onward instead.
-          DEVICE=$(xcrun simctl list devices available \
-            | grep -m1 -E "iPhone (1[4-9]|[2-9][0-9])" \
-            | sed -E 's/^ *//; s/ \(.*//')
-          echo "Picked simulator: $DEVICE"
-          echo "device=$DEVICE" >> "$GITHUB_OUTPUT"
+          # Two real bugs caught here across the first two CI runs:
+          # (1) a greedy sed capture picked up the device's UDID along with
+          #     its name (two parenthetical groups on one `simctl` line —
+          #     UDID, then boot state) — fixed by trimming at the first "(".
+          # (2) even with the name fixed, `name:X,OS:latest` still failed —
+          #     this runner's "latest" simulator runtime isn't necessarily
+          #     paired with every device silhouette (e.g. "iPhone 15 Pro"
+          #     had no OS:latest entry, only specific older ones). Targeting
+          #     one exact, confirmed-available simulator by UDID instead of
+          #     name+OS sidesteps the pairing question entirely.
+          LINE=$(xcrun simctl list devices available | grep -E "iPhone (1[4-9]|[2-9][0-9])" | tail -1)
+          echo "Matched device line: $LINE"
+          UDID=$(echo "$LINE" | grep -oE '[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}')
+          echo "Picked UDID: $UDID"
+          echo "udid=$UDID" >> "$GITHUB_OUTPUT"
       - name: Resolve Swift Package dependencies
         run: |
           xcodebuild -resolvePackageDependencies \
@@ -77,4 +81,4 @@ jobs:
           xcodebuild build \
             -project VisionIOS.xcodeproj \
             -scheme VisionIOS \
-            -destination "platform=iOS Simulator,name=${{ steps.sim.outputs.device }}"
+            -destination "platform=iOS Simulator,id=${{ steps.sim.outputs.udid }}"
