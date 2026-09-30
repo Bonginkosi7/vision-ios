@@ -39,11 +39,13 @@ struct MainBrowserView: View {
                 Image(systemName: "chevron.left")
             }
             .disabled(!(tabManager.activeTab?.webView.canGoBack ?? false))
+            .accessibilityIdentifier("backButton")
 
             Button(action: goForward) {
                 Image(systemName: "chevron.right")
             }
             .disabled(!(tabManager.activeTab?.webView.canGoForward ?? false))
+            .accessibilityIdentifier("forwardButton")
 
             TextField("Search or enter address", text: $addressText, onCommit: navigateFromAddressBar)
                 .textFieldStyle(.plain)
@@ -51,15 +53,19 @@ struct MainBrowserView: View {
                 .disableAutocorrection(true)
                 .padding(.horizontal, 12).padding(.vertical, 8)
                 .background(RoundedRectangle(cornerRadius: 10).fill(DesignSystem.bgCard))
+                .accessibilityIdentifier("addressBarField")
 
             Button(action: toggleBookmark) {
                 Image(systemName: isBookmarked ? "star.fill" : "star")
             }
+            .accessibilityIdentifier("bookmarkButton")
+            .accessibilityLabel(isBookmarked ? "Remove bookmark" : "Add bookmark")
 
             Text("\(tabManager.tabs.count)")
                 .font(.system(size: 12, weight: .bold))
                 .frame(width: 24, height: 24)
                 .overlay(RoundedRectangle(cornerRadius: 6).stroke(DesignSystem.borderCard, lineWidth: 1))
+                .accessibilityIdentifier("tabCountLabel")
         }
         .foregroundStyle(.white)
         .padding(8)

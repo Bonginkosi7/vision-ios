@@ -2,11 +2,11 @@ name: iOS CI
 
 # Real verification for vision-ios, run on GitHub's macOS runners (which
 # ship with real, full Xcode) — the local dev machine only has Command Line
-# Tools, so this workflow is the first place any of this code actually
-# gets compiled against the real iOS SDK. See README.md for the local
-# verification that *was* possible (VisionCore, verified via a standalone
-# swiftc harness) and what could not be (everything in App/, until this
-# runs green).
+# Tools, so this workflow is the only place any of this code gets compiled
+# against the real iOS SDK, and (via the UITests job) the only place it's
+# actually launched and driven in a booted simulator. A green `xcodebuild
+# build` alone only proves the code is valid, not that it behaves
+# correctly — the UITests job closes that gap for real. See README.md.
 
 on:
   push:
@@ -29,8 +29,8 @@ jobs:
       - name: swift test
         run: swift test --verbose
 
-  ios-app-build:
-    name: Build the full iOS app for the Simulator
+  ios-app-uitests:
+    name: Build + real UI tests in a booted Simulator
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
@@ -76,9 +76,27 @@ jobs:
           xcodebuild -resolvePackageDependencies \
             -project VisionIOS.xcodeproj \
             -scheme VisionIOS
-      - name: Build for iOS Simulator
+      - name: Boot the simulator
         run: |
-          xcodebuild build \
+          xcrun simctl boot "${{ steps.sim.outputs.udid }}" || true
+          xcrun simctl bootstatus "${{ steps.sim.outputs.udid }}" -b
+      - name: Build and run real UI tests in the Simulator
+        # This is the actual behavioral proof, not just a compile check —
+        # the app is installed on a real booted simulator and driven:
+        # types a real URL, waits for real WKWebView navigation to
+        # complete, taps the bookmark star, force-terminates the process,
+        # relaunches, and confirms the bookmark survived (VisionIOSUITests
+        # in UITests/).
+        run: |
+          xcodebuild test \
             -project VisionIOS.xcodeproj \
             -scheme VisionIOS \
-            -destination "platform=iOS Simulator,id=${{ steps.sim.outputs.udid }}"
+            -destination "platform=iOS Simulator,id=${{ steps.sim.outputs.udid }}" \
+            -resultBundlePath TestResults.xcresult
+      - name: Upload test result bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-test-results
+          path: TestResults.xcresult
+          retention-days: 14

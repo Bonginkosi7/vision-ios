@@ -25,3 +25,31 @@ targets:
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         MARKETING_VERSION: "0.1.0"
         CURRENT_PROJECT_VERSION: "1"
+
+  # Real behavioral verification — launches the actual built app in a
+  # booted simulator and drives it (navigate, bookmark, relaunch, confirm
+  # persistence), closing the gap a plain `xcodebuild build` can't:
+  # compiling proves the code is valid, not that it behaves correctly.
+  VisionIOSUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    deploymentTarget: "16.0"
+    sources:
+      - path: UITests
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+    dependencies:
+      - target: VisionIOS
+
+schemes:
+  VisionIOS:
+    build:
+      targets:
+        VisionIOS: all
+        VisionIOSUITests: [test]
+    test:
+      targets:
+        - VisionIOSUITests
+    run:
+      config: Debug

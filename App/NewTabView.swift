@@ -24,6 +24,7 @@ struct NewTabView: View {
                         ctaText: "Got it",
                         onCta: {}
                     )
+                    .accessibilityIdentifier("emptyBookmarksState")
                 } else {
                     DesignSystem.card {
                         VStack(alignment: .leading, spacing: 0) {
@@ -31,9 +32,11 @@ struct NewTabView: View {
                                 Button(action: { onNavigate(bookmark.url) }) {
                                     DesignSystem.statRow(emoji: "🔖", label: bookmark.title, value: "")
                                 }
+                                .accessibilityIdentifier("bookmarkRow_\(bookmark.url)")
                             }
                         }
                     }
+                    .accessibilityIdentifier("bookmarksList")
                 }
             }
             .padding(20)
