@@ -56,9 +56,15 @@ jobs:
       - name: Pick an available iPhone simulator
         id: sim
         run: |
+          # Real bug caught here on the first CI run: a `simctl list`
+          # device line has two parenthetical groups — the UDID, then the
+          # boot state, e.g. "iPhone 15 Pro (E3BB...) (Shutdown)" — and a
+          # greedy `s/^ *(.*) \(.*/\1/` captured the UDID along with the
+          # name instead of stopping at the first "(". Fixed by trimming
+          # from the first " (" onward instead.
           DEVICE=$(xcrun simctl list devices available \
             | grep -m1 -E "iPhone (1[4-9]|[2-9][0-9])" \
-            | sed -E 's/^ *(.*) \(.*/\1/')
+            | sed -E 's/^ *//; s/ \(.*//')
           echo "Picked simulator: $DEVICE"
           echo "device=$DEVICE" >> "$GITHUB_OUTPUT"
       - name: Resolve Swift Package dependencies
