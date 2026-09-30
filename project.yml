@@ -1,0 +1,27 @@
+name: VisionIOS
+options:
+  bundleIdPrefix: com.vision
+packages:
+  VisionCore:
+    path: .
+  GRDB:
+    url: https://github.com/groue/GRDB.swift
+    from: "6.0.0"
+targets:
+  VisionIOS:
+    type: application
+    platform: iOS
+    deploymentTarget: "16.0"
+    sources:
+      - path: App
+    dependencies:
+      - package: VisionCore
+      - package: GRDB
+        product: GRDB
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.vision.browser
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
