@@ -74,17 +74,22 @@ struct MainBrowserView: View {
     @ViewBuilder
     private var content: some View {
         if let tab = tabManager.activeTab {
-            if tab.isNewTab {
-                NewTabView(bookmarkStore: bookmarkStore) { destination in
-                    tabManager.navigateActiveTab(to: destination)
-                    syncAddressBar()
-                }
-            } else {
-                WebViewRepresentable(tab: tab)
-                    .onReceive(tab.$url) { _ in
-                        syncAddressBar()
-                    }
+            // A real bug caught live in CI: reading `tab.isNewTab`/`tab.url`
+            // off a plain local `let tab` here does NOT establish SwiftUI
+            // observation of BrowserTab's own @Published properties — only
+            // @StateObject/@ObservedObject-wrapped properties declared on a
+            // View struct get that tracking. Without ActiveTabContent
+            // wrapping `tab` in its own @ObservedObject, this view never
+            // re-rendered when navigation flipped isNewTab to false, so the
+            // WKWebView never appeared and the address bar never updated —
+            // caught by a real UI test timing out waiting for real
+            // navigation to reflect on screen, not spotted by reading the
+            // code.
+            ActiveTabContent(tab: tab, bookmarkStore: bookmarkStore) { destination in
+                tabManager.navigateActiveTab(to: destination)
             }
+            .onReceive(tab.$url) { _ in syncAddressBar() }
+            .onReceive(tab.$isNewTab) { _ in refreshBookmarkState() }
         } else {
             ProgressView().tint(.white)
         }
@@ -94,7 +99,13 @@ struct MainBrowserView: View {
         guard !addressText.isEmpty else { return }
         let destination = AddressResolver.resolveDestination(addressText, searchEngineUrl: searchEngineUrl)
         tabManager.navigateActiveTab(to: destination)
-        syncAddressBar()
+        // Deliberately no synchronous syncAddressBar() call here — tab.url
+        // hasn't been updated yet at this point (WKWebView.load() is async;
+        // the real value only lands once the WKNavigationDelegate's
+        // didCommit/didFinish callbacks fire), and calling it now would
+        // just overwrite what the user typed with the tab's still-stale
+        // empty url. The .onReceive(tab.$url) subscription above is what
+        // correctly syncs the address bar once real navigation happens.
     }
 
     private func goBack() { tabManager.activeTab?.webView.goBack() }
@@ -128,6 +139,24 @@ struct MainBrowserView: View {
             // (never claims success on a write that didn't happen) even
             // though it's not yet a great UX. Real error surfacing is a
             // later-phase concern, not invented here.
+        }
+    }
+}
+
+/// Wraps the active tab as a real @ObservedObject so SwiftUI actually
+/// observes BrowserTab's own @Published isNewTab/url changes, instead of
+/// silently missing them the way reading a plain local `let tab` inside a
+/// parent view's body does.
+private struct ActiveTabContent: View {
+    @ObservedObject var tab: BrowserTab
+    let bookmarkStore: BookmarkStore
+    let onNavigate: (String) -> Void
+
+    var body: some View {
+        if tab.isNewTab {
+            NewTabView(bookmarkStore: bookmarkStore, onNavigate: onNavigate)
+        } else {
+            WebViewRepresentable(tab: tab)
         }
     }
 }
