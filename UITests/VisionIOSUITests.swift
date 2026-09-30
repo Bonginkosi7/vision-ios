@@ -36,7 +36,11 @@ final class VisionIOSUITests: XCTestCase {
         XCTAssertTrue(addressField.waitForExistence(timeout: 5))
         navigate(app: app, addressField: addressField, to: "example.com")
 
-        assertAddressBarEventuallyShows(addressField, "https://example.com", in: self)
+        // A real fact confirmed from an actual failed run's captured
+        // element dump, not assumed: WKWebView canonicalizes a bare-domain
+        // root request to include the trailing slash ("https://example.com/"),
+        // so that's the real value to expect here, not the string as typed.
+        assertAddressBarEventuallyShows(addressField, "https://example.com/", in: self)
     }
 
     /// The real persistence proof this phase's verification plan calls
@@ -45,10 +49,12 @@ final class VisionIOSUITests: XCTestCase {
     /// GRDB/SQLite and survived a real process death, not just an
     /// in-memory flag.
     func test_bookmarkingAPage_survivesAppTermination() {
-        // A URL distinct from the other tests' so this assertion never
-        // depends on the bookmark store being empty beforehand or on test
-        // execution order.
-        let testURL = "https://example.com"
+        // Real value confirmed from a captured element dump on a prior
+        // failed run: WKWebView canonicalizes example.com's root path to
+        // include a trailing slash, and BrowserTab.url is set directly from
+        // webView.url?.absoluteString — so that's the real URL that ends
+        // up both in the address bar and in the bookmark row's identifier.
+        let testURL = "https://example.com/"
         let bookmarkRowIdentifier = "bookmarkRow_\(testURL)"
 
         let app = XCUIApplication()
