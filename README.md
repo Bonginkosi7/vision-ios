@@ -7,65 +7,83 @@ equivalent, disclose anything that can't be honestly replicated rather than
 fake it. See `/Users/user/.claude/plans/encapsulated-inventing-scone.md`
 for the full architecture/roadmap this phase follows.
 
-## Real, current status — read this before assuming anything below "works"
+Repo: https://github.com/Bonginkosi7/vision-ios
 
-**This machine does not have Xcode installed** — only Command Line Tools
-(`xcode-select -p` → `/Library/Developer/CommandLineTools`). Full Xcode
-needs the user's own Apple ID to install, so it hasn't been possible to do
-that from here. Two direct consequences:
+## Real, current status
 
-1. **The `App/` folder (SwiftUI + UIKit + WebKit + GRDB) has never been
-   compiled.** It's a faithful, deliberate port of `MainActivity.kt`'s
-   Phase 1 slice (see file-by-file notes below) but the iOS SDK these files
-   need (SwiftUI's iOS target, `UIViewRepresentable`, `WKWebView`, GRDB via
-   SPM) is bundled with full Xcode, not Command Line Tools — there is
-   currently no way to build or run it on this machine. Treat every file in
-   `App/` as **unverified** until it's actually built and run in Xcode.
+**This machine still doesn't have Xcode installed** — only Command Line
+Tools. That blocked all local verification, so instead of leaving `App/`
+(SwiftUI + UIKit + WebKit + GRDB) as dead, unverified code, CI does the
+verifying: **GitHub Actions** (`.github/workflows/ios.yml`, real Xcode on
+GitHub's own macOS runners, triggered on every push to `main`).
 
-2. **`swift build` / `swift test` (Swift Package Manager) don't work here
-   either**, even for `Sources/VisionCore` — which has zero platform
-   dependencies (no SwiftUI/UIKit/WebKit/GRDB, just `Foundation`). SPM
-   internally calls `xcrun --sdk macosx --show-sdk-platform-path`, which
-   fails under a Command-Line-Tools-only install in this environment:
-   ```
-   xcrun: error: unable to lookup item 'PlatformPath' from command line tools installation
-   ```
+### What CI has actually confirmed, as of run [`36685332109`](https://github.com/Bonginkosi7/vision-ios/actions/runs/36685332109)
 
-## What's actually real-verified right now, without Xcode
+Both real, both green:
 
-Bare `swiftc` (not SPM) does work here. So rather than leave
-`Sources/VisionCore` completely unverified too, its two files —
+1. **`swift test` passes for real** (not just the local standalone-harness
+   run described below) — all cases in `Tests/VisionCoreTests` ran under
+   genuine Xcode/XCTest and passed.
+2. **The full `App/` target — `xcodebuild build`, real iOS SDK, real iOS
+   Simulator destination — compiles successfully.** Every file
+   (`MainBrowserView`, `WebViewRepresentable`, `TabManager`, `BrowserTab`,
+   `AppDatabase`/`BookmarkStore` via GRDB, `NewTabView`, `DesignSystem`,
+   `VisionIOSApp`) type-checks and links against real `SwiftUI`, `UIKit`,
+   `WebKit`, and GRDB (resolved as a real remote Swift Package dependency).
+
+**What this does NOT yet mean**: a successful `xcodebuild build` proves the
+code is valid and links correctly — it does **not** prove the app behaves
+correctly at runtime (does the WKWebView coordinator actually fire, does
+the GRDB migration actually run cleanly on first launch, does tapping the
+bookmark star actually persist). That needs the app actually launched and
+driven in a booted simulator — either locally once Xcode exists, or as a
+follow-up CI job that boots a simulator and runs it (not set up yet). Don't
+report Phase 1 as "done" — only "compiles clean against a real iOS SDK,"
+which is itself a real result, not the finish line.
+
+### Three real bugs this CI loop already caught and fixed
+
+Documented here rather than squashed away, matching this whole project's
+convention of keeping a real debugging trail:
+
+1. **XcodeGen generated a project in a newer format than the runner's
+   default Xcode could read** (`"future Xcode project file format (77)"`
+   against the runner's default Xcode 15.4). Fixed by explicitly selecting
+   the newest Xcode installed on the runner rather than trusting the
+   default.
+2. **A greedy `sed` pattern picked up a simulator's UDID along with its
+   name** — a `simctl list` line has two parenthetical groups (UDID, then
+   boot state), and `s/^ *(.*) \(.*/\1/`'s greedy capture matched past the
+   first one. Fixed by trimming from the first `" ("` onward instead of
+   capturing up to it.
+3. **`{name:X, OS:latest}` still failed to match** even with the name
+   fixed — this runner's "latest" simulator runtime isn't paired with
+   every device silhouette (no `OS:latest` entry existed for "iPhone 15
+   Pro" specifically). Fixed by targeting one confirmed-available
+   simulator directly by UDID instead of a name+OS pairing.
+
+## What was verified locally, without Xcode, before CI existed
+
+Bare `swiftc` works here even though Xcode itself doesn't. Before GitHub
+Actions was set up, `Sources/VisionCore`'s two files —
 `AddressResolver.swift` and `TabIndexing.swift`, direct ports of
-`AddressResolver.kt` and `TabIndexing.kt` — were:
+`AddressResolver.kt`/`TabIndexing.kt` — were type-checked directly and
+actually compiled and run against all 21 real test cases ported from
+`AddressResolverTest.kt`/`TabIndexingTest.kt`, via a standalone `main.swift`
+harness (bypassing SPM's own broken toolchain on this machine — `swift
+build`/`swift test` fail here with `xcrun: error: unable to lookup item
+'PlatformPath'`). All 21 passed. Superseded now by the real `swift test`
+CI run above, but kept as a record that even the "no Xcode at all" state
+had a genuine verification path, not a guess.
 
-- **Type-checked** directly: `swiftc -typecheck AddressResolver.swift TabIndexing.swift` → clean, no errors.
-- **Actually compiled and run** against all 21 real test cases ported from
-  `AddressResolverTest.kt` and `TabIndexingTest.kt` (same inputs, same
-  expected outputs), via a standalone `main.swift` harness compiled with
-  `swiftc` directly (bypassing the broken SPM toolchain) — **all 21
-  passed**. This is genuine behavioral verification of the actual ported
-  logic, not a claim — rerun it yourself any time:
-  ```bash
-  cd /tmp && mkdir -p visioncore_verify && cd visioncore_verify
-  # (recreate main.swift from git history / ask Claude to regenerate it)
-  swiftc /Users/user/Downloads/vision-ios/Sources/VisionCore/AddressResolver.swift \
-         /Users/user/Downloads/vision-ios/Sources/VisionCore/TabIndexing.swift \
-         main.swift -o verify_run && ./verify_run
-  ```
-- The one disclosed real behavioral difference found: `resolveDestination`
-  percent-encodes a space as `%20` (Swift's `addingPercentEncoding`) where
-  the Kotlin/Java port uses `+` (`URLEncoder`) — different literal bytes,
-  identical resolved destination for every real search engine. Noted in
-  `AddressResolver.swift`'s doc comment, not silently assumed identical.
+The one disclosed real behavioral difference found along the way:
+`resolveDestination` percent-encodes a space as `%20` (Swift's
+`addingPercentEncoding`) where the Kotlin/Java port uses `+`
+(`URLEncoder`) — different literal bytes, identical resolved destination
+for every real search engine. Noted in `AddressResolver.swift`'s doc
+comment.
 
-`Tests/VisionCoreTests/*.swift` hold the same 21 cases as real `XCTest`
-cases (mirroring `AddressResolverTest.kt`/`TabIndexingTest.kt` exactly) —
-they're written and ready, but **have not themselves been run**, since
-`swift test` is what's broken here. Once Xcode exists, run them for real
-(`swift test` or Xcode's Test navigator) as the first verification step —
-don't assume the standalone-harness pass above stands in for it forever.
-
-## What's written but NOT verified (`App/`)
+## File-by-file (`App/`)
 
 Direct ports of `MainActivity.kt`'s Phase 1 slice, plus `DesignSystem.kt`:
 
@@ -78,8 +96,9 @@ Direct ports of `MainActivity.kt`'s Phase 1 slice, plus `DesignSystem.kt`:
 - `NewTabView.swift` — real bookmarks row only; no fake shortcuts/widgets yet
 - `DesignSystem.swift` — same component list and color tokens as `DesignSystem.kt`, ported to `@ViewBuilder` functions; drawable XML collapses into inline SwiftUI modifiers (disclosed simplification, noted in-file)
 
-None of this has run in a simulator. Do not report any of it as "working"
-until it has.
+`project.yml` (XcodeGen spec) generates the actual `.xcodeproj` in CI —
+there's no hand-crafted `.pbxproj` in this repo (too fragile to write
+blind without a way to verify it opens), it's regenerated fresh every run.
 
 ## Explicitly NOT built yet (disclosed scope trims, not oversights)
 
@@ -90,11 +109,16 @@ Plan, Paper Review, Rewrite), Rewards/Redeem, Advisor, VISION Ready, Help,
 and the overflow menu. Sequencing for all of these is in the build plan's
 Phase 2–12 roadmap.
 
-## Next steps once Xcode is actually installed and working
+## Next steps
 
-1. Confirm with `xcodebuild -version` — should print a real version, not the Command Line Tools error.
-2. Create a new Xcode iOS App project named `VisionIOS`, bundle ID `com.vision.browser`, SwiftUI lifecycle, iOS 16.0 deployment target.
-3. Add this repo's `Package.swift` as a local Swift package dependency (for `VisionCore`), and add GRDB.swift via File → Add Package Dependencies → `https://github.com/groue/GRDB.swift`.
-4. Add every file under `App/` to the new app target.
-5. Run `swift test` for real for the first time — confirm the 21 cases still pass under the real toolchain, not just the standalone harness above.
-6. Build and run in the iOS Simulator (`mcp__Claude_Code_iOS_Simulator__*` tools) — live-verify: type a URL and confirm navigation, tap the bookmark star, switch/close tabs, force-quit and relaunch and confirm the bookmark persisted. Only after this passes does Phase 1 actually count as done.
+**Once local Xcode exists**: `xcodegen generate`, open `VisionIOS.xcodeproj`,
+build and run in the Simulator, live-verify the real behaviors CI can't
+check yet (type a URL and confirm navigation, tap the bookmark star,
+switch/close tabs, force-quit and relaunch and confirm the bookmark
+persisted).
+
+**Without local Xcode (current path)**: extend `.github/workflows/ios.yml`
+with a job that boots a simulator, installs the built `.app`, and drives it
+— either via `xcodebuild test` against a real `XCUITest` target (not
+written yet) or a scripted `simctl launch`/`simctl io screenshot` sequence
+— so the *behavioral* gap above gets closed by CI too, not just the build.
