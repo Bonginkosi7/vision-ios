@@ -24,10 +24,13 @@ confirmed the full test suite green, including force-terminating the app
 and relaunching to prove a bookmark survived in a real, persisted
 GRDB/SQLite database.
 
-**Phase 2** (History, Downloads, Offline Library, Private Browsing) is
-implemented and pushed; its own CI run is the next thing to watch (see
-`gh run list` or the Actions tab) — don't treat it as verified until that
-run is actually green, same discipline as Phase 1.
+**Phase 2** (History, Downloads, Offline Library, Private Browsing) is also
+done — run [`36846421828`](https://github.com/Bonginkosi7/vision-ios/actions/runs/36846421828)
+passed green on the first try (all 6 real UI tests, all 21 VisionCore unit
+tests), no fix-and-repush cycle needed this time — applying Phase 1's own
+lessons (real `@ObservedObject` reactivity, real keyboard taps, `List`-based
+rows instead of a merge-prone VStack-of-Buttons) preemptively instead of
+rediscovering them.
 
 ## Phase 2: History, Downloads, Offline Library, Private Browsing
 
