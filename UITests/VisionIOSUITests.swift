@@ -108,7 +108,7 @@ final class VisionIOSUITests: XCTestCase {
         navigate(app: app, addressField: addressField, to: "example.com")
         assertAddressBarEventuallyShows(addressField, "https://example.com/", in: self)
 
-        app.buttons["historyButton"].tap()
+        openMenu(app, item: "menu_history")
         let historyURLText = app.staticTexts.matching(NSPredicate(format: "label == %@", "https://example.com/")).firstMatch
         XCTAssertTrue(historyURLText.waitForExistence(timeout: 5), "the real visited URL should show up in History")
     }
@@ -128,15 +128,13 @@ final class VisionIOSUITests: XCTestCase {
         navigate(app: app, addressField: addressField, to: "example.com")
         assertAddressBarEventuallyShows(addressField, "https://example.com/", in: self)
 
-        let saveButton = app.buttons["saveOfflineButton"]
-        XCTAssertTrue(saveButton.waitForExistence(timeout: 5))
-        saveButton.tap()
+        openMenu(app, item: "menu_saveOffline")
 
         let okButton = app.alerts["Save for Offline"].buttons["OK"]
         XCTAssertTrue(okButton.waitForExistence(timeout: 10), "expected a real save-confirmation alert")
         okButton.tap()
 
-        app.buttons["offlineLibraryButton"].tap()
+        openMenu(app, item: "menu_offlineLibrary")
         let savedRowText = app.staticTexts.matching(NSPredicate(format: "label == %@", "Example Domain")).firstMatch
         XCTAssertTrue(savedRowText.waitForExistence(timeout: 5), "the saved page should show up in the Offline Library")
         savedRowText.tap()
@@ -157,15 +155,14 @@ final class VisionIOSUITests: XCTestCase {
         let app = XCUIApplication()
         app.launch()
 
-        XCTAssertTrue(app.buttons["newPrivateTabButton"].waitForExistence(timeout: 5))
-        app.buttons["newPrivateTabButton"].tap()
+        openMenu(app, item: "menu_newPrivateTab")
         XCTAssertTrue(app.staticTexts["privateIndicator"].waitForExistence(timeout: 5), "a new private tab should show the real Private indicator")
 
         let addressField = app.textFields["addressBarField"]
         navigate(app: app, addressField: addressField, to: "example.org")
         assertAddressBarEventuallyShows(addressField, "https://example.org/", in: self)
 
-        app.buttons["historyButton"].tap()
+        openMenu(app, item: "menu_history")
         let privateURLText = app.staticTexts.matching(NSPredicate(format: "label == %@", "https://example.org/")).firstMatch
         XCTAssertFalse(privateURLText.exists, "a private tab's real navigation must never be written to History")
     }
@@ -179,8 +176,7 @@ final class VisionIOSUITests: XCTestCase {
         let app = XCUIApplication()
         app.launch()
 
-        XCTAssertTrue(app.buttons["settingsButton"].waitForExistence(timeout: 5))
-        app.buttons["settingsButton"].tap()
+        openMenu(app, item: "menu_settings")
 
         let status = app.staticTexts["anthropicStatus"]
         XCTAssertTrue(status.waitForExistence(timeout: 5))
@@ -212,8 +208,7 @@ final class VisionIOSUITests: XCTestCase {
         let app = XCUIApplication()
         app.launch()
 
-        XCTAssertTrue(app.buttons["settingsButton"].waitForExistence(timeout: 5))
-        app.buttons["settingsButton"].tap()
+        openMenu(app, item: "menu_settings")
 
         let searchEnginePicker = app.buttons["searchEnginePicker"]
         XCTAssertTrue(searchEnginePicker.waitForExistence(timeout: 5))
@@ -249,8 +244,7 @@ final class VisionIOSUITests: XCTestCase {
         let app = XCUIApplication()
         app.launch()
 
-        XCTAssertTrue(app.buttons["rewriteButton"].waitForExistence(timeout: 5))
-        app.buttons["rewriteButton"].tap()
+        openMenu(app, item: "menu_rewrite")
 
         let input = app.textViews["rewriteInput"]
         XCTAssertTrue(input.waitForExistence(timeout: 5))
@@ -278,7 +272,7 @@ final class VisionIOSUITests: XCTestCase {
         let app = XCUIApplication()
         app.launch()
 
-        app.buttons["settingsButton"].tap()
+        openMenu(app, item: "menu_settings")
         let keyInput = app.secureTextFields["anthropicKeyInput"]
         XCTAssertTrue(keyInput.waitForExistence(timeout: 5))
         keyInput.tap()
@@ -290,7 +284,7 @@ final class VisionIOSUITests: XCTestCase {
         XCTAssertEqual(XCTWaiter().wait(for: [configuredExpectation], timeout: 5), .completed)
         app.buttons["settingsDoneButton"].tap()
 
-        app.buttons["rewriteButton"].tap()
+        openMenu(app, item: "menu_rewrite")
         let input = app.textViews["rewriteInput"]
         XCTAssertTrue(input.waitForExistence(timeout: 5))
         input.tap()
@@ -308,7 +302,7 @@ final class VisionIOSUITests: XCTestCase {
 
         // Clean up so a later test (or re-run) doesn't see a key "already configured".
         app.buttons["rewriteDoneButton"].tap()
-        app.buttons["settingsButton"].tap()
+        openMenu(app, item: "menu_settings")
         app.buttons["anthropicClearButton"].tap()
         app.buttons["settingsDoneButton"].tap()
     }
@@ -324,7 +318,7 @@ final class VisionIOSUITests: XCTestCase {
         let app = XCUIApplication()
         app.launch()
 
-        app.buttons["focusButton"].tap()
+        openMenu(app, item: "menu_focus")
 
         let domainField = app.textFields["addBlockedDomainField"]
         XCTAssertTrue(domainField.waitForExistence(timeout: 5))
@@ -374,7 +368,7 @@ final class VisionIOSUITests: XCTestCase {
         )
 
         // Clean up the blocklist so this test is independent of rerun order.
-        app.buttons["focusButton"].tap()
+        openMenu(app, item: "menu_focus")
         let removeButton = app.buttons["removeBlockedDomain_example.com"]
         if removeButton.waitForExistence(timeout: 5) {
             removeButton.tap()
@@ -391,7 +385,7 @@ final class VisionIOSUITests: XCTestCase {
         let app = XCUIApplication()
         app.launch()
 
-        app.buttons["tasksButton"].tap()
+        openMenu(app, item: "menu_tasks")
 
         let field = app.textFields["newTaskField"]
         XCTAssertTrue(field.waitForExistence(timeout: 5))
@@ -442,7 +436,7 @@ final class VisionIOSUITests: XCTestCase {
         let app = XCUIApplication()
         app.launch()
 
-        app.buttons["advisorButton"].tap()
+        openMenu(app, item: "menu_advisor")
 
         XCTAssertTrue(app.staticTexts["advisorQuickStatsRow"].waitForExistence(timeout: 5), "expected the real quick-stats row to render")
         XCTAssertTrue(app.staticTexts["advisorNoSuggestion"].waitForExistence(timeout: 5), "a fresh launch hasn't been continuously active for 45 real minutes, so no nudge should show")
@@ -466,15 +460,13 @@ final class VisionIOSUITests: XCTestCase {
         navigate(app: app, addressField: addressField, to: "example.com")
         assertAddressBarEventuallyShows(addressField, "https://example.com/", in: self)
 
-        let saveButton = app.buttons["saveOfflineButton"]
-        XCTAssertTrue(saveButton.waitForExistence(timeout: 5))
-        saveButton.tap()
+        openMenu(app, item: "menu_saveOffline")
 
         let okButton = app.alerts["Save for Offline"].buttons["OK"]
         XCTAssertTrue(okButton.waitForExistence(timeout: 10))
         okButton.tap()
 
-        app.buttons["rewardsButton"].tap()
+        openMenu(app, item: "menu_rewards")
         let earnedNote = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "Saved \"Example Domain\" for offline")).firstMatch
         if !earnedNote.waitForExistence(timeout: 5) {
             attachDiagnostics(app: app, name: "offline-save-reward-not-found")
@@ -490,7 +482,7 @@ final class VisionIOSUITests: XCTestCase {
         let app = XCUIApplication()
         app.launch()
 
-        app.buttons["tasksButton"].tap()
+        openMenu(app, item: "menu_tasks")
         let field = app.textFields["newTaskField"]
         XCTAssertTrue(field.waitForExistence(timeout: 5))
         let taskTitle = "Reward UI test \(UUID().uuidString.prefix(8))"
@@ -503,7 +495,7 @@ final class VisionIOSUITests: XCTestCase {
         row.tap()
         app.navigationBars.buttons["Done"].tap()
 
-        app.buttons["rewardsButton"].tap()
+        openMenu(app, item: "menu_rewards")
         let earnedNote = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "Completed \"\(taskTitle)\"")).firstMatch
         if !earnedNote.waitForExistence(timeout: 5) {
             attachDiagnostics(app: app, name: "task-completed-reward-not-found")
@@ -514,6 +506,20 @@ final class VisionIOSUITests: XCTestCase {
     }
 
     // MARK: - Helpers
+
+    /// Taps the real overflow ("⋮") menu button, then the named menu item
+    /// — every action beyond back/forward/bookmark lives behind this one
+    /// real SwiftUI `Menu` now (see MainBrowserView's own doc comment:
+    /// a flat row of always-visible icon buttons genuinely overflowed the
+    /// screen once Phase 7 added one icon too many, caught by this exact
+    /// test suite failing for real in CI). One helper replaces what used
+    /// to be a direct button tap at every call site below.
+    private func openMenu(_ app: XCUIApplication, item identifier: String) {
+        app.buttons["moreMenuButton"].tap()
+        let menuItem = app.buttons[identifier]
+        XCTAssertTrue(menuItem.waitForExistence(timeout: 5), "expected menu item '\(identifier)' to exist in the overflow menu")
+        menuItem.tap()
+    }
 
     /// Types into the address bar and submits it. A first CI run revealed a
     /// real, well-documented XCUITest gotcha: embedding "\n" inside

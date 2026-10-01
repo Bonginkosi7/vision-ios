@@ -1,12 +1,27 @@
 import SwiftUI
 import VisionCore
 
-/// SwiftUI root of the browser — direct equivalent of MainActivity.kt:
-/// address bar, back/forward, tab count, bookmark toggle, a secondary
-/// toolbar for History/Downloads/Offline Library/Save Offline/New Private
-/// Tab, and the active tab's content (either the shared New Tab page or its
-/// real WKWebView). Focus Mode, permissions, and the overflow menu are
-/// explicitly deferred to later phases (see vision-ios/README.md).
+/// SwiftUI root of the browser — direct equivalent of MainActivity.kt: one
+/// real toolbar row (back/forward/address bar/bookmark/tab count/overflow
+/// menu) plus the active tab's content (either the shared New Tab page or
+/// its real WKWebView).
+///
+/// Everything beyond back/forward/bookmark lives behind a single real
+/// overflow menu button, matching Android's own showOverflowMenu()
+/// architecture exactly — Android's whole toolbar is just Back/Forward/
+/// address bar/Bookmark/tab-count plus one "⋮" button opening a popup with
+/// every other action (History, Downloads, Focus Mode, Rewards, etc.).
+/// iOS Phases 1–7 instead grew a second row of always-visible icon
+/// buttons, which genuinely broke in CI once there were enough of them to
+/// push "History" off the right edge of the screen — a real XCUITest
+/// failure (`kAXErrorCannotComplete` scrolling to an off-screen button),
+/// not a cosmetic one, caught the same way every other real bug in this
+/// project has been: a CI run, not a guess. Fixed here by actually
+/// matching the real source's navigation architecture (a single SwiftUI
+/// `Menu`) instead of patching the symptom (e.g. wrapping the row in a
+/// horizontal ScrollView), since the same overflow would only have
+/// recurred as later phases (Flashcards, Exams, Redeem, Chat, ...) kept
+/// adding more always-visible buttons.
 struct MainBrowserView: View {
     @StateObject private var tabManager = TabManager()
     @StateObject private var bookmarkStore = BookmarkStore()
@@ -35,8 +50,6 @@ struct MainBrowserView: View {
     var body: some View {
         VStack(spacing: 0) {
             addressBar
-            Rectangle().fill(DesignSystem.borderCard).frame(height: 1)
-            secondaryToolbar
             Rectangle().fill(DesignSystem.borderCard).frame(height: 1)
             content
         }
@@ -139,56 +152,6 @@ struct MainBrowserView: View {
                 .frame(width: 24, height: 24)
                 .overlay(RoundedRectangle(cornerRadius: 6).stroke(DesignSystem.borderCard, lineWidth: 1))
                 .accessibilityIdentifier("tabCountLabel")
-        }
-        .foregroundStyle(.white)
-        .padding(8)
-    }
-
-    @ViewBuilder
-    private var secondaryToolbar: some View {
-        HStack(spacing: 20) {
-            Button(action: { showHistory = true }) {
-                Image(systemName: "clock")
-            }
-            .accessibilityIdentifier("historyButton")
-
-            Button(action: { showDownloads = true }) {
-                Image(systemName: "arrow.down.circle")
-            }
-            .accessibilityIdentifier("downloadsButton")
-
-            Button(action: { showOfflineLibrary = true }) {
-                Image(systemName: "icloud.and.arrow.down")
-            }
-            .accessibilityIdentifier("offlineLibraryButton")
-
-            Button(action: saveActiveTabOffline) {
-                Image(systemName: "square.and.arrow.down")
-            }
-            .disabled(tabManager.activeTab?.isNewTab ?? true)
-            .accessibilityIdentifier("saveOfflineButton")
-
-            Button(action: { showFocus = true }) {
-                Image(systemName: "timer")
-            }
-            .accessibilityIdentifier("focusButton")
-
-            Button(action: { showTasks = true }) {
-                Image(systemName: "checklist")
-            }
-            .accessibilityIdentifier("tasksButton")
-
-            Button(action: { showAdvisor = true }) {
-                Image(systemName: "sparkles")
-            }
-            .accessibilityIdentifier("advisorButton")
-
-            Button(action: { showRewards = true }) {
-                Image(systemName: "star.circle")
-            }
-            .accessibilityIdentifier("rewardsButton")
-
-            Spacer()
 
             if focusManager.activeSession != nil {
                 Text("Focus")
@@ -204,24 +167,10 @@ struct MainBrowserView: View {
                     .accessibilityIdentifier("privateIndicator")
             }
 
-            Button(action: { tabManager.createTab(url: nil, isPrivate: true) }) {
-                Image(systemName: "eyeglasses")
-            }
-            .accessibilityIdentifier("newPrivateTabButton")
-
-            Button(action: { showRewrite = true }) {
-                Image(systemName: "pencil.and.outline")
-            }
-            .accessibilityIdentifier("rewriteButton")
-
-            Button(action: { showSettings = true }) {
-                Image(systemName: "gearshape")
-            }
-            .accessibilityIdentifier("settingsButton")
+            overflowMenu
         }
         .foregroundStyle(.white)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
+        .padding(8)
         .alert(
             "Save for Offline",
             isPresented: Binding(get: { saveOfflineStatus != nil }, set: { if !$0 { saveOfflineStatus = nil } })
@@ -230,6 +179,83 @@ struct MainBrowserView: View {
         } message: {
             Text(saveOfflineStatus ?? "")
         }
+    }
+
+    /// Direct equivalent of MainActivity.kt's showOverflowMenu() — every
+    /// action beyond back/forward/bookmark lives here, in the real,
+    /// user-specified order Android's own popup uses (New Tab/Private
+    /// Browsing/Downloads/History/Focus Mode/Rewards/Offline Library/
+    /// Tasks/Save Offline/Advisor, then Settings), minus the entries for
+    /// features not built on iOS yet (Bookmarks shortcut, VisionReady,
+    /// Redeem, Chat, Help, the Education/Settings sub-groups) — those
+    /// appear here once their own phases land, not before.
+    @ViewBuilder
+    private var overflowMenu: some View {
+        Menu {
+            Button(action: { tabManager.createTab(url: nil) }) {
+                Label("New Tab", systemImage: "plus")
+            }
+            .accessibilityIdentifier("menu_newTab")
+
+            Button(action: { tabManager.createTab(url: nil, isPrivate: true) }) {
+                Label("New Private Tab", systemImage: "eyeglasses")
+            }
+            .accessibilityIdentifier("menu_newPrivateTab")
+
+            Button(action: { showDownloads = true }) {
+                Label("Downloads", systemImage: "arrow.down.circle")
+            }
+            .accessibilityIdentifier("menu_downloads")
+
+            Button(action: { showHistory = true }) {
+                Label("History", systemImage: "clock")
+            }
+            .accessibilityIdentifier("menu_history")
+
+            Button(action: { showFocus = true }) {
+                Label("Focus Mode", systemImage: "timer")
+            }
+            .accessibilityIdentifier("menu_focus")
+
+            Button(action: { showRewards = true }) {
+                Label("Rewards", systemImage: "star.circle")
+            }
+            .accessibilityIdentifier("menu_rewards")
+
+            Button(action: { showOfflineLibrary = true }) {
+                Label("Offline Library", systemImage: "icloud.and.arrow.down")
+            }
+            .accessibilityIdentifier("menu_offlineLibrary")
+
+            Button(action: { showTasks = true }) {
+                Label("Tasks", systemImage: "checklist")
+            }
+            .accessibilityIdentifier("menu_tasks")
+
+            Button(action: saveActiveTabOffline) {
+                Label("Save Offline", systemImage: "square.and.arrow.down")
+            }
+            .disabled(tabManager.activeTab?.isNewTab ?? true)
+            .accessibilityIdentifier("menu_saveOffline")
+
+            Button(action: { showAdvisor = true }) {
+                Label("Advisor", systemImage: "sparkles")
+            }
+            .accessibilityIdentifier("menu_advisor")
+
+            Button(action: { showRewrite = true }) {
+                Label("Rewrite Writer", systemImage: "pencil.and.outline")
+            }
+            .accessibilityIdentifier("menu_rewrite")
+
+            Button(action: { showSettings = true }) {
+                Label("Settings", systemImage: "gearshape")
+            }
+            .accessibilityIdentifier("menu_settings")
+        } label: {
+            Image(systemName: "ellipsis.circle")
+        }
+        .accessibilityIdentifier("moreMenuButton")
     }
 
     @ViewBuilder
