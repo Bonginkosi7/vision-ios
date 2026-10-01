@@ -24,9 +24,12 @@ confirmed the full test suite green, including force-terminating the app
 and relaunching to prove a bookmark survived in a real, persisted
 GRDB/SQLite database.
 
-**Phase 4** (cloud AI provider layer) is implemented and pushed; its CI run
-is the next thing to watch. Note its verification is deliberately narrower
-than every phase before it — see the Phase 4 section below for why.
+**Phase 4** (cloud AI provider layer) is done — run
+[`36852551212`](https://github.com/Bonginkosi7/vision-ios/actions/runs/36852551212)
+passed green on the first try: all 9 new `CloudAIRequestBuilderTests`
+plus all 8 existing UI tests (no regression from adding `CloudAIProvider.swift`
+to the build). Its verification is deliberately narrower than every other
+phase's — see the Phase 4 section below for why.
 
 **Phase 3** (Settings & AI key storage) is done — run
 [`36850625135`](https://github.com/Bonginkosi7/vision-ios/actions/runs/36850625135)
