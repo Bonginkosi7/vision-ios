@@ -18,6 +18,13 @@ macOS runners, triggered on every push to `main`). The acceptance bar for
 every phase is the same: not "it compiles," but launched, driven in a real
 booted Simulator, and behaviorally confirmed by `UITests/VisionIOSUITests.swift`.
 
+**Phase 10** (Exams) is done — run
+[`36926053584`](https://github.com/Bonginkosi7/vision-ios/actions/runs/36926053584)
+passed fully green on the first attempt: all 18 UI tests, all 88
+VisionCore unit tests. No real bug this time — the new combined test
+(hand-authored exam created, taken, and marked 100% correct with zero
+AI involved, plus the AI-generation honest-error path) passed first try.
+
 **Phase 9** (Flashcards) is done — run
 [`36911066302`](https://github.com/Bonginkosi7/vision-ios/actions/runs/36911066302)
 passed fully green on the second attempt: the first attempt failed on
@@ -110,6 +117,91 @@ tests), no fix-and-repush cycle needed that time — applying Phase 1's own
 lessons (real `@ObservedObject` reactivity, real keyboard taps, `List`-based
 rows instead of a merge-prone VStack-of-Buttons) preemptively instead of
 rediscovering them.
+
+## Phase 10: Exams
+
+Direct port of the scoped-down slice of `ExamDbHelper.kt`/
+`ExamGenerationLogic.kt`/`ExamMarking.kt`/`ShortAnswerMarkingLogic.kt`/
+`CreateExamActivity.kt`/`GenerateExamActivity.kt`/`TakeExamActivity.kt`/
+`ExamsActivity.kt`/`ExamsAdapter.kt`. Reached via a new "Exams" entry in
+the overflow menu.
+
+- **`Sources/VisionCore/ExamMarking.swift`** (pure): real local
+  MCQ/true-false comparison and score-percent math — no AI involved,
+  works fully offline, direct port of `ExamMarking.kt`.
+- **`Sources/VisionCore/ExamGenerationLogic.swift`** (pure): the real
+  system instruction (reusing `TopicTagging` exactly as Flashcards
+  does), 12,000-char bounding, and permissive JSON parsing across all
+  three question types (`RawExamQuestion`), direct port of
+  `ExamGenerationLogic.kt`.
+- **`Sources/VisionCore/ShortAnswerMarkingLogic.swift`** (pure): the
+  real batched-marking prompt and response parsing for short-answer
+  questions — one call covers every still-unmarked short-answer
+  question in an attempt together, same real/pure split established
+  for `TopicExtractionLogic`/`TopicExtractor` and
+  `FlashcardGenerationLogic`/`FlashcardGenerator`. The real network
+  call lives in `App/ShortAnswerMarker.swift`.
+- **`App/ExamStore.swift`** (GRDB) + **`App/ExamGenerator.swift`**:
+  real test/question/attempt/answer storage, instant local MCQ/
+  true-false marking via `ExamMarking`, and the real AI call
+  orchestration for AI-generated tests, reusing the exact
+  `StructuredAI`/`CloudAIProvider` plumbing already proven by Topics
+  and Flashcards.
+- **`App/CreateExamView.swift`**: hand-author an MCQ/true-false exam
+  entirely offline — no AI involved at all, since a hand-authored
+  short-answer "model answer" would have no AI grading behind it to
+  genuinely compare against (same reasoning Android applies).
+- **`App/GenerateExamView.swift`**: pick a real processed document,
+  choose how many of each question type, generate a real test grounded
+  in its real extracted text (optionally topic-tagged).
+- **`App/TakeExamView.swift`**: take any real saved test — real local
+  instant marking for MCQ/true-false, one real batched AI call for any
+  short-answer questions, a real countdown timer that auto-submits at
+  zero for timed tests, and a real `eduTestCompleted` reward once the
+  whole attempt is genuinely, fully marked (closes a Phase 7 trim —
+  `RewardRules.swift` had deferred this event type specifically until a
+  real trigger existed; Advisor's weekly stats also gained the matching
+  real "Learning" row).
+
+**Disclosed scope trim: Tutor, Performance, and Study Plan are not
+ported.** The build plan's original "Phase 9" bundle is now fully
+split: Flashcards (Phase 9) and Exams (Phase 10) are done, but
+Android's own dependency order still gates the rest — Performance's
+mastery calculation needs real Flashcards/Exams data (both now exist)
+before it can honestly run, and Study Plan needs Performance. Tutor has
+no such dependency but is its own real scope. Each gets its own later
+phase.
+
+Within what *is* built: Android's `markedAnswersForTopic` (feeding
+`MasteryEngine` with per-topic `MasteryEvent` rows) isn't ported — its
+whole purpose is Performance's mastery calculation, which doesn't exist
+on iOS yet, same disclosed-trim reasoning Phase 9 used for
+`reviewEventsForTopic`. Android's study-plan launch/session integration
+(`sessionId`/`masteryBeforePercent`, jumping straight into
+`TakeExamActivity`, the post-submission confidence prompt) is
+correspondingly absent too.
+
+### Phase 10 UI test
+
+One new combined case in `VisionIOSUITests.swift`,
+`test_takingAHandAuthoredExamAndGeneratingFromMaterial`, covering two
+real paths:
+
+1. A fully hand-authored MCQ exam — created, saved, opened, answered
+   correctly, and submitted — confirming the real results screen reads
+   exactly "100% correct" with zero AI involved at any point (unlike
+   Flashcards/Topics, Create Exam needs no cloud key configured at
+   all, so this is a genuine full-credit proof, not just an
+   honest-error path).
+2. The same honest "Cloud AI isn't configured" proof already
+   established for Rewrite Writer/Topics/Flashcards, exercised through
+   Generate Mock Test against the same real seeded-and-processed
+   fixture — confirming `ExamGenerator` routes through the identical
+   `CloudAIProvider`/`StructuredAI` plumbing, not a parallel path.
+
+`AppDatabase.swift`'s `v7_phase10` migration adds `examTest`,
+`examQuestion`, `examAttempt`, and `examAnswer` to the same shared
+`vision.sqlite`.
 
 ## Phase 9: Flashcards
 
@@ -812,7 +904,7 @@ comment.
 - `WebViewRepresentable.swift` — `UIViewRepresentable` wrapping one `WKWebView` per tab; real history recording + real `WKDownloadDelegate` handling
 - `BrowserTab.swift` — mirrors `Tab.kt` (id, title, url, isNewTab, isPrivate)
 - `TabManager.swift` — mirrors `MainActivity.kt`'s `tabs`/`activeTabIndex` + create/switch/close/navigate/openOfflineFile, delegates close-index math to `VisionCore.TabIndexing`
-- `AppDatabase.swift` — GRDB `DatabaseQueue` + migrator (`v1_bookmarks`, `v2_phase2`, `v3_phase6`, `v4_phase7`, `v5_phase8`, `v6_phase9`)
+- `AppDatabase.swift` — GRDB `DatabaseQueue` + migrator (`v1_bookmarks`, `v2_phase2`, `v3_phase6`, `v4_phase7`, `v5_phase8`, `v6_phase9`, `v7_phase10`)
 - `BookmarkStore.swift` / `HistoryStore.swift` / `DownloadStore.swift` / `OfflineStore.swift` — GRDB ports of the matching `*DbHelper.kt`
 - `OfflineSaver.swift` — real `createWebArchiveData` capture + file write
 - `KeychainStore.swift` / `AiSettings.swift` — real Keychain-backed AI key storage, port of `AiSettings.kt`
@@ -829,7 +921,8 @@ comment.
 - `StudyDocumentStore.swift` / `TopicStore.swift` — GRDB ports of the `MaterialsActivity.kt`-used slice of `StudyDocumentDbHelper.kt` / `TopicDbHelper.kt`
 - `StructuredAI.swift` / `TopicExtractor.swift` — the real AI call orchestration, port of `StructuredAi.kt` + the networking half of `TopicExtractionLogic.kt`
 - `FlashcardStore.swift` / `FlashcardGenerator.swift` — real card storage, due-queue sorting (never-reviewed first, then shortest-interval first), and `markReviewed`'s real schedule update, plus the real AI call orchestration reusing the exact `StructuredAI`/`CloudAIProvider` plumbing `TopicExtractor` already proved reaches the real Anthropic/OpenAI APIs
-- `NewTabView.swift` / `HistoryView.swift` / `DownloadsView.swift` / `OfflineLibraryView.swift` / `SettingsView.swift` / `RewriteView.swift` / `FocusView.swift` / `TasksView.swift` / `AdvisorView.swift` / `RewardsView.swift` / `MaterialsView.swift` / `FlashcardsView.swift` — real list/empty-state/settings/rewrite/focus/tasks/advisor/rewards/materials/flashcards screens
+- `ExamStore.swift` / `ExamGenerator.swift` / `ShortAnswerMarker.swift` — real test/question/attempt/answer GRDB storage, instant local MCQ/true-false marking, and the real AI orchestration for AI-generated tests and batched short-answer marking, reusing the same `StructuredAI`/`CloudAIProvider` plumbing
+- `NewTabView.swift` / `HistoryView.swift` / `DownloadsView.swift` / `OfflineLibraryView.swift` / `SettingsView.swift` / `RewriteView.swift` / `FocusView.swift` / `TasksView.swift` / `AdvisorView.swift` / `RewardsView.swift` / `MaterialsView.swift` / `FlashcardsView.swift` / `ExamsView.swift` / `CreateExamView.swift` / `GenerateExamView.swift` / `TakeExamView.swift` — real list/empty-state/settings/rewrite/focus/tasks/advisor/rewards/materials/flashcards/exams screens
 - `DesignSystem.swift` — same component list and color tokens as `DesignSystem.kt`, ported to `@ViewBuilder` functions; drawable XML collapses into inline SwiftUI modifiers (disclosed simplification, noted in-file)
 
 **`UITests/`** — `VisionIOSUITests.swift`, the real behavioral verification described above.
@@ -843,7 +936,7 @@ every run.
 
 Profile/credentials/offline-AI-model/memory/storage settings, on-device
 local model fallback, the Ask VISION chat, the remaining education
-screens (Exams, Tutor, Performance, Study Plan, Paper Review), Android's
+screens (Tutor, Performance, Study Plan, Paper Review), Android's
 separate "Study Material hub" (taxonomy tagging, browse/search,
 offline-ready marking, folded-in spaced-repetition review — a distinct,
 bigger feature than My Materials, left for its own later phase),
@@ -851,17 +944,20 @@ Redeem, VISION Ready, and Help. Redeem specifically needs real Firebase
 project credentials and anonymous-auth infrastructure this repo doesn't
 have — see Phase 7's own writeup for why that's a disclosed trim rather
 than fabricated. Sequencing for the rest is in the build plan's Phase
-10–12 roadmap, itself re-scoped from the original bundled "Phase 9"
-once Flashcards shipped as its own slice — Exams/Tutor/Performance/
-Study Plan are now each their own future phase rather than one bundle.
+11–12 roadmap, itself re-scoped from the original bundled "Phase 9"
+once Flashcards and Exams shipped as their own slices — Tutor/
+Performance/Study Plan are now each their own future phase rather than
+one bundle.
 
 ## Next steps
 
-Phase 9 (Flashcards) is done. Per Android's own real dependency order,
-Exams is the natural next slice — Performance's mastery calculation
-needs real Flashcards/Exams data before Study Plan can honestly build
-on it, and Exams doesn't yet depend on anything else unbuilt. That's a
-suggestion, not a decision already made; confirm before starting it.
+Phase 10 (Exams) is done. Flashcards and Exams between them now supply
+the real data Android's own Performance (mastery calculation) needs,
+so Performance looks like the natural next slice by that dependency
+order — though Tutor has no such dependency and could just as
+reasonably come first, since it's a self-contained conversational
+feature. That's a suggestion, not a decision already made; confirm
+before starting either.
 
 **If local Xcode ever exists on this machine**: `xcodegen generate`, open
 `VisionIOS.xcodeproj`, and everything here still works locally too — CI
