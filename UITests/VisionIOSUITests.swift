@@ -427,15 +427,26 @@ final class VisionIOSUITests: XCTestCase {
     /// card with nothing behind it), rather than fabricating a way to
     /// fast-forward WellbeingManager's real clock just to make a deeper
     /// test possible.
+    ///
+    /// A first real CI run found a genuine SwiftUI accessibility quirk
+    /// here, the mirror image of Phase 1's bookmark-row merging bug: when
+    /// `.accessibilityIdentifier` is applied to an HStack/VStack whose
+    /// children are too complex to collapse into one element, SwiftUI
+    /// doesn't synthesize a single `.other` container for it — it pushes
+    /// the SAME identifier onto every leaf StaticText inside instead. The
+    /// real captured accessibility-tree dump from that run confirmed this
+    /// exactly (9 separate StaticTexts all carrying 'advisorQuickStatsRow',
+    /// 4 all carrying 'advisorNoSuggestion'), so these query `staticTexts`,
+    /// not `otherElements`.
     func test_advisorShowsNoNudgeOnAFreshLaunch() {
         let app = XCUIApplication()
         app.launch()
 
         app.buttons["advisorButton"].tap()
 
-        XCTAssertTrue(app.otherElements["advisorQuickStatsRow"].waitForExistence(timeout: 5), "expected the real quick-stats row to render")
-        XCTAssertTrue(app.otherElements["advisorNoSuggestion"].waitForExistence(timeout: 5), "a fresh launch hasn't been continuously active for 45 real minutes, so no nudge should show")
-        XCTAssertFalse(app.otherElements["advisorSuggestionCard"].exists, "no suggestion card should render when AdvisorLogic genuinely returns nil")
+        XCTAssertTrue(app.staticTexts["advisorQuickStatsRow"].waitForExistence(timeout: 5), "expected the real quick-stats row to render")
+        XCTAssertTrue(app.staticTexts["advisorNoSuggestion"].waitForExistence(timeout: 5), "a fresh launch hasn't been continuously active for 45 real minutes, so no nudge should show")
+        XCTAssertFalse(app.staticTexts["advisorSuggestionCard"].exists, "no suggestion card should render when AdvisorLogic genuinely returns nil")
 
         app.navigationBars.buttons["Done"].tap()
     }
