@@ -8,6 +8,12 @@ import WebKit
 final class BrowserTab: Identifiable, ObservableObject {
     let id: UUID
     let webView: WKWebView
+    /// True for a real private tab — its WKWebView was built with a
+    /// `.nonPersistent()` data store (see TabManager.makeWebView), and
+    /// WebViewRepresentable's coordinator skips history recording for it,
+    /// the same real behavioral difference PrivateBrowsingActivity.kt
+    /// discloses for Android (never writes to HistoryDbHelper).
+    let isPrivate: Bool
 
     @Published var title: String = ""
     @Published var url: String = ""
@@ -15,8 +21,9 @@ final class BrowserTab: Identifiable, ObservableObject {
     /// shared New Tab view is shown instead of this (still blank) WKWebView.
     @Published var isNewTab: Bool = true
 
-    init(id: UUID = UUID(), webView: WKWebView) {
+    init(id: UUID = UUID(), webView: WKWebView, isPrivate: Bool = false) {
         self.id = id
         self.webView = webView
+        self.isPrivate = isPrivate
     }
 }

@@ -2,15 +2,24 @@ import SwiftUI
 import VisionCore
 
 /// SwiftUI root of the browser — direct equivalent of MainActivity.kt:
-/// address bar, back/forward, tab count, bookmark toggle, and the active
-/// tab's content (either the shared New Tab page or its real WKWebView).
-/// Focus Mode, downloads, permissions, and the overflow menu are explicitly
-/// deferred to later phases (see vision-ios/README.md).
+/// address bar, back/forward, tab count, bookmark toggle, a secondary
+/// toolbar for History/Downloads/Offline Library/Save Offline/New Private
+/// Tab, and the active tab's content (either the shared New Tab page or its
+/// real WKWebView). Focus Mode, permissions, and the overflow menu are
+/// explicitly deferred to later phases (see vision-ios/README.md).
 struct MainBrowserView: View {
     @StateObject private var tabManager = TabManager()
     @StateObject private var bookmarkStore = BookmarkStore()
+    @StateObject private var historyStore = HistoryStore()
+    @StateObject private var downloadStore = DownloadStore()
+    @StateObject private var offlineStore = OfflineStore()
+
     @State private var addressText: String = ""
     @State private var isBookmarked: Bool = false
+    @State private var showHistory = false
+    @State private var showDownloads = false
+    @State private var showOfflineLibrary = false
+    @State private var saveOfflineStatus: String?
 
     // Phase 1 hardcodes Google — a real Settings-backed search-engine
     // choice (matching VisionSettings.getSearchEngine on Android) is Phase
@@ -21,6 +30,8 @@ struct MainBrowserView: View {
         VStack(spacing: 0) {
             addressBar
             Rectangle().fill(DesignSystem.borderCard).frame(height: 1)
+            secondaryToolbar
+            Rectangle().fill(DesignSystem.borderCard).frame(height: 1)
             content
         }
         .background(DesignSystem.bgCanvas.ignoresSafeArea())
@@ -30,6 +41,19 @@ struct MainBrowserView: View {
             }
         }
         .onChange(of: tabManager.activeTabIndex) { _ in syncAddressBar() }
+        .sheet(isPresented: $showHistory) {
+            HistoryView(historyStore: historyStore) { url in
+                tabManager.navigateActiveTab(to: url)
+            }
+        }
+        .sheet(isPresented: $showDownloads) {
+            DownloadsView(downloadStore: downloadStore)
+        }
+        .sheet(isPresented: $showOfflineLibrary) {
+            OfflineLibraryView(offlineStore: offlineStore) { fileURL in
+                tabManager.openOfflineFile(fileURL)
+            }
+        }
     }
 
     @ViewBuilder
@@ -72,6 +96,57 @@ struct MainBrowserView: View {
     }
 
     @ViewBuilder
+    private var secondaryToolbar: some View {
+        HStack(spacing: 20) {
+            Button(action: { showHistory = true }) {
+                Image(systemName: "clock")
+            }
+            .accessibilityIdentifier("historyButton")
+
+            Button(action: { showDownloads = true }) {
+                Image(systemName: "arrow.down.circle")
+            }
+            .accessibilityIdentifier("downloadsButton")
+
+            Button(action: { showOfflineLibrary = true }) {
+                Image(systemName: "icloud.and.arrow.down")
+            }
+            .accessibilityIdentifier("offlineLibraryButton")
+
+            Button(action: saveActiveTabOffline) {
+                Image(systemName: "square.and.arrow.down")
+            }
+            .disabled(tabManager.activeTab?.isNewTab ?? true)
+            .accessibilityIdentifier("saveOfflineButton")
+
+            Spacer()
+
+            if tabManager.activeTab?.isPrivate == true {
+                Text("Private")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(DesignSystem.visionBlue)
+                    .accessibilityIdentifier("privateIndicator")
+            }
+
+            Button(action: { tabManager.createTab(url: nil, isPrivate: true) }) {
+                Image(systemName: "eyeglasses")
+            }
+            .accessibilityIdentifier("newPrivateTabButton")
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .alert(
+            "Save for Offline",
+            isPresented: Binding(get: { saveOfflineStatus != nil }, set: { if !$0 { saveOfflineStatus = nil } })
+        ) {
+            Button("OK") { saveOfflineStatus = nil }
+        } message: {
+            Text(saveOfflineStatus ?? "")
+        }
+    }
+
+    @ViewBuilder
     private var content: some View {
         if let tab = tabManager.activeTab {
             // A real bug caught live in CI: reading `tab.isNewTab`/`tab.url`
@@ -85,7 +160,12 @@ struct MainBrowserView: View {
             // caught by a real UI test timing out waiting for real
             // navigation to reflect on screen, not spotted by reading the
             // code.
-            ActiveTabContent(tab: tab, bookmarkStore: bookmarkStore) { destination in
+            ActiveTabContent(
+                tab: tab,
+                bookmarkStore: bookmarkStore,
+                historyStore: historyStore,
+                downloadStore: downloadStore
+            ) { destination in
                 tabManager.navigateActiveTab(to: destination)
             }
             .onReceive(tab.$url) { _ in syncAddressBar() }
@@ -141,6 +221,18 @@ struct MainBrowserView: View {
             // later-phase concern, not invented here.
         }
     }
+
+    private func saveActiveTabOffline() {
+        guard let tab = tabManager.activeTab else { return }
+        OfflineSaver.save(tab: tab, store: offlineStore) { result in
+            switch result {
+            case .success(let item):
+                saveOfflineStatus = "Saved \"\(item.title)\" for offline (\(ByteCountFormatter.string(fromByteCount: item.sizeBytes, countStyle: .file)))."
+            case .failure:
+                saveOfflineStatus = "Couldn't save this page for offline right now."
+            }
+        }
+    }
 }
 
 /// Wraps the active tab as a real @ObservedObject so SwiftUI actually
@@ -150,13 +242,15 @@ struct MainBrowserView: View {
 private struct ActiveTabContent: View {
     @ObservedObject var tab: BrowserTab
     let bookmarkStore: BookmarkStore
+    let historyStore: HistoryStore
+    let downloadStore: DownloadStore
     let onNavigate: (String) -> Void
 
     var body: some View {
         if tab.isNewTab {
             NewTabView(bookmarkStore: bookmarkStore, onNavigate: onNavigate)
         } else {
-            WebViewRepresentable(tab: tab)
+            WebViewRepresentable(tab: tab, historyStore: historyStore, downloadStore: downloadStore)
         }
     }
 }

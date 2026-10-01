@@ -19,9 +19,9 @@ final class TabManager: ObservableObject {
     }
 
     @discardableResult
-    func createTab(url: String?, switchToIt: Bool = true) -> BrowserTab {
-        let webView = Self.makeWebView()
-        let tab = BrowserTab(webView: webView)
+    func createTab(url: String?, switchToIt: Bool = true, isPrivate: Bool = false) -> BrowserTab {
+        let webView = Self.makeWebView(isPrivate: isPrivate)
+        let tab = BrowserTab(webView: webView, isPrivate: isPrivate)
         tabs.append(tab)
         if switchToIt {
             activeTabIndex = tabs.count - 1
@@ -46,6 +46,16 @@ final class TabManager: ObservableObject {
         tab.webView.load(URLRequest(url: destinationURL))
     }
 
+    /// Opens a real saved offline `.webarchive` file in the active tab —
+    /// `loadFileURL` (not a plain URLRequest) is the real, required
+    /// WKWebView API for local file access, which is sandboxed unlike a
+    /// normal network request.
+    func openOfflineFile(_ fileURL: URL) {
+        guard let tab = activeTab else { return }
+        tab.isNewTab = false
+        tab.webView.loadFileURL(fileURL, allowingReadAccessTo: fileURL)
+    }
+
     func closeTab(_ tab: BrowserTab) {
         guard let index = tabs.firstIndex(where: { $0.id == tab.id }) else { return }
         let countBeforeClose = tabs.count
@@ -64,13 +74,25 @@ final class TabManager: ObservableObject {
         activeTabIndex = newActiveIndex
     }
 
-    private static func makeWebView() -> WKWebView {
+    private static func makeWebView(isPrivate: Bool = false) -> WKWebView {
         let configuration = WKWebViewConfiguration()
         configuration.allowsInlineMediaPlayback = true
         // WKWebView has JavaScript and DOM storage enabled by default,
         // unlike Android's WebView (which needs both explicitly turned on
         // in createTab()'s WebSettings block) — a real, disclosed platform
         // difference, not a missing step.
+        if isPrivate {
+            // A real, genuinely isolated session — .nonPersistent() never
+            // writes cookies/cache/DOM storage to disk in the first place,
+            // which is actually a stronger real guarantee than Android's
+            // own private-mode WebView (disk-based by default, needing an
+            // explicit post-session wipe in PrivateBrowsingActivity.kt's
+            // finishPrivateSession()) — there is nothing to wipe here
+            // because nothing was ever written, a real simplification
+            // worth disclosing rather than silently matching Android's
+            // extra wipe step for no reason.
+            configuration.websiteDataStore = .nonPersistent()
+        }
         return WKWebView(frame: .zero, configuration: configuration)
     }
 }
