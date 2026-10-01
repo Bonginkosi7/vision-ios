@@ -535,7 +535,9 @@ final class VisionIOSUITests: XCTestCase {
         let row = app.staticTexts["materialRow_ui-test-fixture"]
         XCTAssertTrue(row.waitForExistence(timeout: 5), "the real seeded fixture should show up in My Materials")
 
-        app.buttons["btnProcessDocument_ui-test-fixture"].tap()
+        let processButton = app.buttons["btnProcessDocument_ui-test-fixture"]
+        XCTAssertTrue(processButton.waitForExistence(timeout: 5), "expected a real Process button for an uploaded-but-unprocessed document")
+        processButton.tap()
 
         let status = app.staticTexts["materialStatus_ui-test-fixture"]
         let processedPredicate = NSPredicate(format: "label CONTAINS %@", "Processed")
@@ -545,7 +547,9 @@ final class VisionIOSUITests: XCTestCase {
         }
         XCTAssertTrue(status.label.contains("Processed"), "a real .txt fixture should process successfully, status read: \(status.label)")
 
-        app.buttons["btnTopics_ui-test-fixture"].tap()
+        let topicsButton = app.buttons["btnTopics_ui-test-fixture"]
+        XCTAssertTrue(topicsButton.waitForExistence(timeout: 5), "expected a real Topics button once the document is processed")
+        topicsButton.tap()
 
         let topicsStatus = app.staticTexts["topicsStatus_ui-test-fixture"]
         let notConfiguredPredicate = NSPredicate(format: "label CONTAINS %@", "Cloud AI isn't configured")
@@ -557,7 +561,9 @@ final class VisionIOSUITests: XCTestCase {
 
         // Clean up so a later run (or the same simulator's persisted
         // database) doesn't see the fixture as already present.
-        app.buttons["btnDeleteDocument_ui-test-fixture"].tap()
+        let deleteButton = app.buttons["btnDeleteDocument_ui-test-fixture"]
+        XCTAssertTrue(deleteButton.waitForExistence(timeout: 5))
+        deleteButton.tap()
         XCTAssertFalse(row.waitForExistence(timeout: 3), "deleting the fixture should remove its real row")
 
         app.navigationBars.buttons["Done"].tap()
