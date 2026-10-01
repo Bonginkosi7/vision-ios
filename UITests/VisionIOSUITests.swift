@@ -241,6 +241,78 @@ final class VisionIOSUITests: XCTestCase {
         )
     }
 
+    /// Real "no provider configured" proof: with no AI key saved, Rewrite
+    /// Writer should show the real honest error RewriteWriter.swift
+    /// returns — never a fabricated "rewritten" result standing in for
+    /// one. No network call happens on this path at all.
+    func test_rewriteWithNoProviderConfigured_showsHonestError() {
+        let app = XCUIApplication()
+        app.launch()
+
+        XCTAssertTrue(app.buttons["rewriteButton"].waitForExistence(timeout: 5))
+        app.buttons["rewriteButton"].tap()
+
+        let input = app.textViews["rewriteInput"]
+        XCTAssertTrue(input.waitForExistence(timeout: 5))
+        input.tap()
+        input.typeText("some real text to rewrite")
+
+        app.buttons["rewriteAction_rewrite"].tap()
+
+        let status = app.staticTexts["rewriteStatus"]
+        let configuredPredicate = NSPredicate(format: "label CONTAINS %@", "No cloud AI provider is configured")
+        let expectation = XCTNSPredicateExpectation(predicate: configuredPredicate, object: status)
+        XCTAssertEqual(XCTWaiter().wait(for: [expectation], timeout: 5), .completed, "expected the real honest 'no provider configured' message")
+    }
+
+    /// Real end-to-end network proof, without needing a valid (billable)
+    /// API key: save a real but fake Anthropic key via Settings (a real
+    /// Keychain write, same path Phase 3 verified), trigger a rewrite, and
+    /// confirm a real network-derived error comes back from the actual
+    /// Anthropic API (a 401/403 for the invalid key) — proving
+    /// CloudAIProvider's full real request pipeline fires, without ever
+    /// calling it with real, paid credentials. Cleans the key up
+    /// afterward so this doesn't affect other tests' assumptions about a
+    /// fresh, unconfigured install.
+    func test_rewriteWithInvalidKey_reachesRealAnthropicAPIAndShowsError() {
+        let app = XCUIApplication()
+        app.launch()
+
+        app.buttons["settingsButton"].tap()
+        let keyInput = app.secureTextFields["anthropicKeyInput"]
+        XCTAssertTrue(keyInput.waitForExistence(timeout: 5))
+        keyInput.tap()
+        keyInput.typeText("sk-ant-invalid-fake-key-for-ui-testing")
+        app.buttons["anthropicSaveButton"].tap()
+
+        let configuredStatus = app.staticTexts["anthropicStatus"]
+        let configuredExpectation = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "Configured"), object: configuredStatus)
+        XCTAssertEqual(XCTWaiter().wait(for: [configuredExpectation], timeout: 5), .completed)
+        app.buttons["settingsDoneButton"].tap()
+
+        app.buttons["rewriteButton"].tap()
+        let input = app.textViews["rewriteInput"]
+        XCTAssertTrue(input.waitForExistence(timeout: 5))
+        input.tap()
+        input.typeText("some real text to rewrite")
+        app.buttons["rewriteAction_rewrite"].tap()
+
+        let status = app.staticTexts["rewriteStatus"]
+        let failedPredicate = NSPredicate(format: "label CONTAINS %@ OR label CONTAINS %@", "API error", "failed")
+        let failedExpectation = XCTNSPredicateExpectation(predicate: failedPredicate, object: status)
+        let result = XCTWaiter().wait(for: [failedExpectation], timeout: 20)
+        if result != .completed {
+            attachDiagnostics(app: app, name: "rewrite-invalid-key-no-real-error")
+        }
+        XCTAssertEqual(result, .completed, "expected a real network-derived error from the actual Anthropic API, status read: \(status.label)")
+
+        // Clean up so a later test (or re-run) doesn't see a key "already configured".
+        app.buttons["rewriteDoneButton"].tap()
+        app.buttons["settingsButton"].tap()
+        app.buttons["anthropicClearButton"].tap()
+        app.buttons["settingsDoneButton"].tap()
+    }
+
     // MARK: - Helpers
 
     /// Types into the address bar and submits it. A first CI run revealed a

@@ -20,6 +20,7 @@ struct MainBrowserView: View {
     @State private var showDownloads = false
     @State private var showOfflineLibrary = false
     @State private var showSettings = false
+    @State private var showRewrite = false
     @State private var saveOfflineStatus: String?
 
     var body: some View {
@@ -52,6 +53,9 @@ struct MainBrowserView: View {
         }
         .sheet(isPresented: $showSettings) {
             SettingsView()
+        }
+        .sheet(isPresented: $showRewrite) {
+            RewriteView()
         }
     }
 
@@ -131,6 +135,11 @@ struct MainBrowserView: View {
                 Image(systemName: "eyeglasses")
             }
             .accessibilityIdentifier("newPrivateTabButton")
+
+            Button(action: { showRewrite = true }) {
+                Image(systemName: "pencil.and.outline")
+            }
+            .accessibilityIdentifier("rewriteButton")
 
             Button(action: { showSettings = true }) {
                 Image(systemName: "gearshape")
