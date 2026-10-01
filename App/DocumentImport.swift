@@ -80,31 +80,13 @@ enum DocumentImport {
     /// real text layer (e.g. a scanned-image PDF) ends in .failed with a
     /// specific, real reason — never a silently-empty success.
     static func process(documentId: String, store: StudyDocumentStore) {
-        let doc: StudyDocument
-        do {
-            guard let fetched = try store.get(id: documentId) else {
-                NSLog("[DocumentImport] process: no document found for id=\(documentId)")
-                return
-            }
-            doc = fetched
-        } catch {
-            NSLog("[DocumentImport] process: store.get threw: \(error)")
-            return
-        }
-        NSLog("[DocumentImport] process: found doc id=\(doc.id) contentPath=\(doc.contentPath) fileType=\(doc.fileType.rawValue)")
-
-        do {
-            try store.updateProcessing(id: documentId, status: .processing, processingError: nil, extractedText: nil)
-        } catch {
-            NSLog("[DocumentImport] process: updateProcessing(.processing) threw: \(error)")
-        }
+        guard let doc = try? store.get(id: documentId) else { return }
+        try? store.updateProcessing(id: documentId, status: .processing, processingError: nil, extractedText: nil)
 
         let text: String
         do {
             text = try extractor(for: doc.fileType).extract(fileURL: URL(fileURLWithPath: doc.contentPath))
-            NSLog("[DocumentImport] process: extracted \(text.count) real characters")
         } catch {
-            NSLog("[DocumentImport] process: extraction threw: \(error)")
             try? store.updateProcessing(id: documentId, status: .failed, processingError: "Couldn't read this file: \(error.localizedDescription)", extractedText: nil)
             return
         }
@@ -117,12 +99,7 @@ enum DocumentImport {
             return
         }
 
-        do {
-            try store.updateProcessing(id: documentId, status: .processed, processingError: nil, extractedText: text)
-            NSLog("[DocumentImport] process: updateProcessing(.processed) succeeded for id=\(documentId)")
-        } catch {
-            NSLog("[DocumentImport] process: updateProcessing(.processed) threw: \(error)")
-        }
+        try? store.updateProcessing(id: documentId, status: .processed, processingError: nil, extractedText: text)
     }
 
     static func remove(documentId: String, store: StudyDocumentStore) {

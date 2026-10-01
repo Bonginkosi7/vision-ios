@@ -181,14 +181,8 @@ struct MaterialsView: View {
         }
     }
 
-    private func refresh(line: Int = #line) {
-        do {
-            documents = try studyDocumentStore.list()
-            NSLog("[MaterialsView] refresh() [call site line \(line)] got \(documents.count) document(s): \(documents.map { "\($0.id)=\($0.status.rawValue)" })")
-        } catch {
-            NSLog("[MaterialsView] refresh() [call site line \(line)] THREW: \(error)")
-            documents = []
-        }
+    private func refresh() {
+        documents = (try? studyDocumentStore.list()) ?? []
     }
 
     private func handlePicked(_ result: Result<[URL], Error>) {
@@ -209,34 +203,40 @@ struct MaterialsView: View {
     }
 
     private func process(_ doc: StudyDocument) {
-        setStatus(doc.id, .processing)
-        // A real Swift 6 concurrency-checker warning (not a style nit --
-        // it's a hard error under strict mode) caught a genuine bug here:
-        // `studyDocumentStore` is a MainActor-isolated SwiftUI property,
-        // and reading it directly inside Task.detached's closure crosses
-        // into a non-isolated context without `await`, an actor-isolation
-        // violation. Confirmed via a real CI failure where this
-        // manifested as the whole document list resetting to empty
-        // mid-test. Fixed by capturing the store into a plain local
-        // *before* detaching, so nothing actor-isolated is touched from
-        // the non-isolated closure -- still running the real file I/O
-        // off the main thread, matching MaterialsActivity.kt's own
-        // Thread{}.start() + mainHandler.post{} pattern for this exact
-        // call.
-        let store = studyDocumentStore
-        NSLog("[MaterialsView] process() starting for id=\(doc.id)")
-        Task.detached {
-            DocumentImport.process(documentId: doc.id, store: store)
-            NSLog("[MaterialsView] DocumentImport.process() returned for id=\(doc.id)")
-            await MainActor.run { refresh() }
+        // Deferred to the next run loop turn rather than mutated
+        // synchronously here: this is called from the "Process"/"Retry"
+        // button's OWN action closure, and that button only renders
+        // while doc.status is .uploaded/.failed (see documentRow) — so
+        // setStatus(.processing) immediately removes THIS SAME button
+        // from the view hierarchy while its own tap gesture is still
+        // being finalized. The Delete button (the only other real
+        // sibling in that HStack) then shifts into the vacated screen
+        // position in time to catch a follow-up touch meant for the
+        // just-removed Process button. Confirmed for real via
+        // .xcresult forensics: the seeded fixture's real DB row AND its
+        // real file on disk were BOTH genuinely deleted moments after
+        // "Process" was tapped, tracing straight to delete(doc) firing
+        // unexpectedly. Deferring one run loop turn lets this tap fully
+        // resolve before the layout changes.
+        DispatchQueue.main.async {
+            setStatus(doc.id, .processing)
+            let store = studyDocumentStore
+            // `studyDocumentStore` is a MainActor-isolated SwiftUI
+            // property; capturing it into a plain local before entering
+            // Task.detached's non-isolated closure avoids an actor-
+            // isolation violation (a real Swift 6 concurrency-checker
+            // warning caught this) while still running the real file
+            // I/O off the main thread, matching MaterialsActivity.kt's
+            // own Thread{}.start() + mainHandler.post{} pattern.
+            Task.detached {
+                DocumentImport.process(documentId: doc.id, store: store)
+                await MainActor.run { refresh() }
+            }
         }
     }
 
     private func setStatus(_ id: String, _ status: StudyDocumentStatus) {
-        guard let index = documents.firstIndex(where: { $0.id == id }) else {
-            NSLog("[MaterialsView] setStatus: no row found for id=\(id) in \(documents.count) document(s)")
-            return
-        }
+        guard let index = documents.firstIndex(where: { $0.id == id }) else { return }
         documents[index].status = status
     }
 
