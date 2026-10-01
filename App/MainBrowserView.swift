@@ -16,6 +16,7 @@ struct MainBrowserView: View {
     @StateObject private var taskStore = TaskStore()
     @StateObject private var wellbeingStore = WellbeingStore()
     @StateObject private var focusStore = FocusStore()
+    @StateObject private var rewardStore = RewardStore()
     @ObservedObject private var focusManager = FocusManager.shared
 
     @State private var addressText: String = ""
@@ -28,6 +29,7 @@ struct MainBrowserView: View {
     @State private var showFocus = false
     @State private var showTasks = false
     @State private var showAdvisor = false
+    @State private var showRewards = false
     @State private var saveOfflineStatus: String?
 
     var body: some View {
@@ -50,6 +52,23 @@ struct MainBrowserView: View {
             try? focusStore.closeDanglingSessions()
             if let domains = try? focusStore.listBlockedDomains() {
                 focusManager.setBlockedDomains(domains)
+            }
+            // Centralized here (not inside FocusView) to match
+            // VisionApplication.kt's own single wiring point exactly: set
+            // once at launch, so a session started and later ending while
+            // FocusView isn't even open still gets persisted and still
+            // earns its real reward. Only a session that genuinely ran its
+            // full planned length (15+ min, MIN_FOCUS_MINUTES_FOR_REWARD)
+            // without being stopped early is reward-eligible — starting
+            // one and immediately stopping it can't be farmed for points.
+            focusManager.onSessionEnd = { ended, completedNaturally in
+                try? focusStore.endSession(id: ended.id, blockedAttempts: ended.blockedAttempts)
+                if completedNaturally && ended.plannedMinutes >= 15 {
+                    RewardEngine(store: rewardStore).awardIfEligible(
+                        type: .focusSessionCompleted,
+                        note: "Completed a \(ended.plannedMinutes)-minute Focus Session"
+                    )
+                }
             }
         }
         .onChange(of: tabManager.activeTabIndex) { _ in syncAddressBar() }
@@ -76,10 +95,13 @@ struct MainBrowserView: View {
             FocusView(focusStore: focusStore, focusManager: focusManager)
         }
         .sheet(isPresented: $showTasks) {
-            TasksView(taskStore: taskStore)
+            TasksView(taskStore: taskStore, rewardStore: rewardStore)
         }
         .sheet(isPresented: $showAdvisor) {
-            AdvisorView(wellbeingStore: wellbeingStore)
+            AdvisorView(wellbeingStore: wellbeingStore, rewardStore: rewardStore)
+        }
+        .sheet(isPresented: $showRewards) {
+            RewardsView(rewardStore: rewardStore)
         }
     }
 
@@ -160,6 +182,11 @@ struct MainBrowserView: View {
                 Image(systemName: "sparkles")
             }
             .accessibilityIdentifier("advisorButton")
+
+            Button(action: { showRewards = true }) {
+                Image(systemName: "star.circle")
+            }
+            .accessibilityIdentifier("rewardsButton")
 
             Spacer()
 
@@ -288,6 +315,7 @@ struct MainBrowserView: View {
             switch result {
             case .success(let item):
                 saveOfflineStatus = "Saved \"\(item.title)\" for offline (\(ByteCountFormatter.string(fromByteCount: item.sizeBytes, countStyle: .file)))."
+                RewardEngine(store: rewardStore).awardIfEligible(type: .offlinePrep, note: "Saved \"\(item.title)\" for offline")
             case .failure:
                 saveOfflineStatus = "Couldn't save this page for offline right now."
             }

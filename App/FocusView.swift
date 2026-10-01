@@ -40,18 +40,7 @@ struct FocusView: View {
                 }
             }
         }
-        .onAppear {
-            refreshBlockedDomains()
-            // The one real place a finished/stopped session gets persisted
-            // — both the Stop button and the timer firing naturally go
-            // through FocusManager.stopSession()/its own timer callback,
-            // which both funnel through this same closure. Setting it here
-            // (not duplicated at the call site) keeps "end a session" a
-            // single real code path instead of two that could drift.
-            focusManager.onSessionEnd = { ended, _ in
-                try? focusStore.endSession(id: ended.id, blockedAttempts: ended.blockedAttempts)
-            }
-        }
+        .onAppear(perform: refreshBlockedDomains)
         .onReceive(tick) { now = $0 }
     }
 

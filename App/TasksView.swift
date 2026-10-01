@@ -7,6 +7,7 @@ import SwiftUI
 /// completed task can't be tapped back to pending here.
 struct TasksView: View {
     @ObservedObject var taskStore: TaskStore
+    @ObservedObject var rewardStore: RewardStore
     @Environment(\.dismiss) private var dismiss
 
     private enum Filter: String, CaseIterable { case all = "All", pending = "Pending", completed = "Completed" }
@@ -110,7 +111,10 @@ struct TasksView: View {
 
     private func toggleComplete(_ task: ProductivityTask) {
         guard task.completedAt == nil else { return }
-        try? taskStore.complete(id: task.id)
+        let completedForReal = (try? taskStore.complete(id: task.id)).flatMap { $0 } != nil
+        if completedForReal {
+            RewardEngine(store: rewardStore).awardIfEligible(type: .taskCompleted, note: "Completed \"\(task.title)\"")
+        }
         refresh()
     }
 

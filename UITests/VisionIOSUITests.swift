@@ -447,6 +447,68 @@ final class VisionIOSUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["advisorQuickStatsRow"].waitForExistence(timeout: 5), "expected the real quick-stats row to render")
         XCTAssertTrue(app.staticTexts["advisorNoSuggestion"].waitForExistence(timeout: 5), "a fresh launch hasn't been continuously active for 45 real minutes, so no nudge should show")
         XCTAssertFalse(app.staticTexts["advisorSuggestionCard"].exists, "no suggestion card should render when AdvisorLogic genuinely returns nil")
+        XCTAssertTrue(app.staticTexts["advisorWeekCard"].waitForExistence(timeout: 5), "expected the real This Week reward stats card to render (Phase 7 closes this Phase 6 trim)")
+
+        app.navigationBars.buttons["Done"].tap()
+    }
+
+    /// Real Rewards proof: a genuine offline save should award a real
+    /// OFFLINE_PREP point and show up as a real recent-activity row in
+    /// RewardsView — not just a database row with nothing surfaced.
+    /// Asserts on the specific saved-page note text rather than a point
+    /// total, so this stays correct regardless of points already earned
+    /// by other tests or earlier runs against the same persisted database.
+    func test_savingOfflineAwardsARealRewardEvent() {
+        let app = XCUIApplication()
+        app.launch()
+
+        let addressField = app.textFields["addressBarField"]
+        navigate(app: app, addressField: addressField, to: "example.com")
+        assertAddressBarEventuallyShows(addressField, "https://example.com/", in: self)
+
+        let saveButton = app.buttons["saveOfflineButton"]
+        XCTAssertTrue(saveButton.waitForExistence(timeout: 5))
+        saveButton.tap()
+
+        let okButton = app.alerts["Save for Offline"].buttons["OK"]
+        XCTAssertTrue(okButton.waitForExistence(timeout: 10))
+        okButton.tap()
+
+        app.buttons["rewardsButton"].tap()
+        let earnedNote = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "Saved \"Example Domain\" for offline")).firstMatch
+        if !earnedNote.waitForExistence(timeout: 5) {
+            attachDiagnostics(app: app, name: "offline-save-reward-not-found")
+        }
+        XCTAssertTrue(earnedNote.exists, "a real offline save should show up as a real reward event in Rewards")
+
+        app.navigationBars.buttons["Done"].tap()
+    }
+
+    /// Real Rewards proof for Tasks: completing a real task should award a
+    /// real TASK_COMPLETED point and show up as a real recent-activity row.
+    func test_completingATaskAwardsARealRewardEvent() {
+        let app = XCUIApplication()
+        app.launch()
+
+        app.buttons["tasksButton"].tap()
+        let field = app.textFields["newTaskField"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        let taskTitle = "Reward UI test \(UUID().uuidString.prefix(8))"
+        field.tap()
+        field.typeText(taskTitle)
+        app.buttons["addTaskButton"].tap()
+
+        let row = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", taskTitle)).firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        row.tap()
+        app.navigationBars.buttons["Done"].tap()
+
+        app.buttons["rewardsButton"].tap()
+        let earnedNote = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "Completed \"\(taskTitle)\"")).firstMatch
+        if !earnedNote.waitForExistence(timeout: 5) {
+            attachDiagnostics(app: app, name: "task-completed-reward-not-found")
+        }
+        XCTAssertTrue(earnedNote.exists, "completing a real task should show up as a real reward event in Rewards")
 
         app.navigationBars.buttons["Done"].tap()
     }

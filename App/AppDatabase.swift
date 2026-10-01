@@ -121,6 +121,24 @@ enum AppDatabase {
             }
         }
 
+        migrator.registerMigration("v4_phase7") { db in
+            // Rewards — port of RewardDbHelper.kt's reward_events table.
+            // No redemptions table yet: Redeem (the Firestore-backed
+            // spend side of this) needs real Firebase project credentials
+            // this repo doesn't have — see README's disclosed scope trim.
+            try db.create(table: "rewardEvent") { t in
+                t.primaryKey("id", .text)
+                t.column("type", .text).notNull()
+                t.column("category", .text).notNull()
+                t.column("points", .integer).notNull()
+                t.column("note", .text).notNull()
+                t.column("dedupeKey", .text)
+                t.column("createdAt", .datetime).notNull()
+            }
+            try db.create(index: "idx_rewardEvent_createdAt", on: "rewardEvent", columns: ["createdAt"])
+            try db.create(index: "idx_rewardEvent_dedupeKey", on: "rewardEvent", columns: ["dedupeKey"])
+        }
+
         return migrator
     }
 }
