@@ -182,7 +182,13 @@ struct MaterialsView: View {
     }
 
     private func refresh() {
-        documents = (try? studyDocumentStore.list()) ?? []
+        do {
+            documents = try studyDocumentStore.list()
+            NSLog("[MaterialsView] refresh() got \(documents.count) document(s): \(documents.map { "\($0.id)=\($0.status.rawValue)" })")
+        } catch {
+            NSLog("[MaterialsView] refresh() THREW: \(error)")
+            documents = []
+        }
     }
 
     private func handlePicked(_ result: Result<[URL], Error>) {
@@ -218,14 +224,19 @@ struct MaterialsView: View {
         // Thread{}.start() + mainHandler.post{} pattern for this exact
         // call.
         let store = studyDocumentStore
+        NSLog("[MaterialsView] process() starting for id=\(doc.id)")
         Task.detached {
             DocumentImport.process(documentId: doc.id, store: store)
+            NSLog("[MaterialsView] DocumentImport.process() returned for id=\(doc.id)")
             await MainActor.run { refresh() }
         }
     }
 
     private func setStatus(_ id: String, _ status: StudyDocumentStatus) {
-        guard let index = documents.firstIndex(where: { $0.id == id }) else { return }
+        guard let index = documents.firstIndex(where: { $0.id == id }) else {
+            NSLog("[MaterialsView] setStatus: no row found for id=\(id) in \(documents.count) document(s)")
+            return
+        }
         documents[index].status = status
     }
 
