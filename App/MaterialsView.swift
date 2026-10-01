@@ -204,8 +204,22 @@ struct MaterialsView: View {
 
     private func process(_ doc: StudyDocument) {
         setStatus(doc.id, .processing)
+        // A real Swift 6 concurrency-checker warning (not a style nit --
+        // it's a hard error under strict mode) caught a genuine bug here:
+        // `studyDocumentStore` is a MainActor-isolated SwiftUI property,
+        // and reading it directly inside Task.detached's closure crosses
+        // into a non-isolated context without `await`, an actor-isolation
+        // violation. Confirmed via a real CI failure where this
+        // manifested as the whole document list resetting to empty
+        // mid-test. Fixed by capturing the store into a plain local
+        // *before* detaching, so nothing actor-isolated is touched from
+        // the non-isolated closure -- still running the real file I/O
+        // off the main thread, matching MaterialsActivity.kt's own
+        // Thread{}.start() + mainHandler.post{} pattern for this exact
+        // call.
+        let store = studyDocumentStore
         Task.detached {
-            DocumentImport.process(documentId: doc.id, store: studyDocumentStore)
+            DocumentImport.process(documentId: doc.id, store: store)
             await MainActor.run { refresh() }
         }
     }
