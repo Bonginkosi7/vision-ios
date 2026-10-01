@@ -18,6 +18,27 @@ macOS runners, triggered on every push to `main`). The acceptance bar for
 every phase is the same: not "it compiles," but launched, driven in a real
 booted Simulator, and behaviorally confirmed by `UITests/VisionIOSUITests.swift`.
 
+**Phase 8** (My Materials: document import, extraction, AI topic
+extraction) is done — the longest real CI loop of any phase so far,
+six iterations deep before genuinely green. The first few failures
+were real: a tap-before-wait race in the new UI test, then a genuine
+SwiftUI accessibility-identifier overwrite (the same class of bug
+Phase 7 found, but worse — it clobbered a child *Button's* own
+identifier, not just a StaticText's). After those, one test kept
+failing on the exact same symptom (the seeded document mysteriously
+vanishing mid-test) across three further attempts, including two
+fixes that turned out to target the wrong mechanism — the eventual
+real cause, found only by downloading the `.xcresult` and reading the
+app's own real console output twice, was that tapping "Process"
+could shift the row's Delete button into the just-removed Process
+button's screen position in time to catch a stray touch, genuinely
+deleting the seeded fixture's real row and real file. Fixed for good
+by moving Delete to a real swipe action instead of chasing the exact
+timing. Run
+[`36907386138`](https://github.com/Bonginkosi7/vision-ios/actions/runs/36907386138)
+passed fully green — all 16 UI tests, all 58 VisionCore unit tests.
+Full story below.
+
 **Phase 7** (Rewards) is done — a longer real CI loop than any phase
 before it: the first push's run
 [`36864175163`](https://github.com/Bonginkosi7/vision-ios/actions/runs/36864175163)
@@ -78,6 +99,149 @@ tests), no fix-and-repush cycle needed that time — applying Phase 1's own
 lessons (real `@ObservedObject` reactivity, real keyboard taps, `List`-based
 rows instead of a merge-prone VStack-of-Buttons) preemptively instead of
 rediscovering them.
+
+## Phase 8: My Materials (document import, extraction, AI topic extraction)
+
+Direct port of the real slice of `MaterialsActivity.kt`/`MaterialsAdapter.kt`
+the build plan names explicitly: "unlocks Flashcards/Exams/Tutor via
+topic extraction." Reached via a new "My Materials" entry in the
+overflow menu.
+
+- **`Sources/VisionCore/StudyDocumentTypes.swift`** (pure): `StudyFileType`/
+  `StudyDocumentStatus`, direct ports of the matching Kotlin enums.
+- **`Sources/VisionCore/TopicExtractionLogic.swift`** + **`StructuredJSON.swift`**
+  (pure, real-verified without Xcode via the standalone `swiftc` harness
+  and `swift test`): the real system instruction, 12,000-char bounding,
+  and permissive JSON parsing (`RawTopic`/`RawSubtopic`) ported from
+  `TopicExtractionLogic.kt`, plus the fenced-```json-block extraction
+  `StructuredAi.kt`'s `extractJsonText` does — pure prompt-building and
+  response-parsing only, same real/pure split `CloudAIRequestBuilder`
+  already established.
+- **`App/DocumentExtractors.swift`**: real text extraction per file type.
+  PDF via **PDFKit** — Apple's first-party framework, a genuine
+  simplification over Android, which has no first-party text-layer API
+  (`PdfRenderer` only rasterizes to bitmaps) and needs the third-party
+  pdfbox-android library for this; iOS needs nothing extra. DOCX via a
+  new **ZIPFoundation** dependency (iOS has no first-party zip-reading
+  API, unlike Android's built-in `java.util.zip.ZipFile` — a real,
+  disclosed extra dependency for exactly that gap, same reasoning as
+  choosing GRDB over hand-rolled SQLite3 calls) plus Foundation's own
+  `XMLParser` reading `word/document.xml` directly, as targeted as
+  `DocxExtractor.kt`: no heading-style preservation, just the real full
+  plain text. TXT trivially via `String(contentsOf:encoding:)`.
+- **`App/DocumentImport.swift`**: real file copy into app storage
+  (`startAccessingSecurityScopedResource()` around it — iOS's own real
+  equivalent of Android's `content://` Uri permission grant, with no
+  Android analog needed since `ContentResolver.openInputStream` handles
+  that implicitly) and real per-stage honest failure during processing —
+  an unreadable file or one with no real text layer ends in `.failed`
+  with a specific, real reason, never a silently-empty success.
+- **`App/StudyDocumentStore.swift`** (GRDB) + **`TopicStore.swift`** (GRDB):
+  deliberately narrower than Android's own final schema — no taxonomy
+  (level/grade/category/subject/resourceType/year/language) or
+  `offlineReadyAt` columns yet; those belong to Android's separate,
+  bigger "Study Material hub" this phase does not port (see below).
+- **`App/StructuredAI.swift`** + **`TopicExtractor.swift`**: the real AI
+  call orchestration — direct port of `StructuredAi.kt`'s try-each-
+  provider/retry-once-on-bad-JSON logic, using the same `CloudAIProvider`
+  plumbing Phase 5 already proved reaches the real Anthropic/OpenAI APIs.
+- **`App/MaterialsView.swift`**: upload, real text extraction (tap
+  Process/Retry), and tap-to-reveal AI topic extraction (first tap shows
+  cached topics or runs one real AI call; second tap just collapses the
+  cached result) — direct port of `MaterialsActivity.kt`'s
+  `toggleTopics()`.
+
+**Disclosed scope trim: Android's "Study Material hub" is not ported.**
+`StudyMaterialActivity.kt` — a separate, later-added, substantially
+bigger feature (taxonomy tagging, browse/search, offline-ready marking,
+a folded-in spaced-repetition review tab) — is deliberately left for its
+own later phase, not bundled into this one. The build plan's own
+one-line Phase 8 description ("unlocks Flashcards/Exams/Tutor via topic
+extraction") maps directly onto `MaterialsActivity.kt`'s real scope, not
+`StudyMaterialActivity.kt`'s.
+
+**Disclosed test-seam: a `-UITestSeedMaterial` launch argument.**
+Driving iOS's own system file-picker sheet (`.fileImporter`) reliably
+from XCUITest is a known, genuine platform limitation (the Files app's
+own UI, not this app's) — real projects widely report this as close to
+undriveable. So the upload step itself stays live-verified by hand, not
+by CI; a UI test launching with `-UITestSeedMaterial` instead gets one
+real fixture file genuinely copied onto disk and one real
+`StudyDocument` row inserted at app launch
+(`MainBrowserView.seedMaterialsFixtureIfRequested()`) — the same real
+state `DocumentImport.importFile` would have produced had the picker
+actually been driven. Everything downstream of that real upload —
+processing, topic extraction, deletion — is still exercised for real.
+
+### The real bug trail — six CI iterations, the longest of any phase
+
+Documented in full rather than squashed, same convention as Phase 1's
+"seven real bugs" and Phase 7's toolbar-overflow saga:
+
+1. **A plain tap-before-wait race** in the new test — it tapped
+   `btnProcessDocument_ui-test-fixture` without first waiting for its
+   existence, unlike every other test in the suite. Fixed by adding the
+   wait.
+2. **A worse version of Phase 6/7's accessibility-identifier quirk.**
+   The row's container `VStack` carried its own `.accessibilityIdentifier`
+   (`materialRow_*`); a real captured `.xcresult` dump showed this
+   didn't just leak onto plain `StaticText` leaves (the Phase 6/7
+   pattern) — it *overwrote* `btnProcessDocument_*`/`btnDeleteDocument_*`'s
+   own explicit identifiers, both reported back carrying the row's
+   identifier instead of their own. Fixed by removing the container-level
+   identifier and giving the title its own (`materialTitle_*`).
+3. **A genuine actor-isolation bug.** `process()`'s `Task.detached`
+   closure read `studyDocumentStore` (a MainActor-isolated SwiftUI
+   property) directly — a real Swift 6 concurrency-checker warning, not
+   a style nit. Fixed by capturing it into a plain local before
+   detaching. This was a real, worthwhile fix on its own merits, but
+   didn't resolve the still-failing test.
+4. **Suspected (and ruled out) CI-runner slowness.** Widened the test's
+   own timeouts after an unrelated, previously-stable test also failed
+   in the same run with a similarly inflated duration — a pattern that
+   *had* correctly identified pure infrastructure flakiness twice
+   before in this project (Phase 7's toolbar fix, and a Phase 7 README
+   commit). This time it didn't help: the exact same failure recurred.
+5. **The real root cause**, found only by downloading the `.xcresult`
+   twice and decoding the app's own real console output (NSLog tracing
+   added specifically to settle it, after two targeted fixes failed to):
+   `process(_ doc:)`'s `setStatus(doc.id, .processing)` mutates
+   `documents` — and the "Process"/"Retry" button only renders while
+   `doc.status` is `.uploaded`/`.failed`, so this removes that same
+   button from the view hierarchy while its own tap gesture was still
+   being finalized. The Delete button — the only other real sibling in
+   that `HStack` — shifted into the vacated screen position in time to
+   catch a follow-up touch meant for the just-removed button, genuinely
+   deleting the seeded fixture's real DB row *and* its real file's
+   parent directory. That's why the document appeared to "vanish" and
+   the extraction appeared to "fail with file not found" — both were
+   real, correct symptoms of a real deletion, not bugs in the deleted
+   code paths themselves.
+6. **The actual fix**: rather than chase the exact timing further (a
+   first attempt deferring the mutation via `DispatchQueue.main.async`
+   did *not* resolve it, disproving that specific theory), the hazard
+   class was removed entirely — Delete moved from an always-visible tap
+   button sharing an `HStack` with the conditionally-rendered Process
+   button to a real `.swipeActions` destructive action, matching
+   `HistoryView.swift`'s own already-established pattern in this
+   codebase. A swipe gesture can't land on a tap target that shifted
+   into a different button's old position, regardless of timing.
+
+### Phase 8 UI test
+
+One new case in `VisionIOSUITests.swift`:
+`test_processingAndExtractingTopicsForASeededMaterial` — processes a
+real seeded `.txt` fixture (real `TxtExtractor` against a real file),
+confirms the real "Processed" status, attempts real topic extraction
+with no AI provider configured (confirming the same honest "Cloud AI
+isn't configured" message `test_rewriteWithNoProviderConfigured_showsHonestError`
+already proved for Rewrite Writer — `TopicExtractor` routes through the
+identical `CloudAIProvider` plumbing, not a parallel path), then swipes
+to delete the fixture and confirms its real row is gone.
+
+`AppDatabase.swift`'s `v5_phase8` migration adds `studyDocument` and
+`topic` to the same shared `vision.sqlite`. `project.yml` adds
+ZIPFoundation as a second real SPM dependency alongside GRDB.
 
 ## Phase 7: Rewards
 
@@ -565,7 +729,7 @@ comment.
 - `WebViewRepresentable.swift` — `UIViewRepresentable` wrapping one `WKWebView` per tab; real history recording + real `WKDownloadDelegate` handling
 - `BrowserTab.swift` — mirrors `Tab.kt` (id, title, url, isNewTab, isPrivate)
 - `TabManager.swift` — mirrors `MainActivity.kt`'s `tabs`/`activeTabIndex` + create/switch/close/navigate/openOfflineFile, delegates close-index math to `VisionCore.TabIndexing`
-- `AppDatabase.swift` — GRDB `DatabaseQueue` + migrator (`v1_bookmarks`, `v2_phase2`, `v3_phase6`, `v4_phase7`)
+- `AppDatabase.swift` — GRDB `DatabaseQueue` + migrator (`v1_bookmarks`, `v2_phase2`, `v3_phase6`, `v4_phase7`, `v5_phase8`)
 - `BookmarkStore.swift` / `HistoryStore.swift` / `DownloadStore.swift` / `OfflineStore.swift` — GRDB ports of the matching `*DbHelper.kt`
 - `OfflineSaver.swift` — real `createWebArchiveData` capture + file write
 - `KeychainStore.swift` / `AiSettings.swift` — real Keychain-backed AI key storage, port of `AiSettings.kt`
@@ -577,7 +741,11 @@ comment.
 - `WellbeingManager.swift` / `WellbeingStore.swift` / `WellbeingActions.swift` — in-process tracking + GRDB break/site-visit log, port of `WellbeingManager.kt`/`WellbeingDbHelper.kt`/`WellbeingActions.kt`
 - `FaviconLoader.swift` — real `google.com/s2/favicons` fetch + in-memory cache, used by Focus Mode's blocklist rows
 - `RewardStore.swift` / `RewardEngine.swift` — real GRDB points ledger + the eligibility-checked award gate, port of `RewardDbHelper.kt`/`RewardEngine.kt`
-- `NewTabView.swift` / `HistoryView.swift` / `DownloadsView.swift` / `OfflineLibraryView.swift` / `SettingsView.swift` / `RewriteView.swift` / `FocusView.swift` / `TasksView.swift` / `AdvisorView.swift` / `RewardsView.swift` — real list/empty-state/settings/rewrite/focus/tasks/advisor/rewards screens
+- `DocumentExtractors.swift` — real PDFKit/ZIPFoundation+XMLParser/plain-text extraction, port of `PdfExtractor.kt`/`DocxExtractor.kt`/`TxtExtractor.kt`
+- `DocumentImport.swift` — real file copy + per-stage honest processing failure, port of `DocumentImport.kt`
+- `StudyDocumentStore.swift` / `TopicStore.swift` — GRDB ports of the `MaterialsActivity.kt`-used slice of `StudyDocumentDbHelper.kt` / `TopicDbHelper.kt`
+- `StructuredAI.swift` / `TopicExtractor.swift` — the real AI call orchestration, port of `StructuredAi.kt` + the networking half of `TopicExtractionLogic.kt`
+- `NewTabView.swift` / `HistoryView.swift` / `DownloadsView.swift` / `OfflineLibraryView.swift` / `SettingsView.swift` / `RewriteView.swift` / `FocusView.swift` / `TasksView.swift` / `AdvisorView.swift` / `RewardsView.swift` / `MaterialsView.swift` — real list/empty-state/settings/rewrite/focus/tasks/advisor/rewards/materials screens
 - `DesignSystem.swift` — same component list and color tokens as `DesignSystem.kt`, ported to `@ViewBuilder` functions; drawable XML collapses into inline SwiftUI modifiers (disclosed simplification, noted in-file)
 
 **`UITests/`** — `VisionIOSUITests.swift`, the real behavioral verification described above.
@@ -590,26 +758,23 @@ every run.
 ## Explicitly NOT built yet (disclosed scope trims, not oversights)
 
 Profile/credentials/offline-AI-model/memory/storage settings, on-device
-local model fallback, the Ask VISION chat, every remaining education
-screen (Study Materials, Flashcards, Exams, Tutor, Performance, Study
-Plan, Paper Review), Redeem, VISION Ready, and Help. Redeem specifically
-needs real Firebase project credentials and anonymous-auth infrastructure
-this repo doesn't have — see Phase 7's own writeup for why that's a
-disclosed trim rather than fabricated. Sequencing for the rest is in the
-build plan's Phase 8–12 roadmap.
+local model fallback, the Ask VISION chat, the remaining education
+screens (Flashcards, Exams, Tutor, Performance, Study Plan, Paper
+Review), Android's separate "Study Material hub" (taxonomy tagging,
+browse/search, offline-ready marking, folded-in spaced-repetition
+review — a distinct, bigger feature than My Materials, left for its own
+later phase), Redeem, VISION Ready, and Help. Redeem specifically needs
+real Firebase project credentials and anonymous-auth infrastructure this
+repo doesn't have — see Phase 7's own writeup for why that's a disclosed
+trim rather than fabricated. Sequencing for the rest is in the build
+plan's Phase 9–12 roadmap.
 
 ## Next steps
 
-Phase 8: Study Materials & Documents — real document import (PDF via
-PDFKit, DOCX via a real zip+XML read, TXT trivially), real text
-extraction, and real AI-backed topic extraction (the same
-`generateStructuredJson`-style retry/fallback pattern as Paper Review,
-split into pure VisionCore logic + App-layer networking glue the same
-way `CloudAIRequestBuilder`/`CloudAIProvider` already are) — the slice
-that unlocks Flashcards/Exams/Tutor per the build plan. Android's
-separate, later-added "Study Material hub" (taxonomy tagging, browse/
-search, offline-ready marking, folded-in spaced-repetition review) is a
-distinct, bigger feature deliberately left for its own later phase.
+Phase 9: Education — Flashcards, Exams, Tutor, Performance, Study Plan.
+The build plan calls for reusing Android's own discovered dependency
+order (Performance's mastery calculation needs real Flashcards/Exams
+data before Study Plan can honestly build on it).
 
 **If local Xcode ever exists on this machine**: `xcodegen generate`, open
 `VisionIOS.xcodeproj`, and everything here still works locally too — CI
