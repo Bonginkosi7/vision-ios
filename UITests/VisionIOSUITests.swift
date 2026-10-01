@@ -564,7 +564,11 @@ final class VisionIOSUITests: XCTestCase {
         XCTAssertTrue(topicsStatus.label.contains("Cloud AI isn't configured"), "expected the real honest 'not configured' message, got: \(topicsStatus.label)")
 
         // Clean up so a later run (or the same simulator's persisted
-        // database) doesn't see the fixture as already present.
+        // database) doesn't see the fixture as already present. Delete
+        // lives behind a real swipe action (not a plain tap button —
+        // see MaterialsView.documentRow's own doc comment for why), so
+        // this swipes the row open before tapping it.
+        row.swipeLeft()
         let deleteButton = app.buttons["btnDeleteDocument_ui-test-fixture"]
         XCTAssertTrue(deleteButton.waitForExistence(timeout: 5))
         deleteButton.tap()

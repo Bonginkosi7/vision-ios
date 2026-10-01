@@ -106,15 +106,32 @@ struct MaterialsView: View {
                     topicsButton(doc)
                 }
                 Spacer()
-                Button(action: { delete(doc) }) {
-                    Image(systemName: "trash").foregroundStyle(DesignSystem.textMuted2)
-                }
-                .accessibilityIdentifier("btnDeleteDocument_\(doc.id)")
             }
 
             topicsSection(doc)
         }
         .padding(.vertical, 8)
+        // Delete lives behind a real swipe action, not a plain tap button
+        // in this same HStack — matching HistoryView's own established
+        // pattern. A real, reproducible bug here (caught over several CI
+        // runs, not a guess) traced to the Process/Retry button being
+        // conditionally rendered (only for .uploaded/.failed) right next
+        // to an always-visible Delete button in the same row: removing
+        // Process from the layout — whether synchronously in its own tap
+        // handler or shortly after — could shift Delete into Process's
+        // vacated screen position in time to catch a stray touch meant
+        // for Process. A swipe gesture is a fundamentally different
+        // touch pattern from a tap landing at a shifted coordinate, so
+        // moving delete off a plain tap target removes the hazard
+        // entirely rather than relying on timing to avoid it.
+        .swipeActions {
+            Button(role: .destructive) {
+                delete(doc)
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+            .accessibilityIdentifier("btnDeleteDocument_\(doc.id)")
+        }
         // Deliberately NO .accessibilityIdentifier on this whole VStack:
         // a real captured .xcresult accessibility-tree dump (this
         // project's established forensics technique) showed that when an
@@ -203,35 +220,18 @@ struct MaterialsView: View {
     }
 
     private func process(_ doc: StudyDocument) {
-        // Deferred to the next run loop turn rather than mutated
-        // synchronously here: this is called from the "Process"/"Retry"
-        // button's OWN action closure, and that button only renders
-        // while doc.status is .uploaded/.failed (see documentRow) — so
-        // setStatus(.processing) immediately removes THIS SAME button
-        // from the view hierarchy while its own tap gesture is still
-        // being finalized. The Delete button (the only other real
-        // sibling in that HStack) then shifts into the vacated screen
-        // position in time to catch a follow-up touch meant for the
-        // just-removed Process button. Confirmed for real via
-        // .xcresult forensics: the seeded fixture's real DB row AND its
-        // real file on disk were BOTH genuinely deleted moments after
-        // "Process" was tapped, tracing straight to delete(doc) firing
-        // unexpectedly. Deferring one run loop turn lets this tap fully
-        // resolve before the layout changes.
-        DispatchQueue.main.async {
-            setStatus(doc.id, .processing)
-            let store = studyDocumentStore
-            // `studyDocumentStore` is a MainActor-isolated SwiftUI
-            // property; capturing it into a plain local before entering
-            // Task.detached's non-isolated closure avoids an actor-
-            // isolation violation (a real Swift 6 concurrency-checker
-            // warning caught this) while still running the real file
-            // I/O off the main thread, matching MaterialsActivity.kt's
-            // own Thread{}.start() + mainHandler.post{} pattern.
-            Task.detached {
-                DocumentImport.process(documentId: doc.id, store: store)
-                await MainActor.run { refresh() }
-            }
+        setStatus(doc.id, .processing)
+        // `studyDocumentStore` is a MainActor-isolated SwiftUI property;
+        // capturing it into a plain local before entering Task.detached's
+        // non-isolated closure avoids an actor-isolation violation (a
+        // real Swift 6 concurrency-checker warning caught this) while
+        // still running the real file I/O off the main thread, matching
+        // MaterialsActivity.kt's own Thread{}.start() + mainHandler.post{}
+        // pattern.
+        let store = studyDocumentStore
+        Task.detached {
+            DocumentImport.process(documentId: doc.id, store: store)
+            await MainActor.run { refresh() }
         }
     }
 
