@@ -24,9 +24,12 @@ confirmed the full test suite green, including force-terminating the app
 and relaunching to prove a bookmark survived in a real, persisted
 GRDB/SQLite database.
 
-**Phase 3** (Settings & AI key storage) is implemented and pushed; its CI
-run is the next thing to watch — don't treat it as verified until that run
-is actually green, same discipline as every phase before it.
+**Phase 3** (Settings & AI key storage) is done — run
+[`36850625135`](https://github.com/Bonginkosi7/vision-ios/actions/runs/36850625135)
+passed green on the first try, all 8 real UI tests and all 21 VisionCore
+unit tests, including the real Keychain save/clear round-trip and
+confirming a DuckDuckGo search actually resolves against DuckDuckGo after
+changing the setting.
 
 **Phase 2** (History, Downloads, Offline Library, Private Browsing) is
 done — run [`36846421828`](https://github.com/Bonginkosi7/vision-ios/actions/runs/36846421828)
