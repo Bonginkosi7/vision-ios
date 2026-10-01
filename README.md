@@ -24,13 +24,66 @@ confirmed the full test suite green, including force-terminating the app
 and relaunching to prove a bookmark survived in a real, persisted
 GRDB/SQLite database.
 
-**Phase 2** (History, Downloads, Offline Library, Private Browsing) is also
+**Phase 3** (Settings & AI key storage) is implemented and pushed; its CI
+run is the next thing to watch — don't treat it as verified until that run
+is actually green, same discipline as every phase before it.
+
+**Phase 2** (History, Downloads, Offline Library, Private Browsing) is
 done — run [`36846421828`](https://github.com/Bonginkosi7/vision-ios/actions/runs/36846421828)
 passed green on the first try (all 6 real UI tests, all 21 VisionCore unit
-tests), no fix-and-repush cycle needed this time — applying Phase 1's own
+tests), no fix-and-repush cycle needed that time — applying Phase 1's own
 lessons (real `@ObservedObject` reactivity, real keyboard taps, `List`-based
 rows instead of a merge-prone VStack-of-Buttons) preemptively instead of
 rediscovering them.
+
+## Phase 3: Settings & AI key storage
+
+Direct port of the slice of `SettingsActivity.kt`/`AiSettings.kt`/
+`VisionSettings.kt` this phase's scope covers — reached via a new
+"settingsButton" (gear icon) added to the same secondary toolbar Phase 2
+introduced.
+
+- **`KeychainStore.swift`** — real Keychain Services wrapper
+  (`SecItemAdd`/`SecItemCopyMatching`/`SecItemDelete`), the direct iOS
+  counterpart of Android's `EncryptedSharedPreferences` (AES-256, key
+  material in the Android Keystore) — here, the Keychain's own secure
+  storage plays the same role. Small enough (like `AiSettings.kt` itself)
+  that wrapping the raw API directly is simpler and more honest than a
+  dependency for it.
+- **`AiSettings.swift`** — direct port of `AiSettings.kt`'s
+  get/set/clear surface for the Anthropic and OpenAI keys, backed by
+  `KeychainStore` instead of `EncryptedSharedPreferences`. Same reasoning
+  for why this needs a real in-app UI at all: desktop's env-var keys have
+  no meaning for a distributed binary.
+- **`AppSettings.swift`** — direct port of `VisionSettings.kt`'s
+  `SearchEngine`/`Theme` enums, scoped to exactly what this phase needs
+  (not profile/weather/storage-limit/background-refresh — those land in
+  later phases alongside the features that use them), backed by
+  `UserDefaults` via `@AppStorage` so a change reactively redraws the UI
+  (plain `UserDefaults` reads don't trigger that by themselves).
+- **`SettingsView.swift`** — theme picker, search-engine picker, and the
+  two AI key rows (save/clear/status — "Label — Configured"/"Not
+  configured", same real UX pattern as `SettingsActivity.kt`'s
+  `setUpAiKeyRow`). Profile, credentials, the offline on-device model,
+  memory, and storage are later-phase scope.
+- `MainBrowserView`'s previously-hardcoded Google search URL is now a real
+  read from `AppSettings.searchEngine.queryUrl`, and `VisionIOSApp` reads
+  the real theme setting instead of a hardcoded `.dark` — `nil` for
+  "Follow system" is a deliberate real value (tells SwiftUI to inherit the
+  OS's own appearance), not a missing case.
+
+### Phase 3 UI tests
+
+Two new cases, same bar as every phase before: launch it for real, drive
+it, confirm the real behavior.
+- `test_settingsSavesAndClearsAnAiKey` — save a (fake-value) key, confirm
+  the status flips to Configured, clear it, confirm it flips back — a real
+  Keychain round-trip, not a mocked store.
+- `test_changingSearchEngineAffectsRealNavigation` — switch to DuckDuckGo
+  in Settings, submit a plain search phrase from the address bar, confirm
+  the real resolved destination is a DuckDuckGo URL — proves the setting
+  actually affects live navigation, not just a UI toggle with nothing
+  behind it.
 
 ## Phase 2: History, Downloads, Offline Library, Private Browsing
 
@@ -174,7 +227,9 @@ comment.
 - `AppDatabase.swift` — GRDB `DatabaseQueue` + migrator (`v1_bookmarks`, `v2_phase2`)
 - `BookmarkStore.swift` / `HistoryStore.swift` / `DownloadStore.swift` / `OfflineStore.swift` — GRDB ports of the matching `*DbHelper.kt`
 - `OfflineSaver.swift` — real `createWebArchiveData` capture + file write
-- `NewTabView.swift` / `HistoryView.swift` / `DownloadsView.swift` / `OfflineLibraryView.swift` — real list/empty-state screens
+- `KeychainStore.swift` / `AiSettings.swift` — real Keychain-backed AI key storage, port of `AiSettings.kt`
+- `AppSettings.swift` — `UserDefaults`/`@AppStorage`-backed theme + search engine, port of `VisionSettings.kt`'s Phase 3 slice
+- `NewTabView.swift` / `HistoryView.swift` / `DownloadsView.swift` / `OfflineLibraryView.swift` / `SettingsView.swift` — real list/empty-state/settings screens
 - `DesignSystem.swift` — same component list and color tokens as `DesignSystem.kt`, ported to `@ViewBuilder` functions; drawable XML collapses into inline SwiftUI modifiers (disclosed simplification, noted in-file)
 
 **`UITests/`** — `VisionIOSUITests.swift`, the real behavioral verification described above.
@@ -186,16 +241,18 @@ every run.
 
 ## Explicitly NOT built yet (disclosed scope trims, not oversights)
 
-Focus Mode, Settings (incl. AI key storage), the Ask VISION chat, every
-education screen (Study Materials, Flashcards, Exams, Tutor, Performance,
-Study Plan, Paper Review, Rewrite), Rewards/Redeem, Advisor, VISION Ready,
-Help, and the overflow menu. Sequencing for all of these is in the build
-plan's Phase 3–12 roadmap.
+Focus Mode, Profile/credentials/offline-AI-model/memory/storage settings,
+the cloud AI provider layer itself (keys can be stored now, nothing calls
+out with them yet), the Ask VISION chat, every education screen (Study
+Materials, Flashcards, Exams, Tutor, Performance, Study Plan, Paper
+Review, Rewrite), Rewards/Redeem, Advisor, VISION Ready, Help, and the
+overflow menu. Sequencing for all of these is in the build plan's
+Phase 4–12 roadmap.
 
 ## Next steps
 
-1. Watch Phase 2's CI run; iterate on whatever it actually reports, same as Phase 1.
-2. Phase 3: Settings & AI key storage (Keychain) — unlocks everything AI-dependent afterward.
+1. Watch Phase 3's CI run; iterate on whatever it actually reports, same as every phase before it.
+2. Phase 4: the cloud AI provider layer (`CloudAIProvider.swift` protocol + `AnthropicProvider`/`OpenAIProvider` via `URLSession`) — infrastructure only, consuming the Keychain keys Phase 3 now stores. No UI yet; Phase 5 (Rewrite Writer) is the first real feature to use it.
 
 **If local Xcode ever exists on this machine**: `xcodegen generate`, open
 `VisionIOS.xcodeproj`, and everything here still works locally too — CI

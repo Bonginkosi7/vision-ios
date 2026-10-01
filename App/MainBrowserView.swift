@@ -19,12 +19,8 @@ struct MainBrowserView: View {
     @State private var showHistory = false
     @State private var showDownloads = false
     @State private var showOfflineLibrary = false
+    @State private var showSettings = false
     @State private var saveOfflineStatus: String?
-
-    // Phase 1 hardcodes Google — a real Settings-backed search-engine
-    // choice (matching VisionSettings.getSearchEngine on Android) is Phase
-    // 3 scope, not invented early.
-    private let searchEngineUrl = "https://www.google.com/search?q="
 
     var body: some View {
         VStack(spacing: 0) {
@@ -53,6 +49,9 @@ struct MainBrowserView: View {
             OfflineLibraryView(offlineStore: offlineStore) { fileURL in
                 tabManager.openOfflineFile(fileURL)
             }
+        }
+        .sheet(isPresented: $showSettings) {
+            SettingsView()
         }
     }
 
@@ -132,6 +131,11 @@ struct MainBrowserView: View {
                 Image(systemName: "eyeglasses")
             }
             .accessibilityIdentifier("newPrivateTabButton")
+
+            Button(action: { showSettings = true }) {
+                Image(systemName: "gearshape")
+            }
+            .accessibilityIdentifier("settingsButton")
         }
         .foregroundStyle(.white)
         .padding(.horizontal, 12)
@@ -177,7 +181,7 @@ struct MainBrowserView: View {
 
     private func navigateFromAddressBar() {
         guard !addressText.isEmpty else { return }
-        let destination = AddressResolver.resolveDestination(addressText, searchEngineUrl: searchEngineUrl)
+        let destination = AddressResolver.resolveDestination(addressText, searchEngineUrl: AppSettings.searchEngine.queryUrl)
         tabManager.navigateActiveTab(to: destination)
         // Deliberately no synchronous syncAddressBar() call here — tab.url
         // hasn't been updated yet at this point (WKWebView.load() is async;

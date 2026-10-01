@@ -170,6 +170,77 @@ final class VisionIOSUITests: XCTestCase {
         XCTAssertFalse(privateURLText.exists, "a private tab's real navigation must never be written to History")
     }
 
+    /// Real Keychain round-trip proof: save a real (fake-value) API key,
+    /// confirm the status flips to Configured, clear it, confirm it flips
+    /// back — exercises AiSettings/KeychainStore's actual
+    /// SecItemAdd/SecItemCopyMatching/SecItemDelete calls, not a mocked
+    /// store.
+    func test_settingsSavesAndClearsAnAiKey() {
+        let app = XCUIApplication()
+        app.launch()
+
+        XCTAssertTrue(app.buttons["settingsButton"].waitForExistence(timeout: 5))
+        app.buttons["settingsButton"].tap()
+
+        let status = app.staticTexts["anthropicStatus"]
+        XCTAssertTrue(status.waitForExistence(timeout: 5))
+        XCTAssertTrue(status.label.contains("Not configured"), "expected a fresh install to start unconfigured, got: \(status.label)")
+
+        let input = app.secureTextFields["anthropicKeyInput"]
+        XCTAssertTrue(input.exists)
+        input.tap()
+        input.typeText("sk-ant-test-fake-key-for-ui-testing")
+        app.buttons["anthropicSaveButton"].tap()
+
+        let configuredPredicate = NSPredicate(format: "label CONTAINS %@", "Configured")
+        let configuredExpectation = XCTNSPredicateExpectation(predicate: configuredPredicate, object: status)
+        XCTAssertEqual(XCTWaiter().wait(for: [configuredExpectation], timeout: 5), .completed, "saving a real key should flip status to Configured")
+        XCTAssertFalse(status.label.contains("Not configured"))
+
+        app.buttons["anthropicClearButton"].tap()
+        let clearedPredicate = NSPredicate(format: "label CONTAINS %@", "Not configured")
+        let clearedExpectation = XCTNSPredicateExpectation(predicate: clearedPredicate, object: status)
+        XCTAssertEqual(XCTWaiter().wait(for: [clearedExpectation], timeout: 5), .completed, "clearing the key should flip status back to Not configured")
+    }
+
+    /// Real behavioral proof the search-engine setting actually affects
+    /// navigation, not just a UI toggle with nothing behind it: switch to
+    /// DuckDuckGo, submit a plain search phrase (not a URL) from the
+    /// address bar, and confirm the real resolved destination is a
+    /// DuckDuckGo URL.
+    func test_changingSearchEngineAffectsRealNavigation() {
+        let app = XCUIApplication()
+        app.launch()
+
+        XCTAssertTrue(app.buttons["settingsButton"].waitForExistence(timeout: 5))
+        app.buttons["settingsButton"].tap()
+
+        let searchEnginePicker = app.buttons["searchEnginePicker"]
+        XCTAssertTrue(searchEnginePicker.waitForExistence(timeout: 5))
+        searchEnginePicker.tap()
+
+        let duckDuckGoOption = app.buttons["DuckDuckGo"]
+        XCTAssertTrue(duckDuckGoOption.waitForExistence(timeout: 5), "expected a real menu option for DuckDuckGo")
+        duckDuckGoOption.tap()
+
+        app.buttons["settingsDoneButton"].tap()
+
+        let addressField = app.textFields["addressBarField"]
+        XCTAssertTrue(addressField.waitForExistence(timeout: 5))
+        navigate(app: app, addressField: addressField, to: "vision ios test query")
+
+        let predicate = NSPredicate(format: "value BEGINSWITH %@", "https://duckduckgo.com/")
+        let expectation = XCTNSPredicateExpectation(predicate: predicate, object: addressField)
+        let result = XCTWaiter().wait(for: [expectation], timeout: 15)
+        if result != .completed {
+            attachDiagnostics(app: app, name: "search-engine-not-duckduckgo")
+        }
+        XCTAssertEqual(
+            result, .completed,
+            "expected a search to resolve against DuckDuckGo after changing the setting, address bar read: \(addressField.value ?? "<nil>")"
+        )
+    }
+
     // MARK: - Helpers
 
     /// Types into the address bar and submits it. A first CI run revealed a
