@@ -514,11 +514,26 @@ final class VisionIOSUITests: XCTestCase {
     /// screen once Phase 7 added one icon too many, caught by this exact
     /// test suite failing for real in CI). One helper replaces what used
     /// to be a direct button tap at every call site below.
+    ///
+    /// Taps by raw coordinate rather than the semantic `.tap()`: a real
+    /// captured `.xcresult` accessibility-tree dump (this project's
+    /// established forensics technique) confirmed `moreMenuButton`'s
+    /// frame is genuinely fully on-screen ({402.3, 76.7}-{422.0, 95.7}
+    /// inside a 430pt-wide window) when `.tap()` still failed with
+    /// `kAXErrorCannotComplete` trying to auto-scroll it into view first —
+    /// not an off-screen layout bug, but XCUITest's default scroll-to-
+    /// visible step genuinely tripping over SwiftUI `Menu`'s nested
+    /// Button-inside-Button accessibility structure. A coordinate tap
+    /// skips that failing step entirely; applied to the menu item too
+    /// since it's built the same way.
     private func openMenu(_ app: XCUIApplication, item identifier: String) {
-        app.buttons["moreMenuButton"].tap()
+        let menuButton = app.buttons["moreMenuButton"]
+        XCTAssertTrue(menuButton.waitForExistence(timeout: 5))
+        menuButton.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+
         let menuItem = app.buttons[identifier]
         XCTAssertTrue(menuItem.waitForExistence(timeout: 5), "expected menu item '\(identifier)' to exist in the overflow menu")
-        menuItem.tap()
+        menuItem.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
     }
 
     /// Types into the address bar and submits it. A first CI run revealed a
