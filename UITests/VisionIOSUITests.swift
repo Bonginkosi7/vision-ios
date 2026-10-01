@@ -776,8 +776,13 @@ final class VisionIOSUITests: XCTestCase {
         // activation-point computation still fails for it, the same class
         // of quirk already documented on `openMenu`'s coordinate tap, here
         // triggered by the button living inside a horizontally-scrolling
-        // container rather than a `Menu`.
-        app.buttons["tutorSuggestion_4"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        // container rather than a `Menu`. `waitForExistence` first, same
+        // as every other coordinate-tap call site — a second real CI
+        // failure here traced to `openMenu` itself, not this line, but
+        // the wait belongs here regardless, not assumed.
+        let suggestionButton = app.buttons["tutorSuggestion_4"]
+        XCTAssertTrue(suggestionButton.waitForExistence(timeout: 5))
+        suggestionButton.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
 
         let firstAnswer = app.staticTexts.element(matching: NSPredicate(format: "identifier BEGINSWITH 'tutorAnswer_'"))
         if !firstAnswer.waitForExistence(timeout: 10) {
@@ -861,6 +866,71 @@ final class VisionIOSUITests: XCTestCase {
         app.navigationBars.buttons["Done"].tap()
     }
 
+    /// Real Study Plan proof: with no real AI-identified topic ever
+    /// existing in this CI environment (same honest boundary Performance's
+    /// own test hits), `StudyPlanGenerator` genuinely has nothing to
+    /// schedule — confirming the real "No topics available..." empty
+    /// state renders rather than a fabricated plan. Also exercises the
+    /// real exam-date picker round-trip (pick a date, see the real
+    /// countdown text, clear it back to the unset state) — a path that
+    /// doesn't depend on any topic/AI data at all.
+    func test_studyPlanShowsHonestEmptyPlanAndExamDateRoundTrips() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-UITestSeedMaterial"]
+        app.launch()
+
+        openMenu(app, item: "menu_materials")
+        let materialRow = app.staticTexts["materialTitle_ui-test-fixture"]
+        XCTAssertTrue(materialRow.waitForExistence(timeout: 5))
+        let processButton = app.buttons["btnProcessDocument_ui-test-fixture"]
+        XCTAssertTrue(processButton.waitForExistence(timeout: 5))
+        processButton.tap()
+        let materialStatus = app.staticTexts["materialStatus_ui-test-fixture"]
+        let processedExpectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label CONTAINS %@", "Processed"), object: materialStatus
+        )
+        if XCTWaiter().wait(for: [processedExpectation], timeout: 20) != .completed {
+            attachDiagnostics(app: app, name: "studyplan-material-did-not-process")
+        }
+        XCTAssertTrue(materialStatus.label.contains("Processed"))
+        app.navigationBars.buttons["Done"].tap()
+
+        openMenu(app, item: "menu_studyPlan")
+
+        app.buttons["btnGenerateStudyPlan"].tap()
+        XCTAssertTrue(app.staticTexts["studyPlanEmpty"].waitForExistence(timeout: 5), "no real topic has ever been AI-extracted in this environment, so there's nothing real to schedule")
+
+        let dateButton = app.buttons["studyPlanExamDateInput"]
+        XCTAssertTrue(dateButton.waitForExistence(timeout: 5))
+        XCTAssertEqual(dateButton.label, "Exam date (optional)")
+        dateButton.tap()
+
+        let setDateButton = app.navigationBars.buttons["Set Date"]
+        XCTAssertTrue(setDateButton.waitForExistence(timeout: 5), "expected the real date-picker sheet to open")
+        setDateButton.tap()
+
+        XCTAssertNotEqual(dateButton.label, "Exam date (optional)", "picking a real date should update the button's own label")
+
+        app.buttons["btnGenerateStudyPlan"].tap()
+        let countdown = app.staticTexts["studyPlanExamCountdown"]
+        XCTAssertTrue(countdown.waitForExistence(timeout: 5))
+        XCTAssertTrue(countdown.label.contains("Exam in"), "expected a real countdown derived from the picked exam date, got: \(countdown.label)")
+
+        app.buttons["btnClearExamDate"].tap()
+        XCTAssertEqual(dateButton.label, "Exam date (optional)", "clearing the exam date should really reset it, not just hide it")
+
+        app.navigationBars.buttons["Done"].tap()
+
+        // Clean up via Materials so a later run doesn't see the fixture as
+        // already present.
+        openMenu(app, item: "menu_materials")
+        materialRow.swipeLeft()
+        let deleteMaterialButton = app.buttons["btnDeleteDocument_ui-test-fixture"]
+        XCTAssertTrue(deleteMaterialButton.waitForExistence(timeout: 5))
+        deleteMaterialButton.tap()
+        app.navigationBars.buttons["Done"].tap()
+    }
+
     // MARK: - Helpers
 
     /// Taps the real overflow ("⋮") menu button, then the named menu item
@@ -882,6 +952,18 @@ final class VisionIOSUITests: XCTestCase {
     /// Button-inside-Button accessibility structure. A coordinate tap
     /// skips that failing step entirely; applied to the menu item too
     /// since it's built the same way.
+    ///
+    /// A second, later real failure (caught via the same `.xcresult`
+    /// forensics: the captured post-tap hierarchy showed the base New Tab
+    /// page, not the sheet the tapped item should have opened) traced to
+    /// the menu itself genuinely outgrowing one screen's height — 18 real
+    /// items by Phase 13 — so an item near the end exists in the
+    /// accessibility tree (passing `waitForExistence`) but isn't actually
+    /// on screen yet, and a coordinate computed from its current,
+    /// off-screen frame taps the wrong spot. `isHittable` (true only when
+    /// an element is both visible and interactable) plus a bounded
+    /// swipe-up loop scrolls the open menu just enough to bring it
+    /// genuinely on-screen first — a no-op for items already near the top.
     private func openMenu(_ app: XCUIApplication, item identifier: String) {
         let menuButton = app.buttons["moreMenuButton"]
         XCTAssertTrue(menuButton.waitForExistence(timeout: 5))
@@ -889,6 +971,19 @@ final class VisionIOSUITests: XCTestCase {
 
         let menuItem = app.buttons[identifier]
         XCTAssertTrue(menuItem.waitForExistence(timeout: 5), "expected menu item '\(identifier)' to exist in the overflow menu")
+
+        // First, a brief real wait for the menu's own opening animation to
+        // settle (covers an item that's already on-screen but not yet
+        // hittable the instant it appears in the tree). If that alone
+        // doesn't resolve it, fall back to scrolling — genuinely needed
+        // for an item far enough down this now-18-item menu to start
+        // off-screen.
+        let hittableExpectation = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isHittable == true"), object: menuItem)
+        if XCTWaiter().wait(for: [hittableExpectation], timeout: 2) != .completed {
+            for _ in 0..<8 where !menuItem.isHittable {
+                app.swipeUp()
+            }
+        }
         menuItem.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
     }
 

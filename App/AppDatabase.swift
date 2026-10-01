@@ -267,6 +267,38 @@ enum AppDatabase {
             try db.create(index: "idx_tutorMessage_sessionId", on: "tutorMessage", columns: ["sessionId"])
         }
 
+        migrator.registerMigration("v9_phase13") { db in
+            // Study Plan — port of StudyPlanDbHelper.kt's three tables.
+            try db.create(table: "studyPlan") { t in
+                t.primaryKey("id", .text)
+                t.column("documentId", .text)
+                t.column("examDate", .datetime)
+                t.column("generatedAt", .datetime).notNull()
+                t.column("weekStartAt", .datetime).notNull()
+            }
+            try db.create(table: "studyPlanItem") { t in
+                t.primaryKey("id", .text)
+                t.column("planId", .text).notNull()
+                t.column("dayOffset", .integer).notNull()
+                t.column("topicId", .text)
+                t.column("activityType", .text).notNull()
+                t.column("targetCount", .integer).notNull()
+                t.column("rationale", .text).notNull()
+                t.column("completedAt", .datetime)
+            }
+            try db.create(index: "idx_studyPlanItem_planId", on: "studyPlanItem", columns: ["planId"])
+            try db.create(table: "studySession") { t in
+                t.primaryKey("id", .text)
+                t.column("documentId", .text)
+                t.column("topicId", .text)
+                t.column("activityType", .text).notNull()
+                t.column("planItemId", .text)
+                t.column("startedAt", .datetime).notNull()
+                t.column("endedAt", .datetime)
+                t.column("confidenceRating", .integer)
+            }
+        }
+
         return migrator
     }
 }

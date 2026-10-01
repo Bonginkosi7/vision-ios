@@ -7,15 +7,21 @@ import VisionCore
 /// AI call (ShortAnswerMarker), and award a real `eduTestCompleted` point
 /// event once the whole attempt is genuinely, fully marked.
 ///
-/// Android's post-submission study-plan confidence prompt
-/// (`sessionConfidenceContainer`/`StudySessionLogic.completeSession`) is
-/// deliberately NOT ported — Study Plan doesn't exist on iOS yet (see
-/// README's disclosed scope trim).
+/// The post-submission study-plan confidence prompt
+/// (`sessionConfidenceContainer`/`StudySessionLogic.completeSession`) now
+/// exists for real — `sessionId`/`masteryBeforePercent` are only ever set
+/// when this view is reached via GenerateExamView's own session hand-off
+/// from StudyPlanView's "Start session" tap; standalone use from the
+/// Exams list leaves them nil.
 struct TakeExamView: View {
     let testId: String
     @ObservedObject var examStore: ExamStore
     @ObservedObject var rewardStore: RewardStore
+    let studySessionManager: StudySessionManager
+    var sessionId: String?
+    var masteryBeforePercent: Int?
     @Environment(\.dismiss) private var dismiss
+    @State private var sessionCompleted = false
 
     @State private var test: ExamTest?
     @State private var questions: [ExamQuestionRecord] = []
@@ -166,6 +172,10 @@ struct TakeExamView: View {
                 }
                 .padding(.vertical, 4)
             }
+
+            if sessionId != nil, !results.isEmpty, results.allSatisfy({ $0.isCorrect != nil }) {
+                SessionConfidencePrompt(completed: sessionCompleted, onRate: completeSession)
+            }
         }
     }
 
@@ -238,5 +248,11 @@ struct TakeExamView: View {
         guard let attempt else { return }
         results = (try? examStore.answersForAttempt(attempt.id)) ?? []
         pendingCount = results.filter { $0.isCorrect == nil }.count
+    }
+
+    private func completeSession(confidenceRating: Int) {
+        guard let sessionId else { return }
+        _ = studySessionManager.completeSession(sessionId: sessionId, confidenceRating: confidenceRating, masteryBeforePercent: masteryBeforePercent)
+        sessionCompleted = true
     }
 }

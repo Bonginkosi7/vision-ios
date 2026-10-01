@@ -37,7 +37,15 @@ struct MainBrowserView: View {
     @StateObject private var flashcardStore = FlashcardStore()
     @StateObject private var examStore = ExamStore()
     @StateObject private var tutorStore = TutorStore()
+    @StateObject private var studyPlanStore = StudyPlanStore()
     @ObservedObject private var focusManager = FocusManager.shared
+
+    private var performanceCalculator: PerformanceCalculator {
+        PerformanceCalculator(topicStore: topicStore, flashcardStore: flashcardStore, examStore: examStore, studyDocumentStore: studyDocumentStore)
+    }
+    private var studySessionManager: StudySessionManager {
+        StudySessionManager(studyPlanStore: studyPlanStore, performanceCalculator: performanceCalculator, topicStore: topicStore, rewardEngine: RewardEngine(store: rewardStore))
+    }
 
     @State private var addressText: String = ""
     @State private var isBookmarked: Bool = false
@@ -55,6 +63,7 @@ struct MainBrowserView: View {
     @State private var showExams = false
     @State private var showTutor = false
     @State private var showPerformance = false
+    @State private var showStudyPlan = false
     @State private var saveOfflineStatus: String?
 
     var body: some View {
@@ -131,16 +140,22 @@ struct MainBrowserView: View {
             MaterialsView(studyDocumentStore: studyDocumentStore, topicStore: topicStore)
         }
         .sheet(isPresented: $showFlashcards) {
-            FlashcardsView(studyDocumentStore: studyDocumentStore, flashcardStore: flashcardStore, topicStore: topicStore)
+            FlashcardsView(studyDocumentStore: studyDocumentStore, flashcardStore: flashcardStore, topicStore: topicStore, studySessionManager: studySessionManager)
         }
         .sheet(isPresented: $showExams) {
-            ExamsView(studyDocumentStore: studyDocumentStore, topicStore: topicStore, examStore: examStore, rewardStore: rewardStore)
+            ExamsView(studyDocumentStore: studyDocumentStore, topicStore: topicStore, examStore: examStore, rewardStore: rewardStore, studySessionManager: studySessionManager)
         }
         .sheet(isPresented: $showTutor) {
             TutorView(studyDocumentStore: studyDocumentStore, tutorStore: tutorStore)
         }
         .sheet(isPresented: $showPerformance) {
             PerformanceView(studyDocumentStore: studyDocumentStore, topicStore: topicStore, flashcardStore: flashcardStore, examStore: examStore)
+        }
+        .sheet(isPresented: $showStudyPlan) {
+            StudyPlanView(
+                studyDocumentStore: studyDocumentStore, topicStore: topicStore, flashcardStore: flashcardStore,
+                examStore: examStore, studyPlanStore: studyPlanStore, rewardStore: rewardStore
+            )
         }
     }
 
@@ -334,6 +349,11 @@ struct MainBrowserView: View {
                 Label("Performance", systemImage: "chart.bar")
             }
             .accessibilityIdentifier("menu_performance")
+
+            Button(action: { showStudyPlan = true }) {
+                Label("My Week", systemImage: "calendar")
+            }
+            .accessibilityIdentifier("menu_studyPlan")
 
             Button(action: { showSettings = true }) {
                 Label("Settings", systemImage: "gearshape")

@@ -60,4 +60,11 @@ final class TopicStore: ObservableObject {
                 .fetchAll(db)
         }
     }
+
+    /// A single real topic by id — direct port of TopicDbHelper.kt's
+    /// get(topicId), needed now by Study Plan's `masteryForTopic`
+    /// (StudySessionLogic's before/after delta).
+    func get(_ id: String) throws -> Topic? {
+        try dbQueue.read { db in try Topic.fetchOne(db, key: id) }
+    }
 }

@@ -9,12 +9,12 @@ import VisionCore
 /// from their level-2 subtopics' own already-computed mastery — same
 /// shape as desktop's computeMasteryForDocument.
 ///
-/// Android's `masteryForTopic` (a single topic's mastery, used only by
-/// `StudySessionLogic` for a study-plan session's before/after delta) is
-/// deliberately NOT ported — Study Plan doesn't exist on iOS yet, and
-/// `TopicStore` has no single-topic `get(id:)` lookup to support it since
-/// nothing else needs one yet either (see README's disclosed scope trim).
-/// `getWeakTopics`/`getStrongTopics` are also not ported: real, but
+/// `masteryForTopic` closes the trim this file's doc comment used to
+/// describe: Study Plan (Phase 13) now exists and is the real consumer
+/// of a single topic's mastery for `StudySessionLogic`'s before/after
+/// delta.
+///
+/// `getWeakTopics`/`getStrongTopics` are still not ported: real, but
 /// genuinely unused even in Android's own PerformanceLogic.kt — nothing
 /// there calls them either, and `PerformanceView` gets the same result
 /// by filtering its own already-computed `allTopics` via
@@ -64,5 +64,13 @@ struct PerformanceCalculator {
     func computeMasteryForAllDocuments() -> [TopicMastery] {
         let documents = (try? studyDocumentStore.list()) ?? []
         return documents.flatMap { computeMasteryForDocument($0.id) }
+    }
+
+    /// A single topic's real current mastery, independent of which
+    /// document it belongs to — used by `StudySessionManager` for the
+    /// real before/after mastery delta on a study session.
+    func masteryForTopic(_ topicId: String) -> TopicMastery? {
+        guard let fetched = try? topicStore.get(topicId), let topic = fetched else { return nil }
+        return MasteryEngine.computeTopicMastery(topicId: topic.id, name: topic.name, level: topic.level, parentTopicId: topic.parentTopicId, events: events(forTopic: topic.id))
     }
 }

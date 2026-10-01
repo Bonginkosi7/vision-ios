@@ -9,13 +9,20 @@ import VisionCore
 ///
 /// Android's study-plan launch path (`sessionId`/`masteryBeforePercent`,
 /// jumping straight into `TakeExamActivity` instead of back to the Exams
-/// list) is deliberately NOT ported — Study Plan doesn't exist on iOS
-/// yet (see README's disclosed scope trim). This always returns to the
-/// Exams list after generating, the same as Android's own no-session path.
+/// list) now exists for real: when `onGenerated` is provided (only when
+/// launched from StudyPlanView's "Start session" tap), a successful
+/// generation calls it with the new test id and dismisses this screen,
+/// so the presenter can open `TakeExamView` directly with the same
+/// session carried over — the real equivalent of Android starting
+/// `TakeExamActivity` then finishing `GenerateExamActivity`. Standalone
+/// use from the Exams list leaves `onGenerated` nil and just dismisses
+/// back to the Exams list, same as Android's own no-session path.
 struct GenerateExamView: View {
     @ObservedObject var studyDocumentStore: StudyDocumentStore
     @ObservedObject var topicStore: TopicStore
     @ObservedObject var examStore: ExamStore
+    var preselectedDocumentId: String?
+    var onGenerated: ((String) -> Void)?
     @Environment(\.dismiss) private var dismiss
 
     @State private var processedDocs: [StudyDocument] = []
@@ -96,7 +103,10 @@ struct GenerateExamView: View {
 
     private func loadDocuments() {
         processedDocs = ((try? studyDocumentStore.list()) ?? []).filter { $0.status == .processed }
-        if selectedDocId == nil { selectedDocId = processedDocs.first?.id }
+        if selectedDocId == nil {
+            let preselected = preselectedDocumentId.flatMap { id in processedDocs.first { $0.id == id } }
+            selectedDocId = preselected?.id ?? processedDocs.first?.id
+        }
     }
 
     private func generate() {
@@ -121,7 +131,10 @@ struct GenerateExamView: View {
                 status = result.error ?? "Couldn't generate a test."
                 return
             }
-            try? examStore.createTest(title: resolvedTitle, timeLimitMinutes: timeLimit, questions: data, documentId: doc.id)
+            let testId = try? examStore.createTest(title: resolvedTitle, timeLimitMinutes: timeLimit, questions: data, documentId: doc.id)
+            if let onGenerated, let testId {
+                onGenerated(testId)
+            }
             dismiss()
         }
     }

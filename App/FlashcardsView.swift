@@ -8,14 +8,19 @@ import VisionCore
 /// desktop, and see every real card's own review stats.
 ///
 /// Android's study-plan session integration (`sessionId`/
-/// `completeCurrentSession`/`StudySessionLogic`) is deliberately not
-/// ported — Study Plan doesn't exist on iOS yet (see README's disclosed
-/// scope trim). This is the plain, standalone Flashcards experience
-/// Android itself has when reached outside of a study-plan session.
+/// `completeCurrentSession`/`StudySessionLogic`) now exists for real —
+/// `sessionId`/`preselectedDocumentId`/`masteryBeforePercent` are only
+/// ever set when this view is launched from StudyPlanView's own "Start
+/// session" tap; standalone use from the overflow menu leaves them nil,
+/// the same plain Flashcards experience this screen always had.
 struct FlashcardsView: View {
     @ObservedObject var studyDocumentStore: StudyDocumentStore
     @ObservedObject var flashcardStore: FlashcardStore
     @ObservedObject var topicStore: TopicStore
+    let studySessionManager: StudySessionManager
+    var sessionId: String?
+    var preselectedDocumentId: String?
+    var masteryBeforePercent: Int?
     @Environment(\.dismiss) private var dismiss
 
     @State private var processedDocs: [StudyDocument] = []
@@ -27,6 +32,7 @@ struct FlashcardsView: View {
     @State private var dueIndex = 0
     @State private var cardFlipped = false
     @State private var allCards: [Flashcard] = []
+    @State private var sessionCompleted = false
 
     var body: some View {
         NavigationStack {
@@ -115,9 +121,14 @@ struct FlashcardsView: View {
                 .font(.system(size: 13)).foregroundStyle(DesignSystem.textMuted2)
                 .accessibilityIdentifier("flashcardsNothingDue")
         } else if dueIndex >= dueQueue.count {
-            Text("You're caught up — no more cards due right now.")
-                .font(.system(size: 13)).foregroundStyle(DesignSystem.textMuted2)
-                .accessibilityIdentifier("flashcardsCaughtUp")
+            VStack(alignment: .leading, spacing: 0) {
+                Text("You're caught up — no more cards due right now.")
+                    .font(.system(size: 13)).foregroundStyle(DesignSystem.textMuted2)
+                    .accessibilityIdentifier("flashcardsCaughtUp")
+                if sessionId != nil {
+                    SessionConfidencePrompt(completed: sessionCompleted, onRate: completeSession)
+                }
+            }
         } else {
             let card = dueQueue[dueIndex]
             VStack(alignment: .leading, spacing: 8) {
@@ -172,9 +183,16 @@ struct FlashcardsView: View {
     private func loadDocuments() {
         processedDocs = ((try? studyDocumentStore.list()) ?? []).filter { $0.status == .processed }
         if selectedDocId == nil || !processedDocs.contains(where: { $0.id == selectedDocId }) {
-            selectedDocId = processedDocs.first?.id
+            let preselected = preselectedDocumentId.flatMap { id in processedDocs.first { $0.id == id } }
+            selectedDocId = preselected?.id ?? processedDocs.first?.id
         }
         loadForSelectedDocument()
+    }
+
+    private func completeSession(confidenceRating: Int) {
+        guard let sessionId else { return }
+        _ = studySessionManager.completeSession(sessionId: sessionId, confidenceRating: confidenceRating, masteryBeforePercent: masteryBeforePercent)
+        sessionCompleted = true
     }
 
     private func loadForSelectedDocument() {

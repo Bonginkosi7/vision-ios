@@ -2,15 +2,11 @@ import Foundation
 
 /// Direct port of RewardRules.kt's real category/event/points scale —
 /// carried over as-is from the desktop app's rewardRules.ts, not resized
-/// independently. `RewardEventType` only lists the real event types whose
-/// trigger already exists on iOS (OfflineSaver, TaskStore, FocusManager,
-/// WellbeingActions, and now TakeExamView). Android's own
-/// STUDY_PLAN_TASK_COMPLETED/STUDY_SESSION_COMPLETED/EDU_MASTERY_MILESTONE
-/// cases are still left out for exactly the same reason Android's own
-/// RewardRules.kt documents leaving them out "through Phase 18 because
-/// Study Plan didn't exist yet to trigger them": Study Plan/Performance
-/// don't exist on iOS yet to genuinely trigger them. Add them when those
-/// phases land, not before.
+/// independently. `RewardEventType` lists every real event type whose
+/// trigger exists on iOS (OfflineSaver, TaskStore, FocusManager,
+/// WellbeingActions, TakeExamView, and now StudySessionManager) — the
+/// full set Android's own RewardRules.kt defines, now that Study Plan
+/// (Phase 13) closes the last gap documented here through Phase 12.
 public enum RewardCategory: String, Codable, CaseIterable {
     case health = "HEALTH"
     case learning = "LEARNING"
@@ -55,6 +51,9 @@ public enum RewardEventType: String, Codable, CaseIterable {
     case digitalBalance = "DIGITAL_BALANCE"
     case focusSessionCompleted = "FOCUS_SESSION_COMPLETED"
     case eduTestCompleted = "EDU_TEST_COMPLETED"
+    case studyPlanTaskCompleted = "STUDY_PLAN_TASK_COMPLETED"
+    case studySessionCompleted = "STUDY_SESSION_COMPLETED"
+    case eduMasteryMilestone = "EDU_MASTERY_MILESTONE"
     case weeklyConsistency = "WEEKLY_CONSISTENCY"
 
     public var rule: RewardRule {
@@ -71,6 +70,12 @@ public enum RewardEventType: String, Codable, CaseIterable {
             return RewardRule(category: .productivity, points: 15, label: "Complete a Focus Session (15+ min, run to the end)", dailyLimit: 4)
         case .eduTestCompleted:
             return RewardRule(category: .learning, points: 15, label: "Complete a mock test", dailyLimit: 5)
+        case .studyPlanTaskCompleted:
+            return RewardRule(category: .learning, points: 8, label: "Complete a scheduled study-plan task", dailyLimit: 8)
+        case .studySessionCompleted:
+            return RewardRule(category: .learning, points: 12, label: "Complete a full study session", dailyLimit: 8)
+        case .eduMasteryMilestone:
+            return RewardRule(category: .learning, points: 25, label: "Reach strong mastery on a topic", dedupe: .onceEver)
         case .weeklyConsistency:
             return RewardRule(category: .consistency, points: 20, label: "Stay active on 4+ different days in a week", dedupe: .onceEver)
         }

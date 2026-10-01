@@ -6,17 +6,18 @@ import VisionCore
 /// hand, generate one from a real processed document, take one, and see
 /// real local + AI-marked results.
 ///
-/// Android's study-plan integration (`sessionId`/`masteryBeforePercent`/
-/// the post-submission confidence prompt/`markedAnswersForTopic` feeding
-/// `MasteryEngine`) is deliberately NOT ported — Study Plan and
-/// Performance don't exist on iOS yet (see README's disclosed scope
-/// trim). This is the plain, standalone Exams experience Android itself
-/// has when reached outside of a study-plan session.
+/// Study-plan session integration now exists for real (see
+/// `StudySessionManager`), but this screen's own entry points
+/// (`btnCreateExam`/`btnGenerateExamEntry`/tapping a row) always launch
+/// standalone (`sessionId` nil) — a session-backed launch instead comes
+/// from `StudyPlanView`'s own "Start session" tap, which opens
+/// `GenerateExamView`/`TakeExamView` directly rather than through here.
 struct ExamsView: View {
     @ObservedObject var studyDocumentStore: StudyDocumentStore
     @ObservedObject var topicStore: TopicStore
     @ObservedObject var examStore: ExamStore
     @ObservedObject var rewardStore: RewardStore
+    let studySessionManager: StudySessionManager
     @Environment(\.dismiss) private var dismiss
 
     @State private var tests: [ExamTestSummary] = []
@@ -74,7 +75,7 @@ struct ExamsView: View {
                 GenerateExamView(studyDocumentStore: studyDocumentStore, topicStore: topicStore, examStore: examStore)
             }
             .sheet(item: Binding(get: { openTestId.map(OpenTestId.init) }, set: { openTestId = $0?.id }), onDismiss: refresh) { wrapped in
-                TakeExamView(testId: wrapped.id, examStore: examStore, rewardStore: rewardStore)
+                TakeExamView(testId: wrapped.id, examStore: examStore, rewardStore: rewardStore, studySessionManager: studySessionManager)
             }
         }
         .onAppear(perform: refresh)
