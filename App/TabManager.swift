@@ -23,6 +23,7 @@ final class TabManager: ObservableObject {
         let webView = Self.makeWebView(isPrivate: isPrivate)
         let tab = BrowserTab(webView: webView, isPrivate: isPrivate)
         tabs.append(tab)
+        WellbeingManager.shared.recordTabOpened()
         if switchToIt {
             activeTabIndex = tabs.count - 1
         }

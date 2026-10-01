@@ -13,6 +13,10 @@ struct MainBrowserView: View {
     @StateObject private var historyStore = HistoryStore()
     @StateObject private var downloadStore = DownloadStore()
     @StateObject private var offlineStore = OfflineStore()
+    @StateObject private var taskStore = TaskStore()
+    @StateObject private var wellbeingStore = WellbeingStore()
+    @StateObject private var focusStore = FocusStore()
+    @ObservedObject private var focusManager = FocusManager.shared
 
     @State private var addressText: String = ""
     @State private var isBookmarked: Bool = false
@@ -21,6 +25,9 @@ struct MainBrowserView: View {
     @State private var showOfflineLibrary = false
     @State private var showSettings = false
     @State private var showRewrite = false
+    @State private var showFocus = false
+    @State private var showTasks = false
+    @State private var showAdvisor = false
     @State private var saveOfflineStatus: String?
 
     var body: some View {
@@ -35,6 +42,14 @@ struct MainBrowserView: View {
         .onAppear {
             if tabManager.tabs.isEmpty {
                 tabManager.createTab(url: nil)
+            }
+            // Startup hygiene matching Android's own FocusManager wiring:
+            // a session row left open by a process that died mid-session
+            // has no in-memory timer left to honor it, so it's closed as
+            // data hygiene rather than left permanently dangling.
+            try? focusStore.closeDanglingSessions()
+            if let domains = try? focusStore.listBlockedDomains() {
+                focusManager.setBlockedDomains(domains)
             }
         }
         .onChange(of: tabManager.activeTabIndex) { _ in syncAddressBar() }
@@ -56,6 +71,15 @@ struct MainBrowserView: View {
         }
         .sheet(isPresented: $showRewrite) {
             RewriteView()
+        }
+        .sheet(isPresented: $showFocus) {
+            FocusView(focusStore: focusStore, focusManager: focusManager)
+        }
+        .sheet(isPresented: $showTasks) {
+            TasksView(taskStore: taskStore)
+        }
+        .sheet(isPresented: $showAdvisor) {
+            AdvisorView(wellbeingStore: wellbeingStore)
         }
     }
 
@@ -122,7 +146,29 @@ struct MainBrowserView: View {
             .disabled(tabManager.activeTab?.isNewTab ?? true)
             .accessibilityIdentifier("saveOfflineButton")
 
+            Button(action: { showFocus = true }) {
+                Image(systemName: "timer")
+            }
+            .accessibilityIdentifier("focusButton")
+
+            Button(action: { showTasks = true }) {
+                Image(systemName: "checklist")
+            }
+            .accessibilityIdentifier("tasksButton")
+
+            Button(action: { showAdvisor = true }) {
+                Image(systemName: "sparkles")
+            }
+            .accessibilityIdentifier("advisorButton")
+
             Spacer()
+
+            if focusManager.activeSession != nil {
+                Text("Focus")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(DesignSystem.visionPurple)
+                    .accessibilityIdentifier("focusActiveIndicator")
+            }
 
             if tabManager.activeTab?.isPrivate == true {
                 Text("Private")
@@ -177,7 +223,8 @@ struct MainBrowserView: View {
                 tab: tab,
                 bookmarkStore: bookmarkStore,
                 historyStore: historyStore,
-                downloadStore: downloadStore
+                downloadStore: downloadStore,
+                wellbeingStore: wellbeingStore
             ) { destination in
                 tabManager.navigateActiveTab(to: destination)
             }
@@ -257,13 +304,14 @@ private struct ActiveTabContent: View {
     let bookmarkStore: BookmarkStore
     let historyStore: HistoryStore
     let downloadStore: DownloadStore
+    let wellbeingStore: WellbeingStore
     let onNavigate: (String) -> Void
 
     var body: some View {
         if tab.isNewTab {
             NewTabView(bookmarkStore: bookmarkStore, onNavigate: onNavigate)
         } else {
-            WebViewRepresentable(tab: tab, historyStore: historyStore, downloadStore: downloadStore)
+            WebViewRepresentable(tab: tab, historyStore: historyStore, downloadStore: downloadStore, wellbeingStore: wellbeingStore)
         }
     }
 }

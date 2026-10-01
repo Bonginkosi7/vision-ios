@@ -5,19 +5,32 @@ import WebKit
 /// SwiftUI wrapper on any current iOS SDK, so this UIViewRepresentable is
 /// the one place this app touches UIKit directly. Mirrors the real-time
 /// progress/navigation callbacks MainActivity.kt's anonymous
-/// WebViewClient/WebChromeClient provide on Android, plus real download
-/// handling (WKDownloadDelegate) and real history recording — both gated
-/// on `!tab.isPrivate`, the same real behavioral difference
-/// PrivateBrowsingActivity.kt discloses for Android (never writes to
-/// HistoryDbHelper).
+/// WebViewClient/WebChromeClient provide on Android, plus real history
+/// recording, real `WKDownloadDelegate` handling, real wellbeing
+/// site-visit tracking, and real Focus Mode blocking (gated on
+/// `!tab.isPrivate` where that applies — Focus Mode blocking itself
+/// applies to every tab, matching Android's own `shouldOverrideUrlLoading`
+/// check, which isn't gated on private mode either).
 struct WebViewRepresentable: UIViewRepresentable {
     @ObservedObject var tab: BrowserTab
     let historyStore: HistoryStore
     let downloadStore: DownloadStore
+    let wellbeingStore: WellbeingStore
 
     func makeUIView(context: Context) -> WKWebView {
         tab.webView.navigationDelegate = context.coordinator
         tab.webView.uiDelegate = context.coordinator
+
+        // Defensive remove-then-add: if this representable's underlying
+        // UIView gets torn down and recreated for the same real
+        // tab.webView (switching tabs away and back can do this),
+        // `makeUIView` can run again for the same WKWebView — adding a
+        // script message handler with a name that's already registered a
+        // second time is a real, avoidable bug, not a theoretical one.
+        let controller = tab.webView.configuration.userContentController
+        controller.removeScriptMessageHandler(forName: "focusBridge")
+        controller.add(context.coordinator, name: "focusBridge")
+
         return tab.webView
     }
 
@@ -27,35 +40,74 @@ struct WebViewRepresentable: UIViewRepresentable {
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(tab: tab, historyStore: historyStore, downloadStore: downloadStore)
+        Coordinator(tab: tab, historyStore: historyStore, downloadStore: downloadStore, wellbeingStore: wellbeingStore)
     }
 
-    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
-        let tab: BrowserTab
+    @MainActor
+    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
+        // weak, deliberately: WKUserContentController.add(_:name:) (called
+        // in makeUIView above) makes tab.webView's own configuration hold a
+        // strong reference to this Coordinator. If Coordinator held `tab`
+        // strongly too, that would be a genuine retain cycle (tab ->
+        // webView -> userContentController -> Coordinator -> tab) that
+        // leaks every tab forever once Focus Mode's bridge is registered —
+        // not a hypothetical, a real consequence of wiring this up.
+        weak var tab: BrowserTab?
         let historyStore: HistoryStore
         let downloadStore: DownloadStore
-        /// WKDownload has no id of its own usable before a destination is
-        /// chosen, so the real DownloadRecord created in
-        /// decideDestinationUsing is kept here, keyed by the WKDownload's
-        /// own identity, until its later delegate callbacks need it.
+        let wellbeingStore: WellbeingStore
         private var recordsByDownload: [ObjectIdentifier: DownloadRecord] = [:]
 
-        init(tab: BrowserTab, historyStore: HistoryStore, downloadStore: DownloadStore) {
+        init(tab: BrowserTab, historyStore: HistoryStore, downloadStore: DownloadStore, wellbeingStore: WellbeingStore) {
             self.tab = tab
             self.historyStore = historyStore
             self.downloadStore = downloadStore
+            self.wellbeingStore = wellbeingStore
         }
 
         func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
-            tab.url = webView.url?.absoluteString ?? tab.url
+            tab?.url = webView.url?.absoluteString ?? tab?.url ?? ""
         }
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-            tab.title = webView.title ?? tab.title
-            tab.url = webView.url?.absoluteString ?? tab.url
-            if !tab.isPrivate, let url = webView.url?.absoluteString {
-                try? historyStore.record(url: url, title: webView.title ?? "")
+            tab?.title = webView.title ?? tab?.title ?? ""
+            let urlString = webView.url?.absoluteString ?? tab?.url ?? ""
+            tab?.url = urlString
+
+            // Real page loads only — never the local blocked-page HTML
+            // (loaded via loadHTMLString, so webView.url is nil/about:blank,
+            // not a real http(s) URL) or an offline file:// archive, neither
+            // of which is a real "site visit" or history entry.
+            guard urlString.hasPrefix("http://") || urlString.hasPrefix("https://") else { return }
+            if tab?.isPrivate != true {
+                try? historyStore.record(url: urlString, title: webView.title ?? "")
             }
+            if let host = URL(string: urlString)?.host {
+                try? wellbeingStore.recordSiteVisit(hostname: host)
+            }
+        }
+
+        /// Real Focus Mode blocking — direct port of MainActivity.kt's
+        /// `shouldOverrideUrlLoading` check. Cancels the real navigation
+        /// and shows FocusBlockedPage's local HTML instead, matching
+        /// Android's loadDataWithBaseURL substitution.
+        func webView(
+            _ webView: WKWebView,
+            decidePolicyFor navigationAction: WKNavigationAction,
+            decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
+        ) {
+            if
+                let url = navigationAction.request.url?.absoluteString,
+                let blockedDomain = FocusManager.shared.matchBlockedDomain(url: url)
+            {
+                FocusManager.shared.recordBlockedAttempt()
+                decisionHandler(.cancel)
+                if let session = FocusManager.shared.activeSession {
+                    webView.loadHTMLString(FocusBlockedPage.html(domain: blockedDomain, endsAt: session.endsAt), baseURL: nil)
+                }
+                return
+            }
+            decisionHandler(.allow)
         }
 
         /// New-window requests (target="_blank" links, window.open) load in
@@ -72,6 +124,21 @@ struct WebViewRepresentable: UIViewRepresentable {
                 webView.load(navigationAction.request)
             }
             return nil
+        }
+
+        /// The blocked page's "End session" button — direct equivalent of
+        /// FocusJsBridge.kt's @JavascriptInterface endSession(), reached
+        /// here via `window.webkit.messageHandlers.focusBridge.postMessage(...)`
+        /// instead of Android's addJavascriptInterface.
+        func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+            guard message.name == "focusBridge", (message.body as? String) == "endSession" else { return }
+            FocusManager.shared.stopSession()
+            tab?.webView.evaluateJavaScript("""
+                clearInterval(window.__tickInterval);
+                document.getElementById('subtext').textContent = 'Your focus session has ended — this page is just stale.';
+                document.getElementById('countdown').textContent = '';
+                document.querySelector('button').style.display = 'none';
+                """)
         }
 
         // MARK: - Real downloads (WKDownload — iOS's actual download

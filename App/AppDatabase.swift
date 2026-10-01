@@ -86,6 +86,41 @@ enum AppDatabase {
             }
         }
 
+        migrator.registerMigration("v3_phase6") { db in
+            // Focus Mode — port of FocusDbHelper.kt's two tables.
+            try db.create(table: "focusBlockedDomain") { t in
+                t.primaryKey("domain", .text)
+                t.column("addedAt", .datetime).notNull()
+            }
+            try db.create(table: "focusSession") { t in
+                t.primaryKey("id", .text)
+                t.column("startedAt", .datetime).notNull()
+                t.column("endedAt", .datetime)
+                t.column("plannedMinutes", .integer).notNull()
+                t.column("blockedAttempts", .integer).notNull().defaults(to: 0)
+            }
+
+            // Tasks — port of TaskDbHelper.kt.
+            try db.create(table: "task") { t in
+                t.primaryKey("id", .text)
+                t.column("title", .text).notNull()
+                t.column("createdAt", .datetime).notNull()
+                t.column("completedAt", .datetime)
+            }
+
+            // Wellbeing — port of WellbeingDbHelper.kt's two tables.
+            try db.create(table: "wellbeingEvent") { t in
+                t.primaryKey("id", .text)
+                t.column("type", .text).notNull()
+                t.column("createdAt", .datetime).notNull()
+            }
+            try db.create(table: "siteVisit") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("hostname", .text).notNull()
+                t.column("visitedAt", .datetime).notNull()
+            }
+        }
+
         return migrator
     }
 }
