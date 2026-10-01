@@ -24,6 +24,10 @@ confirmed the full test suite green, including force-terminating the app
 and relaunching to prove a bookmark survived in a real, persisted
 GRDB/SQLite database.
 
+**Phase 4** (cloud AI provider layer) is implemented and pushed; its CI run
+is the next thing to watch. Note its verification is deliberately narrower
+than every phase before it — see the Phase 4 section below for why.
+
 **Phase 3** (Settings & AI key storage) is done — run
 [`36850625135`](https://github.com/Bonginkosi7/vision-ios/actions/runs/36850625135)
 passed green on the first try, all 8 real UI tests and all 21 VisionCore
@@ -38,6 +42,42 @@ tests), no fix-and-repush cycle needed that time — applying Phase 1's own
 lessons (real `@ObservedObject` reactivity, real keyboard taps, `List`-based
 rows instead of a merge-prone VStack-of-Buttons) preemptively instead of
 rediscovering them.
+
+## Phase 4: cloud AI provider layer
+
+Direct port of `CloudAiProvider.kt` — infrastructure only, no UI yet (per
+the build plan: Phase 5's Rewrite Writer is the first real feature to
+consume it). Split deliberately across both halves of this repo:
+
+- **`Sources/VisionCore/CloudAIRequestBuilder.swift`** (pure, no network,
+  real-verified without Xcode): builds the exact real request (URL,
+  headers, JSON body) for both providers, and parses their real response
+  shapes (`content[].text` for Anthropic, `choices[0].message.content` for
+  OpenAI) — separated out specifically so this logic gets the same local
+  `swiftc`-harness + `swift test` verification as `AddressResolver`/
+  `TabIndexing`, rather than being buried inside networking code that can
+  only be checked in CI.
+- **`App/CloudAIProvider.swift`**: the real `URLSession.shared.data(for:)`
+  networking glue (async/await, no third-party HTTP library, matching
+  `CloudAiProvider.kt`'s own minimal-dependency choice over
+  `HttpURLConnection`), `AnthropicProvider`/`OpenAIProvider` reading keys
+  from Phase 3's real `AiSettings`/Keychain store.
+
+**Why this phase's CI verification is narrower than every other phase's:**
+there's no UI yet for `UITests` to launch and drive, and this project
+won't spend real money calling the live, paid Anthropic/OpenAI APIs from
+automated CI with a throwaway key. So Phase 4's real verification is: (1)
+`CloudAIRequestBuilder`'s request/response logic, genuinely tested via
+`swift test` and (before that) a local standalone `swiftc` harness — same
+discipline as `AddressResolver`/`TabIndexing`, all passing before this was
+even pushed; (2) `xcodebuild build`/`test` confirming `CloudAIProvider.swift`
+actually compiles and links against the real `URLSession`/Foundation APIs
+in the real iOS SDK. What's genuinely **not** verified yet: `isAvailable()`
+reading real Keychain state through this specific code path, and a live
+`generate()` call succeeding end-to-end — deferred to Phase 5, once Rewrite
+Writer gives this a real UI entry point a `UITest` can drive (and, for the
+live-call path, realistically needs the user's own real API key rather
+than a fake one — a decision for Phase 5, not assumed here).
 
 ## Phase 3: Settings & AI key storage
 
@@ -201,16 +241,17 @@ as-is for Phase 2's new tests too.
 ## What was verified locally, without Xcode, before CI existed
 
 Bare `swiftc` works here even though Xcode itself doesn't. Before GitHub
-Actions was set up, `Sources/VisionCore`'s two files —
-`AddressResolver.swift` and `TabIndexing.swift`, direct ports of
-`AddressResolver.kt`/`TabIndexing.kt` — were type-checked directly and
-actually compiled and run against all 21 real test cases ported from
-`AddressResolverTest.kt`/`TabIndexingTest.kt`, via a standalone `main.swift`
-harness (bypassing SPM's own broken toolchain on this machine — `swift
-build`/`swift test` fail here with `xcrun: error: unable to lookup item
-'PlatformPath'`). All 21 passed. Superseded now by real `swift test` CI
-runs, but kept as a record that even the "no Xcode at all" state had a
-genuine verification path, not a guess.
+Actions was set up, `Sources/VisionCore`'s pure-logic files —
+`AddressResolver.swift`/`TabIndexing.swift` (Phase 1, direct ports of
+`AddressResolver.kt`/`TabIndexing.kt`) and `CloudAIRequestBuilder.swift`
+(Phase 4) — were type-checked directly and actually compiled and run
+against real test cases via a standalone `main.swift` harness (bypassing
+SPM's own broken toolchain on this machine — `swift build`/`swift test`
+fail here with `xcrun: error: unable to lookup item 'PlatformPath'`): 21
+cases for Phase 1's files, 17 more for Phase 4's. All passed, every time,
+before any of it was pushed. Superseded now by real `swift test` CI runs,
+but kept as a record that even the "no Xcode at all" state had a genuine
+verification path, not a guess.
 
 The one disclosed real behavioral difference found along the way:
 `resolveDestination` percent-encodes a space as `%20` (Swift's
@@ -232,6 +273,7 @@ comment.
 - `OfflineSaver.swift` — real `createWebArchiveData` capture + file write
 - `KeychainStore.swift` / `AiSettings.swift` — real Keychain-backed AI key storage, port of `AiSettings.kt`
 - `AppSettings.swift` — `UserDefaults`/`@AppStorage`-backed theme + search engine, port of `VisionSettings.kt`'s Phase 3 slice
+- `CloudAIProvider.swift` — real `URLSession` networking for the two cloud AI providers, port of `CloudAiProvider.kt`; no UI consumer yet (Phase 5)
 - `NewTabView.swift` / `HistoryView.swift` / `DownloadsView.swift` / `OfflineLibraryView.swift` / `SettingsView.swift` — real list/empty-state/settings screens
 - `DesignSystem.swift` — same component list and color tokens as `DesignSystem.kt`, ported to `@ViewBuilder` functions; drawable XML collapses into inline SwiftUI modifiers (disclosed simplification, noted in-file)
 
@@ -245,17 +287,18 @@ every run.
 ## Explicitly NOT built yet (disclosed scope trims, not oversights)
 
 Focus Mode, Profile/credentials/offline-AI-model/memory/storage settings,
-the cloud AI provider layer itself (keys can be stored now, nothing calls
-out with them yet), the Ask VISION chat, every education screen (Study
-Materials, Flashcards, Exams, Tutor, Performance, Study Plan, Paper
-Review, Rewrite), Rewards/Redeem, Advisor, VISION Ready, Help, and the
-overflow menu. Sequencing for all of these is in the build plan's
-Phase 4–12 roadmap.
+any real UI that actually calls the cloud AI provider layer (it exists and
+compiles now, nothing calls out with it yet), on-device local model
+fallback, the Ask VISION chat, every education screen (Study Materials,
+Flashcards, Exams, Tutor, Performance, Study Plan, Paper Review,
+Rewrite), Rewards/Redeem, Advisor, VISION Ready, Help, and the overflow
+menu. Sequencing for all of these is in the build plan's Phase 5–12
+roadmap.
 
 ## Next steps
 
-1. Watch Phase 3's CI run; iterate on whatever it actually reports, same as every phase before it.
-2. Phase 4: the cloud AI provider layer (`CloudAIProvider.swift` protocol + `AnthropicProvider`/`OpenAIProvider` via `URLSession`) — infrastructure only, consuming the Keychain keys Phase 3 now stores. No UI yet; Phase 5 (Rewrite Writer) is the first real feature to use it.
+1. Watch Phase 4's CI run; iterate on whatever it actually reports, same as every phase before it.
+2. Phase 5: Rewrite Writer — the first real feature to consume `CloudAIProvider`, and the point where `isAvailable()`/a live `generate()` call actually get driven through a real UI and a real `UITest` for the first time.
 
 **If local Xcode ever exists on this machine**: `xcodegen generate`, open
 `VisionIOS.xcodeproj`, and everything here still works locally too — CI
