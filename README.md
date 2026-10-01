@@ -18,6 +18,17 @@ macOS runners, triggered on every push to `main`). The acceptance bar for
 every phase is the same: not "it compiles," but launched, driven in a real
 booted Simulator, and behaviorally confirmed by `UITests/VisionIOSUITests.swift`.
 
+**Phase 6** (Focus Mode, Tasks, Advisor) is done — first push's run
+[`36858894373`](https://github.com/Bonginkosi7/vision-ios/actions/runs/36858894373)
+failed exactly one of 13 real UI tests: a genuine SwiftUI accessibility
+quirk, the mirror image of Phase 1's bookmark-row merging bug (see below).
+Found via the same real `.xcresult` Zstandard-blob forensics technique
+used on Phase 1, fixed by querying what was actually there, and run
+[`36861075136`](https://github.com/Bonginkosi7/vision-ios/actions/runs/36861075136)
+passed fully green — all 13 UI tests (including a real end-to-end Focus
+Mode block, then unblock through the actual `focusBridge`
+`WKScriptMessageHandler`) and all 43 VisionCore unit tests.
+
 **Phase 1** (tab shell, address bar, New Tab, Bookmarks) is done — real
 build [`36691346964`](https://github.com/Bonginkosi7/vision-ios/actions/runs/36691346964)
 confirmed the full test suite green, including force-terminating the app
@@ -53,6 +64,109 @@ tests), no fix-and-repush cycle needed that time — applying Phase 1's own
 lessons (real `@ObservedObject` reactivity, real keyboard taps, `List`-based
 rows instead of a merge-prone VStack-of-Buttons) preemptively instead of
 rediscovering them.
+
+## Phase 6: Focus Mode & Productivity (Tasks, Advisor)
+
+Direct port of `FocusDbHelper.kt`/`FocusManager.kt`/`FocusBlockedPage.kt`/
+`FocusJsBridge.kt`/`FocusActivity.kt`, `TaskDbHelper.kt`/`TasksActivity.kt`,
+and `WellbeingDbHelper.kt`/`WellbeingManager.kt`/`WellbeingActions.kt`/
+`AdvisorLogic.kt`/`AdvisorActivity.kt` — reached via three new toolbar
+buttons (timer / checklist / sparkles icons).
+
+- **`Sources/VisionCore/FocusDomainMatcher.swift`** and
+  **`AdvisorLogic.swift`** (pure, real-verified without Xcode via the
+  standalone `swiftc` harness and `swift test`, same as every prior
+  phase's VisionCore additions): domain-match logic (exact + subdomain +
+  `www.`-normalization, direct port of `FocusDomainMatcherTest.kt`'s real
+  cases) and the 45-minute continuous-session nudge threshold.
+- **`App/FocusManager.swift`**: in-process session/timer state
+  (`@MainActor` `ObservableObject` singleton, real `Timer.scheduledTimer`)
+  — deliberately in-memory only, same tradeoff as Android: a session row
+  left open by a process that died mid-session has no timer left to honor
+  it, so `FocusStore.closeDanglingSessions()` cleans it up at next launch
+  instead of adding a background-task mechanism this feature never had.
+- **`App/FocusStore.swift`**: GRDB port of `FocusDbHelper.kt` — a
+  user-authored blocklist (never a built-in "distracting sites" list this
+  app has no honest basis to curate) plus session history.
+- **`App/FocusBlockedPage.swift`** + the `WKScriptMessageHandler`
+  conformance added to `WebViewRepresentable.Coordinator`: real Focus Mode
+  blocking lives in a new `decidePolicyFor navigationAction` delegate
+  method, which cancels the real navigation and loads this local HTML
+  instead (a real client-side countdown against `FocusManager`'s real
+  `endsAt`, not a static string). Its "End session" button posts to a
+  real `WKScriptMessageHandler` named `"focusBridge"` — the direct
+  WKWebView equivalent of Android's `FocusJsBridge.kt`
+  `@JavascriptInterface`. Registering it required making `Coordinator`'s
+  `tab` property `weak` (it was `let tab: BrowserTab` before): the content
+  controller now holds a real strong reference back to `Coordinator`, and
+  a strong `tab` reference there would have been a genuine retain cycle
+  (`tab → webView → userContentController → Coordinator → tab`) leaking
+  every tab forever, not a hypothetical.
+- **`App/TaskStore.swift`**: GRDB port of `TaskDbHelper.kt` — binary
+  open/completed only, no fabricated "in progress" state; completion is
+  one-way (`complete(id:)` returns `nil` if already completed), same as
+  the real Android/desktop data model.
+- **`App/WellbeingManager.swift`** (in-process, intentionally
+  in-memory-only, matching Android's own disclosed tradeoff) +
+  **`WellbeingStore.swift`** (GRDB: real break events + real distinct
+  site-visit tracking) + **`WellbeingActions.swift`** (real `takeBreak`,
+  deliberately without the reward-eligibility hook `WellbeingActions.kt`
+  has — `RewardEngine`/`RewardDbHelper` don't exist on iOS yet, a
+  disclosed Phase 7 scope trim). Real site-visit recording was added
+  alongside the existing history recording in `WebViewRepresentable`'s
+  `didFinish`, gated the same way: real `http(s)` navigations only, never
+  the local blocked-page HTML or an offline `file://` archive.
+- **`FocusView.swift`** / **`TasksView.swift`** / **`AdvisorView.swift`**:
+  duration-preset chips (15/25/45/60/90 min, `FocusActivity.kt`'s own
+  `SESSION_PRESETS_MIN`) and a live countdown card; an add/filter/complete
+  task list (`.pickerStyle(.segmented)`, not the push/pop `Form`-context
+  style — same reliability choice Phase 3 made for Settings' pickers);
+  real quick stats plus `AdvisorLogic`'s suggestion banner, wired to the
+  same `takeBreak` action for both its "Take a break" and "5-min reset"
+  buttons — confirmed from `AdvisorActivity.kt`'s own click handler that
+  these two real actions are identical, not two features collapsed into
+  one here.
+
+### A real SwiftUI accessibility quirk, the mirror image of Phase 1's
+
+Phase 1 found `.accessibilityElement`'s default *merging* could swallow a
+child's own identifier into its parent's. Phase 6's first CI run found the
+opposite failure mode: `.accessibilityIdentifier` applied to an
+`HStack`/`tipCard` whose children are too complex for SwiftUI to collapse
+into one element doesn't synthesize a container element at all — it pushes
+the *same* identifier onto **every** leaf `StaticText` inside instead. The
+real captured accessibility-tree dump (same Zstandard-blob `.xcresult`
+forensics technique Phase 1 used) showed exactly that: 9 separate
+`StaticText`s all carrying `'advisorQuickStatsRow'`, 4 all carrying
+`'advisorNoSuggestion'` — none of them an `.other` container. Fixed by
+querying `app.staticTexts[...]` instead of `app.otherElements[...]` in the
+one affected test, matching what's actually real rather than restructuring
+the (reusable, used-elsewhere) `DesignSystem` components to force a
+different tree shape.
+
+### Phase 6 UI tests
+
+Three new cases in `VisionIOSUITests.swift`:
+- `test_focusModeBlocksConfiguredDomainAndEndsViaTheRealBridge` — add a
+  real blocked domain, start a real session, confirm navigating to it is
+  genuinely cancelled and the real blocked page shows (rendered inside the
+  WKWebView and bridged into the accessibility tree by WebKit itself, not
+  a native screen), then end the session by tapping the blocked page's own
+  "End session" button — the one path that specifically exercises the
+  `focusBridge` `WKScriptMessageHandler` wiring, not Focus Mode's own Stop
+  button.
+- `test_tasksAddCompleteAndFilter` — add a real task, confirm it shows
+  under Pending, complete it, confirm it moves to Completed and is gone
+  from Pending (completion is genuinely one-way).
+- `test_advisorShowsNoNudgeOnAFreshLaunch` — scoped to what's honestly
+  testable on a fresh launch: `AdvisorLogic`'s 45-minute threshold cannot
+  be reached inside a UI test's real wall-clock runtime, so this confirms
+  the real "nothing to flag" path renders rather than fabricating a way to
+  fast-forward `WellbeingManager`'s real clock just to test deeper.
+
+`AppDatabase.swift`'s `v3_phase6` migration adds `focusBlockedDomain`,
+`focusSession`, `task`, `wellbeingEvent`, `siteVisit` to the same shared
+`vision.sqlite`.
 
 ## Phase 5: Rewrite Writer
 
@@ -322,14 +436,18 @@ comment.
 - `WebViewRepresentable.swift` — `UIViewRepresentable` wrapping one `WKWebView` per tab; real history recording + real `WKDownloadDelegate` handling
 - `BrowserTab.swift` — mirrors `Tab.kt` (id, title, url, isNewTab, isPrivate)
 - `TabManager.swift` — mirrors `MainActivity.kt`'s `tabs`/`activeTabIndex` + create/switch/close/navigate/openOfflineFile, delegates close-index math to `VisionCore.TabIndexing`
-- `AppDatabase.swift` — GRDB `DatabaseQueue` + migrator (`v1_bookmarks`, `v2_phase2`)
+- `AppDatabase.swift` — GRDB `DatabaseQueue` + migrator (`v1_bookmarks`, `v2_phase2`, `v3_phase6`)
 - `BookmarkStore.swift` / `HistoryStore.swift` / `DownloadStore.swift` / `OfflineStore.swift` — GRDB ports of the matching `*DbHelper.kt`
 - `OfflineSaver.swift` — real `createWebArchiveData` capture + file write
 - `KeychainStore.swift` / `AiSettings.swift` — real Keychain-backed AI key storage, port of `AiSettings.kt`
 - `AppSettings.swift` — `UserDefaults`/`@AppStorage`-backed theme + search engine, port of `VisionSettings.kt`'s Phase 3 slice
 - `CloudAIProvider.swift` — real `URLSession` networking for the two cloud AI providers, port of `CloudAiProvider.kt`
 - `RewriteWriter.swift` — real OpenAI-then-Anthropic rewrite orchestration, port of `RewriteWriter.kt`
-- `NewTabView.swift` / `HistoryView.swift` / `DownloadsView.swift` / `OfflineLibraryView.swift` / `SettingsView.swift` / `RewriteView.swift` — real list/empty-state/settings/rewrite screens
+- `FocusManager.swift` / `FocusStore.swift` / `FocusBlockedPage.swift` — real Focus Mode session timer, GRDB blocklist/session history, and the local blocked-page HTML, port of `FocusManager.kt`/`FocusDbHelper.kt`/`FocusBlockedPage.kt`
+- `TaskStore.swift` — GRDB port of `TaskDbHelper.kt`
+- `WellbeingManager.swift` / `WellbeingStore.swift` / `WellbeingActions.swift` — in-process tracking + GRDB break/site-visit log, port of `WellbeingManager.kt`/`WellbeingDbHelper.kt`/`WellbeingActions.kt`
+- `FaviconLoader.swift` — real `google.com/s2/favicons` fetch + in-memory cache, used by Focus Mode's blocklist rows
+- `NewTabView.swift` / `HistoryView.swift` / `DownloadsView.swift` / `OfflineLibraryView.swift` / `SettingsView.swift` / `RewriteView.swift` / `FocusView.swift` / `TasksView.swift` / `AdvisorView.swift` — real list/empty-state/settings/rewrite/focus/tasks/advisor screens
 - `DesignSystem.swift` — same component list and color tokens as `DesignSystem.kt`, ported to `@ViewBuilder` functions; drawable XML collapses into inline SwiftUI modifiers (disclosed simplification, noted in-file)
 
 **`UITests/`** — `VisionIOSUITests.swift`, the real behavioral verification described above.
@@ -341,17 +459,24 @@ every run.
 
 ## Explicitly NOT built yet (disclosed scope trims, not oversights)
 
-Focus Mode, Profile/credentials/offline-AI-model/memory/storage settings,
-on-device local model fallback, the Ask VISION chat, every remaining
-education screen (Study Materials, Flashcards, Exams, Tutor, Performance,
-Study Plan, Paper Review), Rewards/Redeem, Advisor, VISION Ready, Help,
-and the overflow menu. Sequencing for all of these is in the build plan's
-Phase 6–12 roadmap.
+Profile/credentials/offline-AI-model/memory/storage settings, on-device
+local model fallback, the Ask VISION chat, every remaining education
+screen (Study Materials, Flashcards, Exams, Tutor, Performance, Study
+Plan, Paper Review), Rewards/Redeem, VISION Ready, Help, and the overflow
+menu. Also, within what Phase 6 did build: `WellbeingActions.takeBreak`
+has no reward-eligibility hook (`RewardEngine`/`RewardDbHelper` don't
+exist on iOS yet), and `TaskStore.complete`'s one-way guard exists
+specifically so a task can't be farmed for reward points once that
+exists either. Sequencing for all of these is in the build plan's Phase
+7–12 roadmap.
 
 ## Next steps
 
-1. Watch Phase 5's CI run; iterate on whatever it actually reports, same as every phase before it.
-2. Phase 6: Focus Mode & Productivity (Tasks, Advisor) — real block-list interception in `decidePolicyFor`, plus two features with no AI dependency.
+Phase 7: Rewards + Redeem — gated behind Phase 6 since real earning
+actions (offline save, a completed focus session, a completed task) need
+to exist first, which they now do. Redeem's Firestore sync should mirror
+Android's plain REST client choice (`FirestoreRestClient.kt`) over
+pulling in the full Firebase SDK.
 
 **If local Xcode ever exists on this machine**: `xcodegen generate`, open
 `VisionIOS.xcodeproj`, and everything here still works locally too — CI
