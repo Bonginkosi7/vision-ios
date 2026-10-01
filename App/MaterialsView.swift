@@ -80,7 +80,7 @@ struct MaterialsView: View {
                 handlePicked(result)
             }
         }
-        .onAppear(perform: refresh)
+        .onAppear { refresh() }
     }
 
     @ViewBuilder
@@ -181,12 +181,12 @@ struct MaterialsView: View {
         }
     }
 
-    private func refresh() {
+    private func refresh(line: Int = #line) {
         do {
             documents = try studyDocumentStore.list()
-            NSLog("[MaterialsView] refresh() got \(documents.count) document(s): \(documents.map { "\($0.id)=\($0.status.rawValue)" })")
+            NSLog("[MaterialsView] refresh() [call site line \(line)] got \(documents.count) document(s): \(documents.map { "\($0.id)=\($0.status.rawValue)" })")
         } catch {
-            NSLog("[MaterialsView] refresh() THREW: \(error)")
+            NSLog("[MaterialsView] refresh() [call site line \(line)] THREW: \(error)")
             documents = []
         }
     }
