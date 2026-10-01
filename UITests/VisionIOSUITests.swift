@@ -931,6 +931,59 @@ final class VisionIOSUITests: XCTestCase {
         app.navigationBars.buttons["Done"].tap()
     }
 
+    /// Real Paper Review proof: the same honest "Cloud AI isn't
+    /// configured" path already established for Rewrite Writer/Topics/
+    /// Flashcards/Exams, confirming `PaperReviewer` routes through the
+    /// identical `CloudAIProvider`/`StructuredAI` plumbing against the
+    /// same real seeded-and-processed fixture.
+    func test_paperReviewWithNoCloudKeyConfigured() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-UITestSeedMaterial"]
+        app.launch()
+
+        openMenu(app, item: "menu_materials")
+        let materialRow = app.staticTexts["materialTitle_ui-test-fixture"]
+        XCTAssertTrue(materialRow.waitForExistence(timeout: 5))
+        let processButton = app.buttons["btnProcessDocument_ui-test-fixture"]
+        XCTAssertTrue(processButton.waitForExistence(timeout: 5))
+        processButton.tap()
+        let materialStatus = app.staticTexts["materialStatus_ui-test-fixture"]
+        let processedExpectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label CONTAINS %@", "Processed"), object: materialStatus
+        )
+        if XCTWaiter().wait(for: [processedExpectation], timeout: 20) != .completed {
+            attachDiagnostics(app: app, name: "paper-review-material-did-not-process")
+        }
+        XCTAssertTrue(materialStatus.label.contains("Processed"))
+        app.navigationBars.buttons["Done"].tap()
+
+        openMenu(app, item: "menu_paperReview")
+
+        let reviewButton = app.buttons["btnReviewDocument"]
+        XCTAssertTrue(reviewButton.waitForExistence(timeout: 5), "expected a real Review button once a processed document exists")
+        reviewButton.tap()
+
+        let status = app.staticTexts["paperReviewStatus"]
+        let notConfiguredExpectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label CONTAINS %@", "Cloud AI isn't configured"), object: status
+        )
+        if XCTWaiter().wait(for: [notConfiguredExpectation], timeout: 10) != .completed {
+            attachDiagnostics(app: app, name: "paper-review-no-honest-error")
+        }
+        XCTAssertTrue(status.label.contains("Cloud AI isn't configured"), "expected the real honest 'not configured' message, got: \(status.label)")
+
+        app.navigationBars.buttons["Done"].tap()
+
+        // Clean up via Materials so a later run doesn't see the fixture as
+        // already present.
+        openMenu(app, item: "menu_materials")
+        materialRow.swipeLeft()
+        let deleteMaterialButton = app.buttons["btnDeleteDocument_ui-test-fixture"]
+        XCTAssertTrue(deleteMaterialButton.waitForExistence(timeout: 5))
+        deleteMaterialButton.tap()
+        app.navigationBars.buttons["Done"].tap()
+    }
+
     // MARK: - Helpers
 
     /// Taps the real overflow ("⋮") menu button, then the named menu item

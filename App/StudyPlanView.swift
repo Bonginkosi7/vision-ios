@@ -186,7 +186,7 @@ struct StudyPlanView: View {
 
     @ViewBuilder
     private func planItemRow(_ item: StudyPlanItem) -> some View {
-        let topicName = item.topicId.flatMap { (try? topicStore.get($0)) ?? nil }?.name
+        let topicName = item.topicId.flatMap { try? topicStore.get($0) }?.name
         VStack(alignment: .leading, spacing: 2) {
             HStack {
                 Text(activityLabel(item.activityType) + (topicName.map { " — \($0)" } ?? ""))

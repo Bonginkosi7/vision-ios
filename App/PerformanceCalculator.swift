@@ -70,7 +70,7 @@ struct PerformanceCalculator {
     /// document it belongs to — used by `StudySessionManager` for the
     /// real before/after mastery delta on a study session.
     func masteryForTopic(_ topicId: String) -> TopicMastery? {
-        guard let fetched = try? topicStore.get(topicId), let topic = fetched else { return nil }
+        guard let topic = try? topicStore.get(topicId) else { return nil }
         return MasteryEngine.computeTopicMastery(topicId: topic.id, name: topic.name, level: topic.level, parentTopicId: topic.parentTopicId, events: events(forTopic: topic.id))
     }
 }

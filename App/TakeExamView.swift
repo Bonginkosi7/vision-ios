@@ -239,7 +239,7 @@ struct TakeExamView: View {
         let scorePercent = try? examStore.finalizeIfComplete(attempt.id)
         refreshResults()
 
-        if let scorePercent = scorePercent.flatMap({ $0 }) {
+        if let scorePercent {
             RewardEngine(store: rewardStore).awardIfEligible(type: .eduTestCompleted, note: "Completed a mock test (\(Int(scorePercent.rounded()))%)")
         }
     }

@@ -39,14 +39,14 @@ struct StudySessionManager {
     /// the separate one-time `eduMasteryMilestone` bonus the first time a
     /// topic's status flips into "strong".
     func completeSession(sessionId: String, confidenceRating: Int?, masteryBeforePercent: Int?) -> CompleteSessionResult {
-        let priorSession = (try? studyPlanStore.getSession(sessionId)) ?? nil
-        let session = (try? studyPlanStore.completeSession(sessionId, confidenceRating: confidenceRating)) ?? nil
+        let priorSession = try? studyPlanStore.getSession(sessionId)
+        let session = try? studyPlanStore.completeSession(sessionId, confidenceRating: confidenceRating)
         if let planItemId = session?.planItemId {
             try? studyPlanStore.markItemCompleted(planItemId)
         }
 
         let topicId = priorSession?.topicId ?? session?.topicId
-        let topicName = topicId.flatMap { (try? topicStore.get($0)) ?? nil }?.name
+        let topicName = topicId.flatMap { try? topicStore.get($0) }?.name
         let after = topicId.flatMap { performanceCalculator.masteryForTopic($0) }
 
         if session?.planItemId != nil {

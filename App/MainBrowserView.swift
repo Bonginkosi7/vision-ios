@@ -64,6 +64,7 @@ struct MainBrowserView: View {
     @State private var showTutor = false
     @State private var showPerformance = false
     @State private var showStudyPlan = false
+    @State private var showPaperReview = false
     @State private var saveOfflineStatus: String?
 
     var body: some View {
@@ -156,6 +157,9 @@ struct MainBrowserView: View {
                 studyDocumentStore: studyDocumentStore, topicStore: topicStore, flashcardStore: flashcardStore,
                 examStore: examStore, studyPlanStore: studyPlanStore, rewardStore: rewardStore
             )
+        }
+        .sheet(isPresented: $showPaperReview) {
+            PaperReviewView(studyDocumentStore: studyDocumentStore)
         }
     }
 
@@ -354,6 +358,11 @@ struct MainBrowserView: View {
                 Label("My Week", systemImage: "calendar")
             }
             .accessibilityIdentifier("menu_studyPlan")
+
+            Button(action: { showPaperReview = true }) {
+                Label("Paper Review", systemImage: "doc.text.magnifyingglass")
+            }
+            .accessibilityIdentifier("menu_paperReview")
 
             Button(action: { showSettings = true }) {
                 Label("Settings", systemImage: "gearshape")
