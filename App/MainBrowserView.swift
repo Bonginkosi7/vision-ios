@@ -36,6 +36,7 @@ struct MainBrowserView: View {
     @StateObject private var topicStore = TopicStore()
     @StateObject private var flashcardStore = FlashcardStore()
     @StateObject private var examStore = ExamStore()
+    @StateObject private var tutorStore = TutorStore()
     @ObservedObject private var focusManager = FocusManager.shared
 
     @State private var addressText: String = ""
@@ -52,6 +53,7 @@ struct MainBrowserView: View {
     @State private var showMaterials = false
     @State private var showFlashcards = false
     @State private var showExams = false
+    @State private var showTutor = false
     @State private var saveOfflineStatus: String?
 
     var body: some View {
@@ -132,6 +134,9 @@ struct MainBrowserView: View {
         }
         .sheet(isPresented: $showExams) {
             ExamsView(studyDocumentStore: studyDocumentStore, topicStore: topicStore, examStore: examStore, rewardStore: rewardStore)
+        }
+        .sheet(isPresented: $showTutor) {
+            TutorView(studyDocumentStore: studyDocumentStore, tutorStore: tutorStore)
         }
     }
 
@@ -315,6 +320,11 @@ struct MainBrowserView: View {
                 Label("Exams", systemImage: "doc.text.magnifyingglass")
             }
             .accessibilityIdentifier("menu_exams")
+
+            Button(action: { showTutor = true }) {
+                Label("AI Tutor", systemImage: "bubble.left.and.bubble.right")
+            }
+            .accessibilityIdentifier("menu_tutor")
 
             Button(action: { showSettings = true }) {
                 Label("Settings", systemImage: "gearshape")

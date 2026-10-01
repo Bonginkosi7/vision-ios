@@ -243,6 +243,30 @@ enum AppDatabase {
             try db.create(index: "idx_examAnswer_attemptId", on: "examAnswer", columns: ["attemptId"])
         }
 
+        migrator.registerMigration("v8_phase11") { db in
+            // AI Tutor — port of TutorDbHelper.kt's two tables. No
+            // citedChunkIds/lessonId/timestampSeconds columns: this app
+            // has no chunking/retrieval layer and no lessons feature, so
+            // there's nothing real for those to hold.
+            try db.create(table: "tutorSession") { t in
+                t.primaryKey("id", .text)
+                t.column("documentId", .text)
+                t.column("title", .text).notNull()
+                t.column("createdAt", .datetime).notNull()
+                t.column("updatedAt", .datetime).notNull()
+            }
+            try db.create(table: "tutorMessage") { t in
+                t.primaryKey("id", .text)
+                t.column("sessionId", .text).notNull()
+                t.column("role", .text).notNull()
+                t.column("content", .text).notNull()
+                t.column("groundedInDocument", .boolean)
+                t.column("providerName", .text)
+                t.column("createdAt", .datetime).notNull()
+            }
+            try db.create(index: "idx_tutorMessage_sessionId", on: "tutorMessage", columns: ["sessionId"])
+        }
+
         return migrator
     }
 }

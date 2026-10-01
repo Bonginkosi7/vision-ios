@@ -752,6 +752,54 @@ final class VisionIOSUITests: XCTestCase {
         app.navigationBars.buttons["Done"].tap()
     }
 
+    /// Real AI Tutor proof, in two halves — same honest "not configured"
+    /// path already established for Rewrite Writer/Topics/Flashcards/
+    /// Exams, exercised through both of Tutor's two real input paths:
+    /// 1. A suggestion chip tap (`ask(suggestion)`), confirming the real
+    ///    answer text and the real "No cloud AI configured" source label
+    ///    (`TutorAI.ask` routes through the identical `CloudAIProvider`
+    ///    plumbing, not a parallel path, and with no document selected
+    ///    the source label must read "No cloud AI configured", not
+    ///    "Based on your uploaded material").
+    /// 2. Manually typing a question and tapping Ask, confirming a real
+    ///    second exchange renders — proving `TutorStore` persisted and
+    ///    reloaded the first real session's messages rather than losing
+    ///    them between turns.
+    func test_askingTheAITutorWithNoCloudKeyConfigured() {
+        let app = XCUIApplication()
+        app.launch()
+
+        openMenu(app, item: "menu_tutor")
+
+        app.buttons["tutorSuggestion_4"].tap()
+
+        let firstAnswer = app.staticTexts.element(matching: NSPredicate(format: "identifier BEGINSWITH 'tutorAnswer_'"))
+        if !firstAnswer.waitForExistence(timeout: 10) {
+            attachDiagnostics(app: app, name: "tutor-first-answer-missing")
+        }
+        XCTAssertTrue(firstAnswer.label.contains("I don't have a cloud AI provider configured"), "expected the real honest 'not configured' reply, got: \(firstAnswer.label)")
+
+        let firstSource = app.staticTexts.element(matching: NSPredicate(format: "identifier BEGINSWITH 'tutorSource_'"))
+        XCTAssertTrue(firstSource.waitForExistence(timeout: 5))
+        XCTAssertEqual(firstSource.label, "No cloud AI configured", "no document is selected, so this must not claim to be grounded or general-AI")
+
+        let questionCards = app.staticTexts.matching(NSPredicate(format: "identifier BEGINSWITH 'tutorQuestion_'"))
+        XCTAssertTrue(waitForElementCount(questionCards, toEqual: 1), "expected exactly one exchange after the suggestion-chip ask")
+
+        let askInput = app.textFields["tutorAskInput"]
+        askInput.tap()
+        askInput.typeText("What is gravity?")
+        app.buttons["btnTutorAsk"].tap()
+
+        if !waitForElementCount(questionCards, toEqual: 2, timeout: 10) {
+            attachDiagnostics(app: app, name: "tutor-second-exchange-missing")
+        }
+        let answerCards = app.staticTexts.matching(NSPredicate(format: "identifier BEGINSWITH 'tutorAnswer_'"))
+        XCTAssertTrue(waitForElementCount(answerCards, toEqual: 2, timeout: 10), "expected a real second answer after typing a question and tapping Ask")
+
+        app.navigationBars.buttons["Done"].tap()
+    }
+
     // MARK: - Helpers
 
     /// Taps the real overflow ("⋮") menu button, then the named menu item
@@ -841,5 +889,18 @@ final class VisionIOSUITests: XCTestCase {
         hierarchyAttachment.name = "\(name)-hierarchy"
         hierarchyAttachment.lifetime = .keepAlways
         add(hierarchyAttachment)
+    }
+
+    /// Waits for a live element query's count to reach an exact value —
+    /// used where a UUID-keyed identifier (Tutor's per-exchange elements)
+    /// means there's no single fixed identifier to `waitForExistence` on,
+    /// only "how many of these exist now". `NSPredicate(block:)` is
+    /// re-evaluated by the expectation machinery until it's true or the
+    /// timeout elapses, same mechanism `XCTNSPredicateExpectation` already
+    /// uses elsewhere in this file for label-content waits.
+    private func waitForElementCount(_ query: XCUIElementQuery, toEqual expected: Int, timeout: TimeInterval = 5) -> Bool {
+        let predicate = NSPredicate { _, _ in query.count == expected }
+        let expectation = XCTNSPredicateExpectation(predicate: predicate, object: nil)
+        return XCTWaiter().wait(for: [expectation], timeout: timeout) == .completed
     }
 }
