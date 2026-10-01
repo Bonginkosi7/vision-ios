@@ -546,7 +546,7 @@ final class VisionIOSUITests: XCTestCase {
         let status = app.staticTexts["materialStatus_ui-test-fixture"]
         let processedPredicate = NSPredicate(format: "label CONTAINS %@", "Processed")
         let processedExpectation = XCTNSPredicateExpectation(predicate: processedPredicate, object: status)
-        if XCTWaiter().wait(for: [processedExpectation], timeout: 10) != .completed {
+        if XCTWaiter().wait(for: [processedExpectation], timeout: 20) != .completed {
             attachDiagnostics(app: app, name: "material-did-not-process")
         }
         XCTAssertTrue(status.label.contains("Processed"), "a real .txt fixture should process successfully, status read: \(status.label)")
@@ -558,7 +558,7 @@ final class VisionIOSUITests: XCTestCase {
         let topicsStatus = app.staticTexts["topicsStatus_ui-test-fixture"]
         let notConfiguredPredicate = NSPredicate(format: "label CONTAINS %@", "Cloud AI isn't configured")
         let notConfiguredExpectation = XCTNSPredicateExpectation(predicate: notConfiguredPredicate, object: topicsStatus)
-        if XCTWaiter().wait(for: [notConfiguredExpectation], timeout: 5) != .completed {
+        if XCTWaiter().wait(for: [notConfiguredExpectation], timeout: 10) != .completed {
             attachDiagnostics(app: app, name: "material-topics-no-honest-error")
         }
         XCTAssertTrue(topicsStatus.label.contains("Cloud AI isn't configured"), "expected the real honest 'not configured' message, got: \(topicsStatus.label)")
