@@ -18,6 +18,20 @@ macOS runners, triggered on every push to `main`). The acceptance bar for
 every phase is the same: not "it compiles," but launched, driven in a real
 booted Simulator, and behaviorally confirmed by `UITests/VisionIOSUITests.swift`.
 
+**Phase 7** (Rewards) is done — a longer real CI loop than any phase
+before it: the first push's run
+[`36864175163`](https://github.com/Bonginkosi7/vision-ios/actions/runs/36864175163)
+failed on a genuine toolbar-overflow bug (`historyButton` pushed off
+the real screen edge once an 8th always-visible icon was added), and
+fixing that *properly* — matching Android's real single-overflow-menu
+architecture instead of patching the symptom — took two more real
+iterations (a SwiftUI `Menu` tap quirk, then a leaked `Timer` in
+`FocusView`) before run
+[`36872065033`](https://github.com/Bonginkosi7/vision-ios/actions/runs/36872065033)
+passed fully green: all 15 UI tests, all 50 VisionCore unit tests. See
+below for the full story — it's a real one, kept rather than squashed,
+same as Phase 1's own bug log.
+
 **Phase 6** (Focus Mode, Tasks, Advisor) is done — first push's run
 [`36858894373`](https://github.com/Bonginkosi7/vision-ios/actions/runs/36858894373)
 failed exactly one of 13 real UI tests: a genuine SwiftUI accessibility
@@ -64,6 +78,121 @@ tests), no fix-and-repush cycle needed that time — applying Phase 1's own
 lessons (real `@ObservedObject` reactivity, real keyboard taps, `List`-based
 rows instead of a merge-prone VStack-of-Buttons) preemptively instead of
 rediscovering them.
+
+## Phase 7: Rewards
+
+Direct port of `RewardRules.kt`/`RewardEligibility.kt`/`RewardEngine.kt`/
+`RewardDbHelper.kt` — reached via a new "Rewards" entry in the overflow
+menu (see below).
+
+- **`Sources/VisionCore/RewardRules.swift`** and **`RewardEligibility.swift`**
+  (pure, real-verified without Xcode via the standalone `swiftc` harness
+  and `swift test`): the real category/event/points/level scale, carried
+  over as-is from the desktop app's `rewardRules.ts`, and the dedupe/
+  daily-limit eligibility gate every award passes through.
+  `RewardEventType` only lists the 6 real event types whose trigger
+  exists on iOS right now (`OFFLINE_PREP`, `TASK_COMPLETED`,
+  `HEALTHY_BREAK`, `DIGITAL_BALANCE`, `FOCUS_SESSION_COMPLETED`,
+  `WEEKLY_CONSISTENCY`) — Android's education-related cases
+  (`EDU_TEST_COMPLETED`, `STUDY_PLAN_TASK_COMPLETED`,
+  `STUDY_SESSION_COMPLETED`, `EDU_MASTERY_MILESTONE`) are left out for
+  exactly the reason `RewardRules.kt`'s own comment documents leaving
+  them out through Android's own Phase 18: no education feature exists
+  yet to genuinely trigger them.
+- **`App/RewardStore.swift`** (GRDB) + **`RewardEngine.swift`**: the real
+  points ledger and the eligibility-checked award gate, wired into the
+  four real triggers that already exist — `OfflineSaver`'s successful
+  save (`OFFLINE_PREP`), `TaskStore.complete`'s real one-way completion
+  (`TASK_COMPLETED`), `WellbeingActions.takeBreak` gated on 10+ real
+  continuous minutes (`HEALTHY_BREAK` + `DIGITAL_BALANCE`), and
+  `FocusManager.onSessionEnd` gated on `completedNaturally` and 15+
+  planned minutes (`FOCUS_SESSION_COMPLETED`) — plus `WEEKLY_CONSISTENCY`
+  awarded automatically by `RewardEngine` itself as a side effect of any
+  other award. `availableBalance()` currently always equals `total()`:
+  the real formula is `total() − redemption spend`, and there's
+  genuinely never any spend yet since Redeem isn't ported (see below) —
+  a real, correct value for the real current state, not a placeholder.
+- **`App/RewardsView.swift`**: real level/points/balance, this-week-by-
+  category stats, a weekly insight banner, "how you earn points," and
+  recent activity — every number from `RewardStore`, nothing seeded.
+- Closed a Phase 6 disclosed trim: `AdvisorView`'s real "This Week"
+  section (points/healthy-breaks/focus-sessions this week) was left out
+  then because it depended on reward data that didn't exist yet. It
+  drops Android's own "🎓 Learning completed" row for the same reason
+  `RewardEventType` drops `EDU_TEST_COMPLETED` — no education feature
+  exists on iOS yet to generate any.
+
+**Disclosed scope trim: Redeem is not ported.** Android's Redeem feature
+(`RedeemActivity.kt`, `RedemptionDbHelper.kt`, `RewardCatalogRemote.kt`,
+`FirestoreRestClient.kt`) spends real points against a shared catalog
+synced from a real Firestore backend over anonymous auth
+(`FirebaseAnonAuth`) and a real `FirebaseConfig` project. None of that
+infrastructure exists for iOS — there's no Firebase project config, no
+anonymous-auth flow, nothing to verify a real REST call against. Porting
+it now would mean either fabricating unverifiable network code or faking
+the whole feature, both against this project's basic rule. Deferred to a
+later phase, once real Firebase project credentials exist to build and
+verify against for real.
+
+### A real toolbar-overflow bug, and the two more real bugs fixing it properly surfaced
+
+The first CI run of this phase failed `test_historyRecordsRealNavigation`
+and `test_privateTabDoesNotRecordHistory` with a real
+`kAXErrorCannotComplete` trying to scroll `historyButton` into view — its
+real captured frame had gone negative (off the left edge). The actual
+cause wasn't cosmetic: `MainBrowserView`'s `secondaryToolbar` had grown to
+8 always-visible icon buttons across Phases 1–7, and this was simply the
+push that didn't fit anymore. Reading `MainActivity.kt`'s real
+`showOverflowMenu()` showed this was always an architectural mismatch —
+Android's entire toolbar is just Back/Forward/address bar/Bookmark/tab-
+count plus one real "⋮" button opening a popup with every other action;
+it never grows a second always-visible row no matter how many features
+get added. iOS had drifted from that since Phase 1. Patching the symptom
+(e.g. wrapping the row in a horizontal `ScrollView`) would have just
+deferred the exact same break to Phase 8 or 9, so this was fixed by
+actually matching the real architecture: one SwiftUI `Menu` replacing
+`secondaryToolbar` entirely, and every affected UI test rewritten to open
+it first.
+
+That fix surfaced two more real, independent bugs, each found through a
+genuine CI failure and fixed with evidence, not a guess:
+
+1. **A SwiftUI `Menu` tap quirk.** The very next run failed tapping
+   `moreMenuButton` with the same `kAXErrorCannotComplete` — but a real
+   captured `.xcresult` accessibility-tree dump (this project's
+   established Zstandard-blob forensics technique, same one Phase 1 and
+   Phase 6 used) showed the button's frame was genuinely fully on-screen
+   (`{402.3, 76.7}`–`{422.0, 95.7}` inside a real 430pt-wide window).
+   XCUITest's default `.tap()` was failing on its own auto-scroll-into-
+   view step, apparently confused by `Menu`'s nested Button-inside-Button
+   accessibility structure — not an off-screen bug at all. Fixed by
+   tapping via raw coordinate instead, which skips that failing step.
+2. **A real leaked `Timer`.** With that fixed, 14 of 15 tests passed; the
+   one that opens `FocusView` twice in a single run (start a session,
+   close it, reopen it to clean up the test's own blocklist entry) hit a
+   genuine ~60-real-second stall waiting for the app to report idle.
+   `FocusView`'s countdown was a plain `let tick = Timer.publish(every: 1,
+   on: .main, in: .common).autoconnect()` — `.autoconnect()` starts a
+   real, already-running `Timer` the instant it's created, and a plain
+   stored `let` gets reconstructed (reconnecting a brand-new real Timer)
+   on every body re-evaluation of the view struct. Opening the view twice
+   gave this real leak enough opportunity to compound into a measurable
+   stall. Fixed by making it `@State`, so SwiftUI preserves the same
+   publisher instance across re-renders for that view's identity instead
+   of reconnecting a new one each time.
+
+### Phase 7 UI tests
+
+Two new cases in `VisionIOSUITests.swift`:
+- `test_savingOfflineAwardsARealRewardEvent` — a real offline save shows
+  up as a real recent-activity row in Rewards, asserted on the specific
+  saved-page note text rather than a point total so it stays correct
+  regardless of points already earned by other tests or earlier runs.
+- `test_completingATaskAwardsARealRewardEvent` — same proof for
+  completing a real task.
+
+`AppDatabase.swift`'s `v4_phase7` migration adds `rewardEvent` to the same
+shared `vision.sqlite`.
 
 ## Phase 6: Focus Mode & Productivity (Tasks, Advisor)
 
@@ -432,11 +561,11 @@ comment.
 
 **`App/`** (SwiftUI + UIKit + WebKit + GRDB, real iOS target):
 - `VisionIOSApp.swift` — `@main` entry point
-- `MainBrowserView.swift` — address bar, secondary toolbar, hosts the active tab via `ActiveTabContent`
+- `MainBrowserView.swift` — one toolbar row (back/forward/address bar/bookmark/tab count) plus a single real overflow `Menu` for every other action, matching `MainActivity.kt`'s own `showOverflowMenu()` architecture (see Phase 7's bug writeup for why); hosts the active tab via `ActiveTabContent`
 - `WebViewRepresentable.swift` — `UIViewRepresentable` wrapping one `WKWebView` per tab; real history recording + real `WKDownloadDelegate` handling
 - `BrowserTab.swift` — mirrors `Tab.kt` (id, title, url, isNewTab, isPrivate)
 - `TabManager.swift` — mirrors `MainActivity.kt`'s `tabs`/`activeTabIndex` + create/switch/close/navigate/openOfflineFile, delegates close-index math to `VisionCore.TabIndexing`
-- `AppDatabase.swift` — GRDB `DatabaseQueue` + migrator (`v1_bookmarks`, `v2_phase2`, `v3_phase6`)
+- `AppDatabase.swift` — GRDB `DatabaseQueue` + migrator (`v1_bookmarks`, `v2_phase2`, `v3_phase6`, `v4_phase7`)
 - `BookmarkStore.swift` / `HistoryStore.swift` / `DownloadStore.swift` / `OfflineStore.swift` — GRDB ports of the matching `*DbHelper.kt`
 - `OfflineSaver.swift` — real `createWebArchiveData` capture + file write
 - `KeychainStore.swift` / `AiSettings.swift` — real Keychain-backed AI key storage, port of `AiSettings.kt`
@@ -447,7 +576,8 @@ comment.
 - `TaskStore.swift` — GRDB port of `TaskDbHelper.kt`
 - `WellbeingManager.swift` / `WellbeingStore.swift` / `WellbeingActions.swift` — in-process tracking + GRDB break/site-visit log, port of `WellbeingManager.kt`/`WellbeingDbHelper.kt`/`WellbeingActions.kt`
 - `FaviconLoader.swift` — real `google.com/s2/favicons` fetch + in-memory cache, used by Focus Mode's blocklist rows
-- `NewTabView.swift` / `HistoryView.swift` / `DownloadsView.swift` / `OfflineLibraryView.swift` / `SettingsView.swift` / `RewriteView.swift` / `FocusView.swift` / `TasksView.swift` / `AdvisorView.swift` — real list/empty-state/settings/rewrite/focus/tasks/advisor screens
+- `RewardStore.swift` / `RewardEngine.swift` — real GRDB points ledger + the eligibility-checked award gate, port of `RewardDbHelper.kt`/`RewardEngine.kt`
+- `NewTabView.swift` / `HistoryView.swift` / `DownloadsView.swift` / `OfflineLibraryView.swift` / `SettingsView.swift` / `RewriteView.swift` / `FocusView.swift` / `TasksView.swift` / `AdvisorView.swift` / `RewardsView.swift` — real list/empty-state/settings/rewrite/focus/tasks/advisor/rewards screens
 - `DesignSystem.swift` — same component list and color tokens as `DesignSystem.kt`, ported to `@ViewBuilder` functions; drawable XML collapses into inline SwiftUI modifiers (disclosed simplification, noted in-file)
 
 **`UITests/`** — `VisionIOSUITests.swift`, the real behavioral verification described above.
@@ -462,21 +592,24 @@ every run.
 Profile/credentials/offline-AI-model/memory/storage settings, on-device
 local model fallback, the Ask VISION chat, every remaining education
 screen (Study Materials, Flashcards, Exams, Tutor, Performance, Study
-Plan, Paper Review), Rewards/Redeem, VISION Ready, Help, and the overflow
-menu. Also, within what Phase 6 did build: `WellbeingActions.takeBreak`
-has no reward-eligibility hook (`RewardEngine`/`RewardDbHelper` don't
-exist on iOS yet), and `TaskStore.complete`'s one-way guard exists
-specifically so a task can't be farmed for reward points once that
-exists either. Sequencing for all of these is in the build plan's Phase
-7–12 roadmap.
+Plan, Paper Review), Redeem, VISION Ready, and Help. Redeem specifically
+needs real Firebase project credentials and anonymous-auth infrastructure
+this repo doesn't have — see Phase 7's own writeup for why that's a
+disclosed trim rather than fabricated. Sequencing for the rest is in the
+build plan's Phase 8–12 roadmap.
 
 ## Next steps
 
-Phase 7: Rewards + Redeem — gated behind Phase 6 since real earning
-actions (offline save, a completed focus session, a completed task) need
-to exist first, which they now do. Redeem's Firestore sync should mirror
-Android's plain REST client choice (`FirestoreRestClient.kt`) over
-pulling in the full Firebase SDK.
+Phase 8: Study Materials & Documents — real document import (PDF via
+PDFKit, DOCX via a real zip+XML read, TXT trivially), real text
+extraction, and real AI-backed topic extraction (the same
+`generateStructuredJson`-style retry/fallback pattern as Paper Review,
+split into pure VisionCore logic + App-layer networking glue the same
+way `CloudAIRequestBuilder`/`CloudAIProvider` already are) — the slice
+that unlocks Flashcards/Exams/Tutor per the build plan. Android's
+separate, later-added "Study Material hub" (taxonomy tagging, browse/
+search, offline-ready marking, folded-in spaced-repetition review) is a
+distinct, bigger feature deliberately left for its own later phase.
 
 **If local Xcode ever exists on this machine**: `xcodegen generate`, open
 `VisionIOS.xcodeproj`, and everything here still works locally too — CI
