@@ -148,6 +148,18 @@ struct StudyPlanView: View {
                         Button("Set Date") { showDatePicker = false }
                     }
                 }
+                // Commits "today" into `examDate` the moment the sheet
+                // opens — matching Android's own DatePickerDialog, which
+                // pre-populates the current year/month/day into its
+                // fields immediately rather than requiring an explicit
+                // scroll/tap first. Without this, a user (or a UI test)
+                // that opens the picker and taps "Set Date" without
+                // touching the calendar grid would see `examDate` stay
+                // nil, since a SwiftUI DatePicker's binding `set` only
+                // fires on a real user interaction with the control.
+                .onAppear {
+                    if examDate == nil { examDate = Date() }
+                }
         }
     }
 

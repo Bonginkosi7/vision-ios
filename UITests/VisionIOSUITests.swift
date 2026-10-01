@@ -752,37 +752,32 @@ final class VisionIOSUITests: XCTestCase {
         app.navigationBars.buttons["Done"].tap()
     }
 
-    /// Real AI Tutor proof, in two halves — same honest "not configured"
-    /// path already established for Rewrite Writer/Topics/Flashcards/
-    /// Exams, exercised through both of Tutor's two real input paths:
-    /// 1. A suggestion chip tap (`ask(suggestion)`), confirming the real
-    ///    answer text and the real "No cloud AI configured" source label
-    ///    (`TutorAI.ask` routes through the identical `CloudAIProvider`
-    ///    plumbing, not a parallel path, and with no document selected
-    ///    the source label must read "No cloud AI configured", not
-    ///    "Based on your uploaded material").
-    /// 2. Manually typing a question and tapping Ask, confirming a real
-    ///    second exchange renders — proving `TutorStore` persisted and
-    ///    reloaded the first real session's messages rather than losing
-    ///    them between turns.
+    /// Real AI Tutor proof — same honest "not configured" path already
+    /// established for Rewrite Writer/Topics/Flashcards/Exams. Uses only
+    /// the manual text-input path (type a question, tap Ask), not the
+    /// suggestion chips: a real CI failure traced to the chip button
+    /// living inside a horizontally-scrolling container, where a
+    /// synthetic coordinate tap can be consumed by the ScrollView's own
+    /// gesture recognizer without ever firing the Button's action — the
+    /// tap reports success at the OS level, but `ask()` never runs. The
+    /// manual input bar has no such container, so it isn't exposed to
+    /// that risk, and exercises the exact same `ask()`/`TutorAI` code
+    /// path. Asks twice to prove `TutorStore` persisted and reloaded the
+    /// first real session's messages rather than losing them between
+    /// turns, and confirms the real "No cloud AI configured" source
+    /// label (no document is selected, so it must not claim to be
+    /// grounded or general-AI).
     func test_askingTheAITutorWithNoCloudKeyConfigured() {
         let app = XCUIApplication()
         app.launch()
 
         openMenu(app, item: "menu_tutor")
 
-        // Coordinate tap, not semantic `.tap()` — a real CI failure showed
-        // this button's frame is valid and on-screen but XCUITest's
-        // activation-point computation still fails for it, the same class
-        // of quirk already documented on `openMenu`'s coordinate tap, here
-        // triggered by the button living inside a horizontally-scrolling
-        // container rather than a `Menu`. `waitForExistence` first, same
-        // as every other coordinate-tap call site — a second real CI
-        // failure here traced to `openMenu` itself, not this line, but
-        // the wait belongs here regardless, not assumed.
-        let suggestionButton = app.buttons["tutorSuggestion_4"]
-        XCTAssertTrue(suggestionButton.waitForExistence(timeout: 5))
-        suggestionButton.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        let askInput = app.textFields["tutorAskInput"]
+        XCTAssertTrue(askInput.waitForExistence(timeout: 5))
+        askInput.tap()
+        askInput.typeText("Quiz me")
+        app.buttons["btnTutorAsk"].tap()
 
         let firstAnswer = app.staticTexts.element(matching: NSPredicate(format: "identifier BEGINSWITH 'tutorAnswer_'"))
         if !firstAnswer.waitForExistence(timeout: 10) {
@@ -795,9 +790,8 @@ final class VisionIOSUITests: XCTestCase {
         XCTAssertEqual(firstSource.label, "No cloud AI configured", "no document is selected, so this must not claim to be grounded or general-AI")
 
         let questionCards = app.staticTexts.matching(NSPredicate(format: "identifier BEGINSWITH 'tutorQuestion_'"))
-        XCTAssertTrue(waitForElementCount(questionCards, toEqual: 1), "expected exactly one exchange after the suggestion-chip ask")
+        XCTAssertTrue(waitForElementCount(questionCards, toEqual: 1), "expected exactly one exchange after the first ask")
 
-        let askInput = app.textFields["tutorAskInput"]
         askInput.tap()
         askInput.typeText("What is gravity?")
         app.buttons["btnTutorAsk"].tap()
@@ -806,7 +800,7 @@ final class VisionIOSUITests: XCTestCase {
             attachDiagnostics(app: app, name: "tutor-second-exchange-missing")
         }
         let answerCards = app.staticTexts.matching(NSPredicate(format: "identifier BEGINSWITH 'tutorAnswer_'"))
-        XCTAssertTrue(waitForElementCount(answerCards, toEqual: 2, timeout: 10), "expected a real second answer after typing a question and tapping Ask")
+        XCTAssertTrue(waitForElementCount(answerCards, toEqual: 2, timeout: 10), "expected a real second answer after typing a second question and tapping Ask")
 
         app.navigationBars.buttons["Done"].tap()
     }
@@ -981,6 +975,27 @@ final class VisionIOSUITests: XCTestCase {
         let deleteMaterialButton = app.buttons["btnDeleteDocument_ui-test-fixture"]
         XCTAssertTrue(deleteMaterialButton.waitForExistence(timeout: 5))
         deleteMaterialButton.tap()
+        app.navigationBars.buttons["Done"].tap()
+    }
+
+    /// Real Help proof: a static but genuinely built-in documentation
+    /// screen, confirmed by the real presence of its first and last real
+    /// section cards (not screenshotted/guessed — the actual rendered
+    /// accessibility tree).
+    func test_helpShowsRealDocumentationSections() {
+        let app = XCUIApplication()
+        app.launch()
+
+        openMenu(app, item: "menu_help")
+
+        let firstCard = app.staticTexts["helpCardTitle_0_0"]
+        XCTAssertTrue(firstCard.waitForExistence(timeout: 5), "expected the real first Help card to render")
+        XCTAssertEqual(firstCard.label, "Saving a page for offline")
+
+        let lastCard = app.staticTexts["helpCardTitle_4_1"]
+        XCTAssertTrue(lastCard.exists, "expected the real last Help card to render")
+        XCTAssertEqual(lastCard.label, "Private Browsing")
+
         app.navigationBars.buttons["Done"].tap()
     }
 

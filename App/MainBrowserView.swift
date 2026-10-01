@@ -65,6 +65,7 @@ struct MainBrowserView: View {
     @State private var showPerformance = false
     @State private var showStudyPlan = false
     @State private var showPaperReview = false
+    @State private var showHelp = false
     @State private var saveOfflineStatus: String?
 
     var body: some View {
@@ -160,6 +161,9 @@ struct MainBrowserView: View {
         }
         .sheet(isPresented: $showPaperReview) {
             PaperReviewView(studyDocumentStore: studyDocumentStore)
+        }
+        .sheet(isPresented: $showHelp) {
+            HelpView()
         }
     }
 
@@ -368,6 +372,11 @@ struct MainBrowserView: View {
                 Label("Settings", systemImage: "gearshape")
             }
             .accessibilityIdentifier("menu_settings")
+
+            Button(action: { showHelp = true }) {
+                Label("Help", systemImage: "questionmark.circle")
+            }
+            .accessibilityIdentifier("menu_help")
         } label: {
             Image(systemName: "ellipsis.circle")
         }
