@@ -24,10 +24,13 @@ confirmed the full test suite green, including force-terminating the app
 and relaunching to prove a bookmark survived in a real, persisted
 GRDB/SQLite database.
 
-**Phase 5** (Rewrite Writer) is implemented and pushed; its CI run is the
-next thing to watch. This is the real first use of Phase 4's AI layer —
-see the Phase 5 section below for exactly what is and isn't verified
-without a paid API key.
+**Phase 5** (Rewrite Writer) is done — run
+[`36855048304`](https://github.com/Bonginkosi7/vision-ios/actions/runs/36855048304)
+passed green on the first try, 43 tests total, zero failures, including
+`test_rewriteWithInvalidKey_reachesRealAnthropicAPIAndShowsError`
+genuinely reaching the live `api.anthropic.com` and getting a real
+rejection back for the invalid key — see the Phase 5 section below for
+exactly what is and isn't verified without a paid API key.
 
 **Phase 4** (cloud AI provider layer) is done — run
 [`36852551212`](https://github.com/Bonginkosi7/vision-ios/actions/runs/36852551212)
