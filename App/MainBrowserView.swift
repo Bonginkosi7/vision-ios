@@ -54,6 +54,7 @@ struct MainBrowserView: View {
     @State private var showFlashcards = false
     @State private var showExams = false
     @State private var showTutor = false
+    @State private var showPerformance = false
     @State private var saveOfflineStatus: String?
 
     var body: some View {
@@ -137,6 +138,9 @@ struct MainBrowserView: View {
         }
         .sheet(isPresented: $showTutor) {
             TutorView(studyDocumentStore: studyDocumentStore, tutorStore: tutorStore)
+        }
+        .sheet(isPresented: $showPerformance) {
+            PerformanceView(studyDocumentStore: studyDocumentStore, topicStore: topicStore, flashcardStore: flashcardStore, examStore: examStore)
         }
     }
 
@@ -325,6 +329,11 @@ struct MainBrowserView: View {
                 Label("AI Tutor", systemImage: "bubble.left.and.bubble.right")
             }
             .accessibilityIdentifier("menu_tutor")
+
+            Button(action: { showPerformance = true }) {
+                Label("Performance", systemImage: "chart.bar")
+            }
+            .accessibilityIdentifier("menu_performance")
 
             Button(action: { showSettings = true }) {
                 Label("Settings", systemImage: "gearshape")

@@ -77,10 +77,9 @@ struct ExamAnswerResult: Identifiable {
 /// AI-generated test back to its real source document — nil for a fully
 /// user-authored one.
 ///
-/// Android's `markedAnswersForTopic` (returning `MasteryEvent` rows for
-/// MasteryEngine) is deliberately NOT ported — Performance doesn't exist
-/// on iOS yet, matching the exact same disclosed-trim reasoning Phase 9
-/// used for `reviewEventsForTopic` (see README).
+/// `markedAnswersForTopic` closes the trim this file's doc comment used
+/// to describe: Performance (Phase 12) now exists and is the real
+/// consumer of marked exam answers tagged to a topic.
 final class ExamStore: ObservableObject {
     private let dbQueue: DatabaseQueue
     init(dbQueue: DatabaseQueue = AppDatabase.shared) { self.dbQueue = dbQueue }
@@ -227,5 +226,22 @@ final class ExamStore: ObservableObject {
             try db.execute(sql: "UPDATE examAttempt SET status = ?, scorePercent = ? WHERE id = ?", arguments: ["marked", scorePercent, attemptId])
         }
         return scorePercent
+    }
+
+    /// Every real marked exam answer belonging to a question tagged to
+    /// this topic, most recent first — feeds `MasteryEngine` via
+    /// `PerformanceCalculator`. Direct port of ExamDbHelper.kt's
+    /// markedAnswersForTopic.
+    func markedAnswersForTopic(_ topicId: String) throws -> [MasteryEvent] {
+        try dbQueue.read { db in
+            let rows = try Row.fetchAll(db, sql: """
+                SELECT a.isCorrect, a.markedAt
+                FROM examAnswer a
+                JOIN examQuestion q ON q.id = a.questionId
+                WHERE q.topicId = ? AND a.isCorrect IS NOT NULL
+                ORDER BY a.markedAt DESC
+                """, arguments: [topicId])
+            return rows.map { row in MasteryEvent(correct: row["isCorrect"], createdAt: row["markedAt"]) }
+        }
     }
 }

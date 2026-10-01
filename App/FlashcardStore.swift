@@ -28,13 +28,10 @@ struct NewFlashcard {
 }
 
 /// Real local storage for AI-generated flashcards — GRDB port of
-/// FlashcardDbHelper.kt. `reviewEventsForTopic` (Performance's real
-/// per-topic mastery aggregation) is deliberately not ported yet: its
-/// return type depends on MasteryEvent/the mastery engine, neither of
-/// which exists on iOS until Performance's own phase — the
-/// `flashcardReviewEvent` table itself is still written for real by
-/// `markReviewed` below, so that data exists and is ready once Performance
-/// lands and genuinely needs to read it.
+/// FlashcardDbHelper.kt. `reviewEventsForTopic` closes the trim this
+/// file's doc comment used to describe: Performance (Phase 12) now
+/// exists and is the real consumer of the `flashcardReviewEvent` rows
+/// `markReviewed` has been writing since Phase 9.
 final class FlashcardStore: ObservableObject {
     private let dbQueue: DatabaseQueue
 
@@ -95,5 +92,21 @@ final class FlashcardStore: ObservableObject {
 
     func get(_ id: String) throws -> Flashcard? {
         try dbQueue.read { db in try Flashcard.fetchOne(db, key: id) }
+    }
+
+    /// Every real review event for flashcards tagged to this topic, most
+    /// recent first — feeds `MasteryEngine` via `PerformanceCalculator`.
+    /// Direct port of FlashcardDbHelper.kt's reviewEventsForTopic.
+    func reviewEventsForTopic(_ topicId: String) throws -> [MasteryEvent] {
+        try dbQueue.read { db in
+            let rows = try Row.fetchAll(db, sql: """
+                SELECT e.confident, e.createdAt
+                FROM flashcardReviewEvent e
+                JOIN flashcard c ON c.id = e.flashcardId
+                WHERE c.topicId = ?
+                ORDER BY e.createdAt DESC
+                """, arguments: [topicId])
+            return rows.map { row in MasteryEvent(correct: row["confident"], createdAt: row["createdAt"]) }
+        }
     }
 }
