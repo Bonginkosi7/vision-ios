@@ -527,12 +527,16 @@ final class VisionIOSUITests: XCTestCase {
 
         openMenu(app, item: "menu_materials")
 
-        // materialRow_* is applied to a VStack whose children are too
-        // complex for SwiftUI to collapse into one accessibility element
-        // — the same real quirk Phase 6/7 found (the identifier lands on
-        // every leaf StaticText inside instead of a single `.other`), so
-        // this queries staticTexts, not otherElements.
-        let row = app.staticTexts["materialRow_ui-test-fixture"]
+        // A first real CI run found this row's container VStack carrying
+        // its own .accessibilityIdentifier doesn't just leak onto plain
+        // StaticText leaves (the Phase 6/7 quirk) — it can overwrite a
+        // child BUTTON's own explicit identifier too (confirmed via a
+        // real captured .xcresult dump: btnProcessDocument_* and
+        // btnDeleteDocument_* both came back labeled with the row's own
+        // identifier instead of their own). Fixed in MaterialsView.swift
+        // by removing the container-level identifier entirely and giving
+        // the title text its own (materialTitle_*).
+        let row = app.staticTexts["materialTitle_ui-test-fixture"]
         XCTAssertTrue(row.waitForExistence(timeout: 5), "the real seeded fixture should show up in My Materials")
 
         let processButton = app.buttons["btnProcessDocument_ui-test-fixture"]

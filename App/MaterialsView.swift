@@ -87,6 +87,7 @@ struct MaterialsView: View {
     private func documentRow(_ doc: StudyDocument) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(doc.title).foregroundStyle(.white).font(.system(size: 14, weight: .bold))
+                .accessibilityIdentifier("materialTitle_\(doc.id)")
             Text("\(statusLabel(doc.status)) · \(doc.fileType.label) · \(ByteCountFormatter.string(fromByteCount: doc.sizeBytes, countStyle: .file))")
                 .font(.system(size: 12)).foregroundStyle(DesignSystem.textMuted2)
                 .accessibilityIdentifier("materialStatus_\(doc.id)")
@@ -114,7 +115,18 @@ struct MaterialsView: View {
             topicsSection(doc)
         }
         .padding(.vertical, 8)
-        .accessibilityIdentifier("materialRow_\(doc.id)")
+        // Deliberately NO .accessibilityIdentifier on this whole VStack:
+        // a real captured .xcresult accessibility-tree dump (this
+        // project's established forensics technique) showed that when an
+        // ancestor container like this one carries its own identifier,
+        // SwiftUI doesn't just leak it onto plain StaticText leaves (the
+        // Phase 6/7 quirk) — it can overwrite a CHILD BUTTON'S OWN
+        // explicit .accessibilityIdentifier too, exactly what broke
+        // btnProcessDocument_*/btnDeleteDocument_* here (both reported
+        // back with this container's identifier instead of their own).
+        // Each real interactive/readable element below carries its own
+        // distinct identifier instead, with nothing set at this level to
+        // collide with them.
     }
 
     @ViewBuilder
