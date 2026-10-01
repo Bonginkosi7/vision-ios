@@ -643,6 +643,115 @@ final class VisionIOSUITests: XCTestCase {
         app.navigationBars.buttons["Done"].tap()
     }
 
+    /// Real Exams proof, in two halves:
+    ///
+    /// 1. A fully hand-authored MCQ exam, created, taken, and marked with
+    ///    zero AI involvement — real local `ExamMarking` string comparison
+    ///    end to end (choose the option known to be correct, submit, and
+    ///    confirm the real score reads "100% correct"). Unlike Flashcards'
+    ///    AI-only path, Create Exam needs no cloud key configured at all,
+    ///    so this is a genuine full-credit real behavioral proof, not just
+    ///    an honest-error path.
+    /// 2. The same honest "Cloud AI isn't configured" proof already
+    ///    established for Rewrite Writer/Topics/Flashcards, exercised here
+    ///    through Generate Mock Test — confirming `ExamGenerator` routes
+    ///    through the identical `CloudAIProvider`/`StructuredAI` plumbing.
+    func test_takingAHandAuthoredExamAndGeneratingFromMaterial() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-UITestSeedMaterial"]
+        app.launch()
+
+        openMenu(app, item: "menu_materials")
+        let materialRow = app.staticTexts["materialTitle_ui-test-fixture"]
+        XCTAssertTrue(materialRow.waitForExistence(timeout: 5))
+        let processButton = app.buttons["btnProcessDocument_ui-test-fixture"]
+        XCTAssertTrue(processButton.waitForExistence(timeout: 5))
+        processButton.tap()
+        let materialStatus = app.staticTexts["materialStatus_ui-test-fixture"]
+        let processedExpectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label CONTAINS %@", "Processed"), object: materialStatus
+        )
+        if XCTWaiter().wait(for: [processedExpectation], timeout: 20) != .completed {
+            attachDiagnostics(app: app, name: "exams-material-did-not-process")
+        }
+        XCTAssertTrue(materialStatus.label.contains("Processed"))
+        app.navigationBars.buttons["Done"].tap()
+
+        openMenu(app, item: "menu_exams")
+
+        // --- Half 1: hand-authored exam, taken and marked with no AI. ---
+        let createButton = app.buttons["btnCreateExam"]
+        XCTAssertTrue(createButton.waitForExistence(timeout: 5))
+        createButton.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+
+        let titleField = app.textFields["examTitleInput"]
+        XCTAssertTrue(titleField.waitForExistence(timeout: 5))
+        titleField.tap()
+        titleField.typeText("UI Test Exam")
+
+        app.textFields["questionPrompt_0"].tap()
+        app.textFields["questionPrompt_0"].typeText("What is 2+2?")
+        let optionTexts = ["3", "4", "5", "6"]
+        for (index, text) in optionTexts.enumerated() {
+            let field = app.textFields["mcqOption_0_\(index)"]
+            field.tap()
+            field.typeText(text)
+        }
+        app.buttons["mcqCorrect_0_1"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        app.buttons["btnSaveExam"].tap()
+
+        let examRow = app.buttons.element(matching: NSPredicate(format: "identifier BEGINSWITH 'examRow_'"))
+        XCTAssertTrue(examRow.waitForExistence(timeout: 5), "expected the just-saved exam to appear in the real list")
+        examRow.tap()
+
+        let correctOption = app.buttons.element(matching: NSPredicate(format: "identifier BEGINSWITH 'takingOption_' AND label == %@", "4"))
+        XCTAssertTrue(correctOption.waitForExistence(timeout: 5))
+        correctOption.tap()
+        app.buttons["btnSubmitExam"].tap()
+
+        let resultsScore = app.staticTexts["resultsScore"]
+        let scoredExpectation = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "100% correct"), object: resultsScore)
+        if XCTWaiter().wait(for: [scoredExpectation], timeout: 10) != .completed {
+            attachDiagnostics(app: app, name: "exams-score-not-100-percent")
+        }
+        XCTAssertEqual(resultsScore.label, "100% correct", "a correctly-answered MCQ-only exam should be marked fully correct with no AI involved")
+        app.navigationBars.buttons["Close"].tap()
+
+        examRow.swipeLeft()
+        let deleteExamButton = app.buttons.element(matching: NSPredicate(format: "identifier BEGINSWITH 'btnDeleteExam_'"))
+        XCTAssertTrue(deleteExamButton.waitForExistence(timeout: 5))
+        deleteExamButton.tap()
+
+        // --- Half 2: AI-generated exam, honest "not configured" path. ---
+        let generateEntryButton = app.buttons["btnGenerateExamEntry"]
+        XCTAssertTrue(generateEntryButton.waitForExistence(timeout: 5))
+        generateEntryButton.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+
+        let generateButton = app.buttons["btnGenerateExam"]
+        XCTAssertTrue(generateButton.waitForExistence(timeout: 5), "expected a real Generate button once a processed document exists")
+        generateButton.tap()
+
+        let generateStatus = app.staticTexts["generateExamStatus"]
+        let notConfiguredExpectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label CONTAINS %@", "Cloud AI isn't configured"), object: generateStatus
+        )
+        if XCTWaiter().wait(for: [notConfiguredExpectation], timeout: 10) != .completed {
+            attachDiagnostics(app: app, name: "exams-generate-no-honest-error")
+        }
+        XCTAssertTrue(generateStatus.label.contains("Cloud AI isn't configured"), "expected the real honest 'not configured' message, got: \(generateStatus.label)")
+        app.navigationBars.buttons["Cancel"].tap()
+        app.navigationBars.buttons["Done"].tap()
+
+        // Clean up via Materials so a later run doesn't see the fixture as
+        // already present.
+        openMenu(app, item: "menu_materials")
+        materialRow.swipeLeft()
+        let deleteMaterialButton = app.buttons["btnDeleteDocument_ui-test-fixture"]
+        XCTAssertTrue(deleteMaterialButton.waitForExistence(timeout: 5))
+        deleteMaterialButton.tap()
+        app.navigationBars.buttons["Done"].tap()
+    }
+
     // MARK: - Helpers
 
     /// Taps the real overflow ("⋮") menu button, then the named menu item

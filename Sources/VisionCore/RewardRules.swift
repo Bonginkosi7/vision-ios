@@ -4,14 +4,13 @@ import Foundation
 /// carried over as-is from the desktop app's rewardRules.ts, not resized
 /// independently. `RewardEventType` only lists the real event types whose
 /// trigger already exists on iOS (OfflineSaver, TaskStore, FocusManager,
-/// WellbeingActions) — Android's own EDU_TEST_COMPLETED/
+/// WellbeingActions, and now TakeExamView). Android's own
 /// STUDY_PLAN_TASK_COMPLETED/STUDY_SESSION_COMPLETED/EDU_MASTERY_MILESTONE
-/// cases are left out for exactly the same reason Android's own
+/// cases are still left out for exactly the same reason Android's own
 /// RewardRules.kt documents leaving them out "through Phase 18 because
-/// Study Plan didn't exist yet to trigger them": no education feature
-/// exists on iOS yet to genuinely trigger them. Add them when the
-/// matching iOS phase (Study Materials/Flashcards/Exams/Study Plan) lands,
-/// not before.
+/// Study Plan didn't exist yet to trigger them": Study Plan/Performance
+/// don't exist on iOS yet to genuinely trigger them. Add them when those
+/// phases land, not before.
 public enum RewardCategory: String, Codable, CaseIterable {
     case health = "HEALTH"
     case learning = "LEARNING"
@@ -55,6 +54,7 @@ public enum RewardEventType: String, Codable, CaseIterable {
     case healthyBreak = "HEALTHY_BREAK"
     case digitalBalance = "DIGITAL_BALANCE"
     case focusSessionCompleted = "FOCUS_SESSION_COMPLETED"
+    case eduTestCompleted = "EDU_TEST_COMPLETED"
     case weeklyConsistency = "WEEKLY_CONSISTENCY"
 
     public var rule: RewardRule {
@@ -69,6 +69,8 @@ public enum RewardEventType: String, Codable, CaseIterable {
             return RewardRule(category: .health, points: 10, label: "Keep a balanced day (your first real break of the day)", dedupe: .oncePerDay)
         case .focusSessionCompleted:
             return RewardRule(category: .productivity, points: 15, label: "Complete a Focus Session (15+ min, run to the end)", dailyLimit: 4)
+        case .eduTestCompleted:
+            return RewardRule(category: .learning, points: 15, label: "Complete a mock test", dailyLimit: 5)
         case .weeklyConsistency:
             return RewardRule(category: .consistency, points: 20, label: "Stay active on 4+ different days in a week", dedupe: .onceEver)
         }

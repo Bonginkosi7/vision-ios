@@ -197,6 +197,52 @@ enum AppDatabase {
             try db.create(index: "idx_flashcardReviewEvent_flashcardId", on: "flashcardReviewEvent", columns: ["flashcardId"])
         }
 
+        migrator.registerMigration("v7_phase10") { db in
+            // Exams — port of ExamDbHelper.kt's four tables. No
+            // mastery/topic-aggregate table: Android's own
+            // markedAnswersForTopic (feeding MasteryEngine) isn't ported
+            // either — Performance doesn't exist on iOS yet, same
+            // disclosed trim as Phase 9's reviewEventsForTopic.
+            try db.create(table: "examTest") { t in
+                t.primaryKey("id", .text)
+                t.column("title", .text).notNull()
+                t.column("timeLimitMinutes", .integer)
+                t.column("createdAt", .datetime).notNull()
+                t.column("documentId", .text)
+            }
+            try db.create(table: "examQuestion") { t in
+                t.primaryKey("id", .text)
+                t.column("testId", .text).notNull()
+                t.column("ordinal", .integer).notNull()
+                t.column("type", .text).notNull()
+                t.column("prompt", .text).notNull()
+                t.column("optionsJSON", .text)
+                t.column("correctAnswer", .text).notNull()
+                t.column("explanation", .text)
+                t.column("topicId", .text)
+            }
+            try db.create(index: "idx_examQuestion_testId", on: "examQuestion", columns: ["testId"])
+            try db.create(table: "examAttempt") { t in
+                t.primaryKey("id", .text)
+                t.column("testId", .text).notNull()
+                t.column("status", .text).notNull().defaults(to: "in_progress")
+                t.column("startedAt", .datetime).notNull()
+                t.column("submittedAt", .datetime)
+                t.column("scorePercent", .double)
+                t.column("expiresAt", .datetime)
+            }
+            try db.create(table: "examAnswer") { t in
+                t.primaryKey("id", .text)
+                t.column("attemptId", .text).notNull()
+                t.column("questionId", .text).notNull()
+                t.column("studentAnswer", .text).notNull()
+                t.column("isCorrect", .boolean)
+                t.column("feedback", .text)
+                t.column("markedAt", .datetime)
+            }
+            try db.create(index: "idx_examAnswer_attemptId", on: "examAnswer", columns: ["attemptId"])
+        }
+
         return migrator
     }
 }

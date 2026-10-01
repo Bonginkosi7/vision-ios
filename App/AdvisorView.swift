@@ -28,6 +28,7 @@ struct AdvisorView: View {
     @State private var tabsOpenedToday = 0
     @State private var weekPoints = 0
     @State private var weekBreaks = 0
+    @State private var weekLearning = 0
     @State private var weekFocusSessions = 0
     @State private var suggestion: AdvisorSuggestion?
 
@@ -79,6 +80,7 @@ struct AdvisorView: View {
                     DesignSystem.card {
                         DesignSystem.statRow(emoji: "⭐", label: "Points earned", value: "\(weekPoints)")
                         DesignSystem.statRow(emoji: "❤️", label: "Healthy breaks", value: "\(weekBreaks)")
+                        DesignSystem.statRow(emoji: "🎓", label: "Learning", value: "\(weekLearning)")
                         DesignSystem.statRow(emoji: "🎯", label: "Focus sessions", value: "\(weekFocusSessions)")
                     }
                     .accessibilityIdentifier("advisorWeekCard")
@@ -103,6 +105,7 @@ struct AdvisorView: View {
         tabsOpenedToday = WellbeingManager.shared.tabsOpenedToday()
         weekPoints = (try? rewardStore.totalThisWeek()) ?? 0
         weekBreaks = (try? rewardStore.countEventsThisWeek(.healthyBreak)) ?? 0
+        weekLearning = (try? rewardStore.countEventsThisWeek(.eduTestCompleted)) ?? 0
         weekFocusSessions = (try? rewardStore.countEventsThisWeek(.focusSessionCompleted)) ?? 0
         suggestion = AdvisorLogic.getSuggestion(continuousSessionMs: continuousSessionMs)
     }
