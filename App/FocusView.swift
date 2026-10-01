@@ -17,7 +17,17 @@ struct FocusView: View {
     @State private var blockedDomains: [String] = []
     @State private var newDomainText = ""
     @State private var now = Date()
-    private let tick = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+    // @State, deliberately, not a plain `let`: Timer.publish(...).autoconnect()
+    // starts a real, already-running Timer the instant it's created, and a
+    // plain stored `let` gets re-created (reconnecting a brand-new Timer)
+    // on every body re-evaluation of this struct — a well-documented real
+    // Combine leak. Opening FocusView twice in one real CI run (start a
+    // session, close, reopen to clean up the blocklist) leaked enough
+    // independently-firing Timers to stall the app's idle detection for a
+    // genuine ~60 real seconds, caught as a real CI timeout, not a guess.
+    // @State preserves this publisher's identity across re-renders for
+    // the same view identity instead of reconnecting a new one each time.
+    @State private var tick = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     var body: some View {
         NavigationStack {
