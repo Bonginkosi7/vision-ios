@@ -7,6 +7,9 @@ packages:
   GRDB:
     url: https://github.com/groue/GRDB.swift
     from: "6.0.0"
+  ZIPFoundation:
+    url: https://github.com/weichsel/ZIPFoundation
+    from: "0.9.0"
 targets:
   VisionIOS:
     type: application
@@ -18,6 +21,8 @@ targets:
       - package: VisionCore
       - package: GRDB
         product: GRDB
+      - package: ZIPFoundation
+        product: ZIPFoundation
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.vision.browser

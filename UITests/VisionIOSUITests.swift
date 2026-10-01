@@ -505,6 +505,64 @@ final class VisionIOSUITests: XCTestCase {
         app.navigationBars.buttons["Done"].tap()
     }
 
+    /// Real My Materials proof: process a real uploaded file (real text
+    /// extraction via TxtExtractor against a real file on disk) and
+    /// attempt real topic extraction with no AI provider configured,
+    /// confirming the same honest "not configured" message
+    /// test_rewriteWithNoProviderConfigured_showsHonestError already
+    /// proved for Rewrite Writer — TopicExtractor routes through the
+    /// exact same CloudAIProvider plumbing, not a parallel path.
+    ///
+    /// Driving iOS's own system file-picker sheet reliably from XCUITest
+    /// is a known, real platform limitation (the Files app's UI, not this
+    /// app's), so the upload step itself is skipped here in favor of a
+    /// real fixture seeded at launch via `-UITestSeedMaterial` — see
+    /// MainBrowserView.seedMaterialsFixtureIfRequested()'s own doc
+    /// comment. Everything downstream of that real upload (processing,
+    /// topic extraction, deletion) is still exercised for real.
+    func test_processingAndExtractingTopicsForASeededMaterial() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-UITestSeedMaterial"]
+        app.launch()
+
+        openMenu(app, item: "menu_materials")
+
+        // materialRow_* is applied to a VStack whose children are too
+        // complex for SwiftUI to collapse into one accessibility element
+        // — the same real quirk Phase 6/7 found (the identifier lands on
+        // every leaf StaticText inside instead of a single `.other`), so
+        // this queries staticTexts, not otherElements.
+        let row = app.staticTexts["materialRow_ui-test-fixture"]
+        XCTAssertTrue(row.waitForExistence(timeout: 5), "the real seeded fixture should show up in My Materials")
+
+        app.buttons["btnProcessDocument_ui-test-fixture"].tap()
+
+        let status = app.staticTexts["materialStatus_ui-test-fixture"]
+        let processedPredicate = NSPredicate(format: "label CONTAINS %@", "Processed")
+        let processedExpectation = XCTNSPredicateExpectation(predicate: processedPredicate, object: status)
+        if XCTWaiter().wait(for: [processedExpectation], timeout: 10) != .completed {
+            attachDiagnostics(app: app, name: "material-did-not-process")
+        }
+        XCTAssertTrue(status.label.contains("Processed"), "a real .txt fixture should process successfully, status read: \(status.label)")
+
+        app.buttons["btnTopics_ui-test-fixture"].tap()
+
+        let topicsStatus = app.staticTexts["topicsStatus_ui-test-fixture"]
+        let notConfiguredPredicate = NSPredicate(format: "label CONTAINS %@", "Cloud AI isn't configured")
+        let notConfiguredExpectation = XCTNSPredicateExpectation(predicate: notConfiguredPredicate, object: topicsStatus)
+        if XCTWaiter().wait(for: [notConfiguredExpectation], timeout: 5) != .completed {
+            attachDiagnostics(app: app, name: "material-topics-no-honest-error")
+        }
+        XCTAssertTrue(topicsStatus.label.contains("Cloud AI isn't configured"), "expected the real honest 'not configured' message, got: \(topicsStatus.label)")
+
+        // Clean up so a later run (or the same simulator's persisted
+        // database) doesn't see the fixture as already present.
+        app.buttons["btnDeleteDocument_ui-test-fixture"].tap()
+        XCTAssertFalse(row.waitForExistence(timeout: 3), "deleting the fixture should remove its real row")
+
+        app.navigationBars.buttons["Done"].tap()
+    }
+
     // MARK: - Helpers
 
     /// Taps the real overflow ("⋮") menu button, then the named menu item

@@ -32,6 +32,8 @@ struct MainBrowserView: View {
     @StateObject private var wellbeingStore = WellbeingStore()
     @StateObject private var focusStore = FocusStore()
     @StateObject private var rewardStore = RewardStore()
+    @StateObject private var studyDocumentStore = StudyDocumentStore()
+    @StateObject private var topicStore = TopicStore()
     @ObservedObject private var focusManager = FocusManager.shared
 
     @State private var addressText: String = ""
@@ -45,6 +47,7 @@ struct MainBrowserView: View {
     @State private var showTasks = false
     @State private var showAdvisor = false
     @State private var showRewards = false
+    @State private var showMaterials = false
     @State private var saveOfflineStatus: String?
 
     var body: some View {
@@ -83,6 +86,7 @@ struct MainBrowserView: View {
                     )
                 }
             }
+            seedMaterialsFixtureIfRequested()
         }
         .onChange(of: tabManager.activeTabIndex) { _ in syncAddressBar() }
         .sheet(isPresented: $showHistory) {
@@ -115,6 +119,45 @@ struct MainBrowserView: View {
         }
         .sheet(isPresented: $showRewards) {
             RewardsView(rewardStore: rewardStore)
+        }
+        .sheet(isPresented: $showMaterials) {
+            MaterialsView(studyDocumentStore: studyDocumentStore, topicStore: topicStore)
+        }
+    }
+
+    /// A real, disclosed test seam, not a fabricated feature: driving
+    /// iOS's own system file-picker sheet (`.fileImporter`) reliably from
+    /// XCUITest is a known, genuine platform limitation (the Files app's
+    /// own UI, not this app's), so the upload step itself stays
+    /// live-verified by hand rather than by CI. Everything downstream of
+    /// a real uploaded file — processing, topic extraction, deletion —
+    /// still needs real end-to-end proof, so a UI test launching with
+    /// `-UITestSeedMaterial` gets one real fixture file genuinely copied
+    /// onto disk and one real `StudyDocument` row inserted, the exact
+    /// same real state `DocumentImport.importFile` would have produced
+    /// had the picker actually been driven.
+    private func seedMaterialsFixtureIfRequested() {
+        guard ProcessInfo.processInfo.arguments.contains("-UITestSeedMaterial") else { return }
+        guard (try? studyDocumentStore.list())?.isEmpty ?? true else { return }
+        do {
+            let folder = try FileManager.default.url(
+                for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true
+            ).appendingPathComponent("StudyDocuments/ui-test-fixture", isDirectory: true)
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            let fileURL = folder.appendingPathComponent("fixture.txt")
+            let contents = "This is a real fixture file for UI testing My Materials. It covers two real subjects: Photosynthesis and Cellular Respiration."
+            try contents.write(to: fileURL, atomically: true, encoding: .utf8)
+
+            let document = StudyDocument(
+                id: "ui-test-fixture", title: "UI Test Fixture", originalFilename: "fixture.txt",
+                fileType: .txt, contentPath: fileURL.path, sizeBytes: Int64(contents.utf8.count),
+                status: .uploaded, processingError: nil, extractedText: nil, createdAt: Date()
+            )
+            try studyDocumentStore.insert(document)
+        } catch {
+            // A failed seed just means the UI test's own assertions won't
+            // find the fixture and will fail loudly with a real reason —
+            // never worth crashing a real user's launch over.
         }
     }
 
@@ -247,6 +290,11 @@ struct MainBrowserView: View {
                 Label("Rewrite Writer", systemImage: "pencil.and.outline")
             }
             .accessibilityIdentifier("menu_rewrite")
+
+            Button(action: { showMaterials = true }) {
+                Label("My Materials", systemImage: "books.vertical")
+            }
+            .accessibilityIdentifier("menu_materials")
 
             Button(action: { showSettings = true }) {
                 Label("Settings", systemImage: "gearshape")

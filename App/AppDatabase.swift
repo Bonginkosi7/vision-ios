@@ -139,6 +139,42 @@ enum AppDatabase {
             try db.create(index: "idx_rewardEvent_dedupeKey", on: "rewardEvent", columns: ["dedupeKey"])
         }
 
+        migrator.registerMigration("v5_phase8") { db in
+            // My Materials — the slice of StudyDocumentDbHelper.kt's real
+            // columns MaterialsActivity.kt actually uses. Deliberately
+            // narrower than Android's own final schema: no taxonomy
+            // (level/grade/category/subject/resourceType/year/language)
+            // or offlineReadyAt columns yet — those belong to Android's
+            // separate, bigger "Study Material hub" this phase does not
+            // port (see README's disclosed scope trim). They land in
+            // their own migration if/when that hub gets built.
+            try db.create(table: "studyDocument") { t in
+                t.primaryKey("id", .text)
+                t.column("title", .text).notNull()
+                t.column("originalFilename", .text).notNull()
+                t.column("fileType", .text).notNull()
+                t.column("contentPath", .text).notNull()
+                t.column("sizeBytes", .integer).notNull()
+                t.column("status", .text).notNull()
+                t.column("processingError", .text)
+                t.column("extractedText", .text)
+                t.column("createdAt", .datetime).notNull()
+            }
+
+            // Topics — port of TopicDbHelper.kt's real hierarchical
+            // topic/subtopic structure.
+            try db.create(table: "topic") { t in
+                t.primaryKey("id", .text)
+                t.column("documentId", .text).notNull()
+                t.column("parentTopicId", .text)
+                t.column("level", .integer).notNull()
+                t.column("name", .text).notNull()
+                t.column("summary", .text)
+                t.column("ordinal", .integer).notNull()
+            }
+            try db.create(index: "idx_topic_documentId", on: "topic", columns: ["documentId"])
+        }
+
         return migrator
     }
 }
