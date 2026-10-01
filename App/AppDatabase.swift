@@ -175,6 +175,28 @@ enum AppDatabase {
             try db.create(index: "idx_topic_documentId", on: "topic", columns: ["documentId"])
         }
 
+        migrator.registerMigration("v6_phase9") { db in
+            // Flashcards — port of FlashcardDbHelper.kt's two tables.
+            try db.create(table: "flashcard") { t in
+                t.primaryKey("id", .text)
+                t.column("documentId", .text).notNull()
+                t.column("front", .text).notNull()
+                t.column("back", .text).notNull()
+                t.column("createdAt", .datetime).notNull()
+                t.column("intervalTier", .integer).notNull().defaults(to: -1)
+                t.column("reviewCount", .integer).notNull().defaults(to: 0)
+                t.column("nextDueAt", .datetime)
+                t.column("topicId", .text)
+            }
+            try db.create(table: "flashcardReviewEvent") { t in
+                t.primaryKey("id", .text)
+                t.column("flashcardId", .text).notNull()
+                t.column("confident", .boolean).notNull()
+                t.column("createdAt", .datetime).notNull()
+            }
+            try db.create(index: "idx_flashcardReviewEvent_flashcardId", on: "flashcardReviewEvent", columns: ["flashcardId"])
+        }
+
         return migrator
     }
 }

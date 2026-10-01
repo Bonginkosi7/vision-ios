@@ -34,6 +34,7 @@ struct MainBrowserView: View {
     @StateObject private var rewardStore = RewardStore()
     @StateObject private var studyDocumentStore = StudyDocumentStore()
     @StateObject private var topicStore = TopicStore()
+    @StateObject private var flashcardStore = FlashcardStore()
     @ObservedObject private var focusManager = FocusManager.shared
 
     @State private var addressText: String = ""
@@ -48,6 +49,7 @@ struct MainBrowserView: View {
     @State private var showAdvisor = false
     @State private var showRewards = false
     @State private var showMaterials = false
+    @State private var showFlashcards = false
     @State private var saveOfflineStatus: String?
 
     var body: some View {
@@ -122,6 +124,9 @@ struct MainBrowserView: View {
         }
         .sheet(isPresented: $showMaterials) {
             MaterialsView(studyDocumentStore: studyDocumentStore, topicStore: topicStore)
+        }
+        .sheet(isPresented: $showFlashcards) {
+            FlashcardsView(studyDocumentStore: studyDocumentStore, flashcardStore: flashcardStore, topicStore: topicStore)
         }
     }
 
@@ -295,6 +300,11 @@ struct MainBrowserView: View {
                 Label("My Materials", systemImage: "books.vertical")
             }
             .accessibilityIdentifier("menu_materials")
+
+            Button(action: { showFlashcards = true }) {
+                Label("Flashcards", systemImage: "rectangle.on.rectangle")
+            }
+            .accessibilityIdentifier("menu_flashcards")
 
             Button(action: { showSettings = true }) {
                 Label("Settings", systemImage: "gearshape")

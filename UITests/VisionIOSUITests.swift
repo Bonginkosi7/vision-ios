@@ -577,6 +577,72 @@ final class VisionIOSUITests: XCTestCase {
         app.navigationBars.buttons["Done"].tap()
     }
 
+    /// Real Flashcards proof: process a real seeded fixture (reusing the
+    /// same `-UITestSeedMaterial` fixture and processing flow Phase 8's
+    /// test already proved), confirm the real document picker shows it
+    /// once processed, then attempt real flashcard generation with no AI
+    /// provider configured — the same honest "Cloud AI isn't configured"
+    /// message Phase 5/8 already proved, since FlashcardGenerator routes
+    /// through the identical CloudAIProvider/StructuredAI plumbing, not a
+    /// parallel path. Confirms the real "nothing due"/"none yet" empty
+    /// states render when generation genuinely produced no cards, rather
+    /// than fabricating content.
+    func test_generatingFlashcardsFromASeededMaterial() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-UITestSeedMaterial"]
+        app.launch()
+
+        openMenu(app, item: "menu_materials")
+        let materialRow = app.staticTexts["materialTitle_ui-test-fixture"]
+        XCTAssertTrue(materialRow.waitForExistence(timeout: 5))
+
+        let processButton = app.buttons["btnProcessDocument_ui-test-fixture"]
+        XCTAssertTrue(processButton.waitForExistence(timeout: 5))
+        processButton.tap()
+
+        let materialStatus = app.staticTexts["materialStatus_ui-test-fixture"]
+        let processedExpectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label CONTAINS %@", "Processed"), object: materialStatus
+        )
+        if XCTWaiter().wait(for: [processedExpectation], timeout: 20) != .completed {
+            attachDiagnostics(app: app, name: "flashcards-material-did-not-process")
+        }
+        XCTAssertTrue(materialStatus.label.contains("Processed"))
+        app.navigationBars.buttons["Done"].tap()
+
+        openMenu(app, item: "menu_flashcards")
+
+        let generateButton = app.buttons["btnGenerateFlashcards"]
+        if !generateButton.waitForExistence(timeout: 5) {
+            attachDiagnostics(app: app, name: "flashcards-generate-button-not-found")
+        }
+        XCTAssertTrue(generateButton.exists, "expected a real Generate button once a processed document exists")
+        generateButton.tap()
+
+        let generateStatus = app.staticTexts["flashcardsGenerateStatus"]
+        let notConfiguredExpectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label CONTAINS %@", "Cloud AI isn't configured"), object: generateStatus
+        )
+        if XCTWaiter().wait(for: [notConfiguredExpectation], timeout: 10) != .completed {
+            attachDiagnostics(app: app, name: "flashcards-generate-no-honest-error")
+        }
+        XCTAssertTrue(generateStatus.label.contains("Cloud AI isn't configured"), "expected the real honest 'not configured' message, got: \(generateStatus.label)")
+
+        XCTAssertTrue(app.staticTexts["flashcardsNothingDue"].waitForExistence(timeout: 5), "no real flashcards exist yet, so nothing should be due")
+        XCTAssertTrue(app.staticTexts["flashcardsNoneYet"].waitForExistence(timeout: 5), "a failed generation should leave a genuinely empty flashcard list, not fabricated cards")
+
+        app.navigationBars.buttons["Done"].tap()
+
+        // Clean up via Materials so a later run doesn't see the fixture
+        // as already present.
+        openMenu(app, item: "menu_materials")
+        materialRow.swipeLeft()
+        let deleteButton = app.buttons["btnDeleteDocument_ui-test-fixture"]
+        XCTAssertTrue(deleteButton.waitForExistence(timeout: 5))
+        deleteButton.tap()
+        app.navigationBars.buttons["Done"].tap()
+    }
+
     // MARK: - Helpers
 
     /// Taps the real overflow ("⋮") menu button, then the named menu item
