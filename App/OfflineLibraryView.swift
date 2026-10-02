@@ -7,6 +7,12 @@ import SwiftUI
 /// the "education" category the Study Material hub's Review tab reads.
 /// Recommendations ("you might want this offline") are a disclosed
 /// scope trim for this phase — see README.
+///
+/// Also fixed here: a real, pre-existing gap versus every sibling sheet
+/// in this app — there was no "Done" button, so a user who opened this
+/// just to browse/reassign categories (not to open a file) had no way
+/// back out except tapping a row. Added the same toolbar Done every
+/// other screen already has.
 struct OfflineLibraryView: View {
     @ObservedObject var offlineStore: OfflineStore
     let onOpen: (URL) -> Void
@@ -63,6 +69,11 @@ struct OfflineLibraryView: View {
                 }
             }
             .navigationTitle("Offline Library")
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") { dismiss() }
+                }
+            }
         }
         .onAppear(perform: refresh)
     }

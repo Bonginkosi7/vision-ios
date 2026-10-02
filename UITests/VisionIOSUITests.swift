@@ -1212,7 +1212,7 @@ final class VisionIOSUITests: XCTestCase {
         let educationOption = app.buttons["Education"]
         XCTAssertTrue(educationOption.waitForExistence(timeout: 5))
         educationOption.tap()
-        app.swipeDown()
+        app.navigationBars.buttons["Done"].tap()
 
         openEducationMenu(app, item: "menu_studyMaterial")
         app.buttons["btnStudyTabReview"].tap()
