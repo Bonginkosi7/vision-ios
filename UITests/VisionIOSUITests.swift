@@ -244,7 +244,7 @@ final class VisionIOSUITests: XCTestCase {
         let app = XCUIApplication()
         app.launch()
 
-        openMenu(app, item: "menu_rewrite")
+        openEducationMenu(app, item: "menu_rewrite")
 
         let input = app.textViews["rewriteInput"]
         XCTAssertTrue(input.waitForExistence(timeout: 5))
@@ -284,7 +284,7 @@ final class VisionIOSUITests: XCTestCase {
         XCTAssertEqual(XCTWaiter().wait(for: [configuredExpectation], timeout: 5), .completed)
         app.buttons["settingsDoneButton"].tap()
 
-        openMenu(app, item: "menu_rewrite")
+        openEducationMenu(app, item: "menu_rewrite")
         let input = app.textViews["rewriteInput"]
         XCTAssertTrue(input.waitForExistence(timeout: 5))
         input.tap()
@@ -525,7 +525,7 @@ final class VisionIOSUITests: XCTestCase {
         app.launchArguments = ["-UITestSeedMaterial"]
         app.launch()
 
-        openMenu(app, item: "menu_materials")
+        openEducationMenu(app, item: "menu_materials")
 
         // A first real CI run found this row's container VStack carrying
         // its own .accessibilityIdentifier doesn't just leak onto plain
@@ -592,7 +592,7 @@ final class VisionIOSUITests: XCTestCase {
         app.launchArguments = ["-UITestSeedMaterial"]
         app.launch()
 
-        openMenu(app, item: "menu_materials")
+        openEducationMenu(app, item: "menu_materials")
         let materialRow = app.staticTexts["materialTitle_ui-test-fixture"]
         XCTAssertTrue(materialRow.waitForExistence(timeout: 5))
 
@@ -610,7 +610,7 @@ final class VisionIOSUITests: XCTestCase {
         XCTAssertTrue(materialStatus.label.contains("Processed"))
         app.navigationBars.buttons["Done"].tap()
 
-        openMenu(app, item: "menu_flashcards")
+        openEducationMenu(app, item: "menu_flashcards")
 
         let generateButton = app.buttons["btnGenerateFlashcards"]
         if !generateButton.waitForExistence(timeout: 5) {
@@ -635,7 +635,7 @@ final class VisionIOSUITests: XCTestCase {
 
         // Clean up via Materials so a later run doesn't see the fixture
         // as already present.
-        openMenu(app, item: "menu_materials")
+        openEducationMenu(app, item: "menu_materials")
         materialRow.swipeLeft()
         let deleteButton = app.buttons["btnDeleteDocument_ui-test-fixture"]
         XCTAssertTrue(deleteButton.waitForExistence(timeout: 5))
@@ -661,7 +661,7 @@ final class VisionIOSUITests: XCTestCase {
         app.launchArguments = ["-UITestSeedMaterial"]
         app.launch()
 
-        openMenu(app, item: "menu_materials")
+        openEducationMenu(app, item: "menu_materials")
         let materialRow = app.staticTexts["materialTitle_ui-test-fixture"]
         XCTAssertTrue(materialRow.waitForExistence(timeout: 5))
         let processButton = app.buttons["btnProcessDocument_ui-test-fixture"]
@@ -677,7 +677,7 @@ final class VisionIOSUITests: XCTestCase {
         XCTAssertTrue(materialStatus.label.contains("Processed"))
         app.navigationBars.buttons["Done"].tap()
 
-        openMenu(app, item: "menu_exams")
+        openEducationMenu(app, item: "menu_exams")
 
         // --- Half 1: hand-authored exam, taken and marked with no AI. ---
         let createButton = app.buttons["btnCreateExam"]
@@ -744,7 +744,7 @@ final class VisionIOSUITests: XCTestCase {
 
         // Clean up via Materials so a later run doesn't see the fixture as
         // already present.
-        openMenu(app, item: "menu_materials")
+        openEducationMenu(app, item: "menu_materials")
         materialRow.swipeLeft()
         let deleteMaterialButton = app.buttons["btnDeleteDocument_ui-test-fixture"]
         XCTAssertTrue(deleteMaterialButton.waitForExistence(timeout: 5))
@@ -771,7 +771,7 @@ final class VisionIOSUITests: XCTestCase {
         let app = XCUIApplication()
         app.launch()
 
-        openMenu(app, item: "menu_tutor")
+        openEducationMenu(app, item: "menu_tutor")
 
         let askInput = app.textFields["tutorAskInput"]
         XCTAssertTrue(askInput.waitForExistence(timeout: 5))
@@ -819,7 +819,7 @@ final class VisionIOSUITests: XCTestCase {
         app.launchArguments = ["-UITestSeedMaterial"]
         app.launch()
 
-        openMenu(app, item: "menu_materials")
+        openEducationMenu(app, item: "menu_materials")
         let materialRow = app.staticTexts["materialTitle_ui-test-fixture"]
         XCTAssertTrue(materialRow.waitForExistence(timeout: 5))
         let processButton = app.buttons["btnProcessDocument_ui-test-fixture"]
@@ -835,7 +835,7 @@ final class VisionIOSUITests: XCTestCase {
         XCTAssertTrue(materialStatus.label.contains("Processed"))
         app.navigationBars.buttons["Done"].tap()
 
-        openMenu(app, item: "menu_performance")
+        openEducationMenu(app, item: "menu_performance")
 
         XCTAssertTrue(app.staticTexts["performanceEmptyTopics"].waitForExistence(timeout: 5), "no real topic has ever been AI-extracted in this environment, so there must be nothing to show")
         XCTAssertTrue(app.staticTexts["performanceEmptyStrong"].waitForExistence(timeout: 5))
@@ -852,7 +852,7 @@ final class VisionIOSUITests: XCTestCase {
 
         // Clean up via Materials so a later run doesn't see the fixture as
         // already present.
-        openMenu(app, item: "menu_materials")
+        openEducationMenu(app, item: "menu_materials")
         materialRow.swipeLeft()
         let deleteMaterialButton = app.buttons["btnDeleteDocument_ui-test-fixture"]
         XCTAssertTrue(deleteMaterialButton.waitForExistence(timeout: 5))
@@ -873,7 +873,7 @@ final class VisionIOSUITests: XCTestCase {
         app.launchArguments = ["-UITestSeedMaterial"]
         app.launch()
 
-        openMenu(app, item: "menu_materials")
+        openEducationMenu(app, item: "menu_materials")
         let materialRow = app.staticTexts["materialTitle_ui-test-fixture"]
         XCTAssertTrue(materialRow.waitForExistence(timeout: 5))
         let processButton = app.buttons["btnProcessDocument_ui-test-fixture"]
@@ -889,7 +889,7 @@ final class VisionIOSUITests: XCTestCase {
         XCTAssertTrue(materialStatus.label.contains("Processed"))
         app.navigationBars.buttons["Done"].tap()
 
-        openMenu(app, item: "menu_studyPlan")
+        openEducationMenu(app, item: "menu_studyPlan")
 
         app.buttons["btnGenerateStudyPlan"].tap()
         XCTAssertTrue(app.staticTexts["studyPlanEmpty"].waitForExistence(timeout: 5), "no real topic has ever been AI-extracted in this environment, so there's nothing real to schedule")
@@ -917,7 +917,7 @@ final class VisionIOSUITests: XCTestCase {
 
         // Clean up via Materials so a later run doesn't see the fixture as
         // already present.
-        openMenu(app, item: "menu_materials")
+        openEducationMenu(app, item: "menu_materials")
         materialRow.swipeLeft()
         let deleteMaterialButton = app.buttons["btnDeleteDocument_ui-test-fixture"]
         XCTAssertTrue(deleteMaterialButton.waitForExistence(timeout: 5))
@@ -935,7 +935,7 @@ final class VisionIOSUITests: XCTestCase {
         app.launchArguments = ["-UITestSeedMaterial"]
         app.launch()
 
-        openMenu(app, item: "menu_materials")
+        openEducationMenu(app, item: "menu_materials")
         let materialRow = app.staticTexts["materialTitle_ui-test-fixture"]
         XCTAssertTrue(materialRow.waitForExistence(timeout: 5))
         let processButton = app.buttons["btnProcessDocument_ui-test-fixture"]
@@ -951,7 +951,7 @@ final class VisionIOSUITests: XCTestCase {
         XCTAssertTrue(materialStatus.label.contains("Processed"))
         app.navigationBars.buttons["Done"].tap()
 
-        openMenu(app, item: "menu_paperReview")
+        openEducationMenu(app, item: "menu_paperReview")
 
         let reviewButton = app.buttons["btnReviewDocument"]
         XCTAssertTrue(reviewButton.waitForExistence(timeout: 5), "expected a real Review button once a processed document exists")
@@ -970,7 +970,7 @@ final class VisionIOSUITests: XCTestCase {
 
         // Clean up via Materials so a later run doesn't see the fixture as
         // already present.
-        openMenu(app, item: "menu_materials")
+        openEducationMenu(app, item: "menu_materials")
         materialRow.swipeLeft()
         let deleteMaterialButton = app.buttons["btnDeleteDocument_ui-test-fixture"]
         XCTAssertTrue(deleteMaterialButton.waitForExistence(timeout: 5))
@@ -1093,6 +1093,26 @@ final class VisionIOSUITests: XCTestCase {
 
         let menuItem = app.buttons[identifier]
         XCTAssertTrue(menuItem.waitForExistence(timeout: 5), "expected menu item '\(identifier)' to exist in the overflow menu")
+        menuItem.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+    }
+
+    /// Same as `openMenu`, but for the real nested "Education" submenu
+    /// (My Materials/Flashcards/Exams/AI Tutor/Performance/My Week/
+    /// Rewrite Writer/Paper Review) — matches Android's own real
+    /// `showOverflowMenu()` accordion group, added once the top-level
+    /// popup grew too large to stay flat (see `MainBrowserView`'s own
+    /// doc comment on `overflowMenu`).
+    private func openEducationMenu(_ app: XCUIApplication, item identifier: String) {
+        let menuButton = app.buttons["moreMenuButton"]
+        XCTAssertTrue(menuButton.waitForExistence(timeout: 5))
+        menuButton.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+
+        let educationItem = app.buttons["menu_education"]
+        XCTAssertTrue(educationItem.waitForExistence(timeout: 5), "expected the real Education submenu to exist in the overflow menu")
+        educationItem.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+
+        let menuItem = app.buttons[identifier]
+        XCTAssertTrue(menuItem.waitForExistence(timeout: 5), "expected menu item '\(identifier)' to exist in the Education submenu")
         menuItem.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
     }
 

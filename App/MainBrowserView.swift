@@ -273,12 +273,17 @@ struct MainBrowserView: View {
 
     /// Direct equivalent of MainActivity.kt's showOverflowMenu() — every
     /// action beyond back/forward/bookmark lives here, in the real,
-    /// user-specified order Android's own popup uses (New Tab/Private
-    /// Browsing/Downloads/History/Focus Mode/Rewards/Offline Library/
-    /// Tasks/Save Offline/Advisor, then Settings), minus the entries for
-    /// features not built on iOS yet (Bookmarks shortcut, VisionReady,
-    /// Redeem, Chat, Help, the Education/Settings sub-groups) — those
-    /// appear here once their own phases land, not before.
+    /// user-specified order Android's own popup uses. The education
+    /// screens are nested under a real "Education" submenu, matching
+    /// Android's own real restructuring: MainActivity.kt's own doc
+    /// comment on `showOverflowMenu()` confirms a single flat popup this
+    /// size became genuinely unmanageable for Android too (its original
+    /// PopupMenu silently drops nested submenus, so Android built a
+    /// custom PopupWindow accordion instead — SwiftUI's `Menu` supports
+    /// real nesting natively, so this is a direct equivalent, not a
+    /// workaround). Minus the entries for features not built on iOS yet
+    /// (Bookmarks shortcut, VisionReady, Redeem, the Study Material hub,
+    /// Autofill) — those appear here once their own phases land.
     @ViewBuilder
     private var overflowMenu: some View {
         Menu {
@@ -333,11 +338,33 @@ struct MainBrowserView: View {
             }
             .accessibilityIdentifier("menu_advisor")
 
-            Button(action: { showRewrite = true }) {
-                Label("Rewrite Writer", systemImage: "pencil.and.outline")
+            Button(action: { showAskVision = true }) {
+                Label("Ask VISION", systemImage: "bubble.left.and.text.bubble.right")
             }
-            .accessibilityIdentifier("menu_rewrite")
+            .accessibilityIdentifier("menu_askVision")
 
+            educationMenu
+
+            Button(action: { showSettings = true }) {
+                Label("Settings", systemImage: "gearshape")
+            }
+            .accessibilityIdentifier("menu_settings")
+
+            Button(action: { showHelp = true }) {
+                Label("Help", systemImage: "questionmark.circle")
+            }
+            .accessibilityIdentifier("menu_help")
+        } label: {
+            Image(systemName: "ellipsis.circle")
+        }
+        .accessibilityIdentifier("moreMenuButton")
+    }
+
+    /// Real nested submenu — Android's own "Education" accordion group
+    /// (see `overflowMenu`'s own doc comment for why).
+    @ViewBuilder
+    private var educationMenu: some View {
+        Menu {
             Button(action: { showMaterials = true }) {
                 Label("My Materials", systemImage: "books.vertical")
             }
@@ -368,29 +395,19 @@ struct MainBrowserView: View {
             }
             .accessibilityIdentifier("menu_studyPlan")
 
+            Button(action: { showRewrite = true }) {
+                Label("Rewrite Writer", systemImage: "pencil.and.outline")
+            }
+            .accessibilityIdentifier("menu_rewrite")
+
             Button(action: { showPaperReview = true }) {
                 Label("Paper Review", systemImage: "doc.text.magnifyingglass")
             }
             .accessibilityIdentifier("menu_paperReview")
-
-            Button(action: { showAskVision = true }) {
-                Label("Ask VISION", systemImage: "bubble.left.and.text.bubble.right")
-            }
-            .accessibilityIdentifier("menu_askVision")
-
-            Button(action: { showSettings = true }) {
-                Label("Settings", systemImage: "gearshape")
-            }
-            .accessibilityIdentifier("menu_settings")
-
-            Button(action: { showHelp = true }) {
-                Label("Help", systemImage: "questionmark.circle")
-            }
-            .accessibilityIdentifier("menu_help")
         } label: {
-            Image(systemName: "ellipsis.circle")
+            Label("Education", systemImage: "graduationcap")
         }
-        .accessibilityIdentifier("moreMenuButton")
+        .accessibilityIdentifier("menu_education")
     }
 
     @ViewBuilder
