@@ -1079,19 +1079,42 @@ final class VisionIOSUITests: XCTestCase {
     /// itself wrong: `isHittable` can throw "Activation point invalid" on
     /// a perfectly reachable item (confirmed by a different, previously
     /// rock-solid test failing on it in CI), making the helper *less*
-    /// reliable than the plain coordinate tap it replaced. The real
-    /// Tutor-screen bug turned out to be unrelated to this helper
-    /// entirely — a suggestion-chip tap being silently swallowed by its
-    /// own enclosing `ScrollView` — so this stays the plain
-    /// wait-then-coordinate-tap it always was.
+    /// reliable than the plain coordinate tap it replaced.
+    ///
+    /// The real root cause, confirmed twice now via this project's own
+    /// `.xcresult` forensics on two *different* menu items in two
+    /// different CI runs: a coordinate tap on a menu item can
+    /// intermittently fail to register at all — the OS reports the tap
+    /// as having completed with no error, but the SwiftUI `Menu` never
+    /// actually dismisses and the item's own action never fires, leaving
+    /// the app sitting on the base screen. Not tied to any one item, its
+    /// position, or a `ScrollView` — a genuine, if rare, flake in the
+    /// tap itself. The fix is to verify and retry: a real tap on a menu
+    /// item always dismisses the whole popover, so if `menuItem` is still
+    /// around shortly after tapping it, the tap didn't register — tap it
+    /// again (re-querying fresh each time, since a missed tap can leave
+    /// the old reference stale) rather than failing outright.
     private func openMenu(_ app: XCUIApplication, item identifier: String) {
         let menuButton = app.buttons["moreMenuButton"]
         XCTAssertTrue(menuButton.waitForExistence(timeout: 5))
         menuButton.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
 
-        let menuItem = app.buttons[identifier]
-        XCTAssertTrue(menuItem.waitForExistence(timeout: 5), "expected menu item '\(identifier)' to exist in the overflow menu")
-        menuItem.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        for attempt in 1...3 {
+            let menuItem = app.buttons[identifier]
+            guard menuItem.waitForExistence(timeout: 5) else {
+                if attempt == 1 {
+                    XCTFail("expected menu item '\(identifier)' to exist in the overflow menu")
+                }
+                return
+            }
+            menuItem.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+
+            let dismissedExpectation = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: menuItem)
+            if XCTWaiter().wait(for: [dismissedExpectation], timeout: 2) == .completed {
+                return
+            }
+        }
+        XCTFail("menu item '\(identifier)' tap did not register after 3 attempts")
     }
 
     /// Types into the address bar and submits it. A first CI run revealed a
