@@ -256,16 +256,23 @@ struct StudyMaterialView: View {
         }
         let untaggedCount = allDocs.filter { $0.level == nil }.count
         if untaggedCount > 0 {
+            // Deliberately NO .accessibilityIdentifier on the whole card:
+            // a real captured .xcresult dump (Phase 8's own established
+            // forensics technique) already proved once this session that
+            // an identifier on a container wrapping multiple children
+            // doesn't just leak onto plain Text leaves — it can overwrite
+            // a child Button's own explicit identifier too. Each real
+            // element below carries its own distinct identifier instead.
             DesignSystem.card {
                 Text("\(untaggedCount) item\(untaggedCount == 1 ? "" : "s") need\(untaggedCount == 1 ? "s" : "") details")
                     .font(.system(size: 14, weight: .bold)).foregroundStyle(.white)
+                    .accessibilityIdentifier("studyUntaggedBanner")
                 Text("Add a level, subject, and more so these show up in the right place.")
                     .font(.system(size: 12)).foregroundStyle(DesignSystem.textMuted2)
                 Button("Review") { navigate(.untagged) }
                     .padding(.top, 8)
                     .accessibilityIdentifier("btnStudyReviewUntagged")
             }
-            .accessibilityIdentifier("studyUntaggedBanner")
         }
     }
 
@@ -328,17 +335,20 @@ struct StudyMaterialView: View {
         if untagged.isEmpty {
             Text("Nothing untagged right now.").font(.system(size: 13)).foregroundStyle(DesignSystem.textMuted2).accessibilityIdentifier("studyNothingUntagged")
         } else {
+            // Deliberately NO .accessibilityIdentifier on the whole HStack
+            // row — see homeSection's own comment on this same real
+            // container-identifier-clobbers-a-child-Button quirk.
             ForEach(untagged) { doc in
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(doc.title).font(.system(size: 14, weight: .bold)).foregroundStyle(.white)
+                            .accessibilityIdentifier("studyUntaggedRow_\(doc.id)")
                         Text(doc.fileType.label).font(.system(size: 12)).foregroundStyle(DesignSystem.textMuted2)
                     }
                     Spacer()
                     Button("Add details") { taggingDoc = doc }.accessibilityIdentifier("btnStudyAddDetails_\(doc.id)")
                 }
                 .padding(.vertical, 6)
-                .accessibilityIdentifier("studyUntaggedRow_\(doc.id)")
             }
         }
     }
