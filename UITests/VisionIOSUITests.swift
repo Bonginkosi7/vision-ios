@@ -128,7 +128,7 @@ final class VisionIOSUITests: XCTestCase {
         navigate(app: app, addressField: addressField, to: "example.com")
         assertAddressBarEventuallyShows(addressField, "https://example.com/", in: self)
 
-        openMenu(app, item: "menu_saveOffline", expectsSheet: false)
+        openMenu(app, item: "menu_saveOffline")
 
         let okButton = app.alerts["Save for Offline"].buttons["OK"]
         XCTAssertTrue(okButton.waitForExistence(timeout: 10), "expected a real save-confirmation alert")
@@ -155,7 +155,7 @@ final class VisionIOSUITests: XCTestCase {
         let app = XCUIApplication()
         app.launch()
 
-        openMenu(app, item: "menu_newPrivateTab", expectsSheet: false)
+        openMenu(app, item: "menu_newPrivateTab")
         XCTAssertTrue(app.staticTexts["privateIndicator"].waitForExistence(timeout: 5), "a new private tab should show the real Private indicator")
 
         let addressField = app.textFields["addressBarField"]
@@ -460,7 +460,7 @@ final class VisionIOSUITests: XCTestCase {
         navigate(app: app, addressField: addressField, to: "example.com")
         assertAddressBarEventuallyShows(addressField, "https://example.com/", in: self)
 
-        openMenu(app, item: "menu_saveOffline", expectsSheet: false)
+        openMenu(app, item: "menu_saveOffline")
 
         let okButton = app.alerts["Save for Offline"].buttons["OK"]
         XCTAssertTrue(okButton.waitForExistence(timeout: 10))
@@ -1071,71 +1071,29 @@ final class VisionIOSUITests: XCTestCase {
     /// skips that failing step entirely; applied to the menu item too
     /// since it's built the same way.
     ///
-    /// A later, genuinely confusing CI failure here (the captured post-tap
-    /// hierarchy showed the base New Tab page, not the sheet the tapped
-    /// item should have opened) was misdiagnosed once as "the menu has
-    /// outgrown one screen's height" and this helper grew an `isHittable`
-    /// wait plus a bounded swipe-up loop to compensate. That fix was
-    /// itself wrong: `isHittable` can throw "Activation point invalid" on
-    /// a perfectly reachable item (confirmed by a different, previously
-    /// rock-solid test failing on it in CI), making the helper *less*
-    /// reliable than the plain coordinate tap it replaced.
-    ///
-    /// The real root cause, confirmed via this project's own `.xcresult`
-    /// forensics across *three* different CI runs and different menu
-    /// items each time: a coordinate tap on a menu item can
-    /// intermittently fail to register at all — the OS reports the tap
-    /// as having completed with no error, but the tapped button's own
-    /// action never fires, leaving the app sitting on the base screen.
-    /// Not tied to any one item, its position, or a `ScrollView` — a
-    /// genuine, if rare, flake in the tap itself. A first fix attempt
-    /// checked whether the *tapped item* had disappeared (reasoning that
-    /// a real tap always dismisses the popover) — wrong: a real captured
-    /// failure showed the popover dismissing, satisfying that check,
-    /// while the actual destination never opened, because the tap landed
-    /// in the popover's own dismiss-on-tap-outside scrim rather than on
-    /// the button itself.
-    ///
-    /// The reliable signal instead: every menu item except
-    /// "menu_newPrivateTab" (creates a tab in place, no modal) and
-    /// "menu_saveOffline" (a real `.alert`, not a `.sheet`) opens one of
-    /// MainBrowserView's own `.sheet(isPresented:)` screens, which cover
-    /// the *whole root view* — including `moreMenuButton` itself.
-    /// `moreMenuButton` becoming inaccessible only happens once a real
-    /// full-screen sheet is genuinely covering the root view, so that's
-    /// what's checked here, retrying the whole open-then-tap sequence
-    /// from the top (re-querying everything fresh, since a missed tap
-    /// can leave old references stale) when it doesn't. Pass
-    /// `expectsSheet: false` for the two call sites with no sheet to
-    /// check for.
-    private func openMenu(_ app: XCUIApplication, item identifier: String, expectsSheet: Bool = true) {
-        for attempt in 1...3 {
-            let menuButton = app.buttons["moreMenuButton"]
-            guard menuButton.waitForExistence(timeout: 5) else {
-                XCTFail("expected the real overflow menu button to exist")
-                return
-            }
-            menuButton.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+    /// Three later attempts to "fix" an occasional CI failure here
+    /// (`isHittable` + swipe-up; retry-if-item-still-exists; retry-if-
+    /// moreMenuButton-still-exists) each made things *worse* — one run
+    /// threw a new error class, another left a real downstream failure
+    /// uncaught, and the last one failed almost the entire suite outright
+    /// on a run that completed suspiciously fast, pointing to a real bug
+    /// in the "fix" rather than runner slowness. None of those were
+    /// reverted for lack of a theory — each was reverted because the
+    /// next real CI run disproved it. This is back to exactly the plain,
+    /// single-attempt version that was reliable across Phases 1–10: the
+    /// rare genuine failures it still has are the same class of
+    /// isolated, non-reproducing CI-runner-slowness flake this project
+    /// has hit many times on completely unrelated tests, always
+    /// resolved by a plain re-run with no code change — not something
+    /// this helper should try to paper over with more logic.
+    private func openMenu(_ app: XCUIApplication, item identifier: String) {
+        let menuButton = app.buttons["moreMenuButton"]
+        XCTAssertTrue(menuButton.waitForExistence(timeout: 5))
+        menuButton.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
 
-            let menuItem = app.buttons[identifier]
-            guard menuItem.waitForExistence(timeout: 5) else {
-                XCTFail("expected menu item '\(identifier)' to exist in the overflow menu")
-                return
-            }
-            menuItem.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
-
-            guard expectsSheet else { return }
-
-            let coveredExpectation = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: menuButton)
-            if XCTWaiter().wait(for: [coveredExpectation], timeout: 2) == .completed {
-                return
-            }
-            // Tap didn't register — a real, intermittent flake confirmed
-            // via this project's own `.xcresult` forensics across two
-            // different CI runs and two different menu items. Retry the
-            // whole sequence from the top rather than failing outright.
-        }
-        XCTFail("menu item '\(identifier)' tap did not register after 3 attempts")
+        let menuItem = app.buttons[identifier]
+        XCTAssertTrue(menuItem.waitForExistence(timeout: 5), "expected menu item '\(identifier)' to exist in the overflow menu")
+        menuItem.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
     }
 
     /// Types into the address bar and submits it. A first CI run revealed a
