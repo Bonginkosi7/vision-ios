@@ -1099,7 +1099,10 @@ final class VisionIOSUITests: XCTestCase {
         app.buttons["btnManageOfflineContent"].tap()
         let savedRowText = app.staticTexts.matching(NSPredicate(format: "label == %@", "Example Domain")).firstMatch
         XCTAssertTrue(savedRowText.waitForExistence(timeout: 5), "our real saved page (example.org, same placeholder title as example.com/.net) should show up in the real Offline Library opened from here")
-        app.navigationBars.buttons["Done"].tap()
+        // OfflineLibraryView has no "Done" button of its own — the real,
+        // only way it dismisses is by tapping a row to reopen it (same
+        // path test_offlineSaveAndReopen exercises).
+        savedRowText.tap()
 
         app.navigationBars.buttons["Done"].tap()
     }
