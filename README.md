@@ -18,6 +18,33 @@ macOS runners, triggered on every push to `main`). The acceptance bar for
 every phase is the same: not "it compiles," but launched, driven in a real
 booted Simulator, and behaviorally confirmed by `UITests/VisionIOSUITests.swift`.
 
+**Phase 18** (Study Material hub) is done — the biggest single phase
+this project has shipped, and its own real bug hunt spanned five
+pushes across several genuinely different kinds of failure. Run
+[`37014842971`](https://github.com/Bonginkosi7/vision-ios/actions/runs/37014842971)
+failed on the exact container-identifier-clobbers-a-child-Button quirk
+this README already documented from Phase 8 and Phase 17 — a THIRD
+real hit of the same class, this time `.accessibilityIdentifier("studyUntaggedBanner")`
+on a `DesignSystem.card` overwriting its own "Review" `Button`'s
+identifier. Fixed by moving it to the one `Text` actually asserted on,
+and auditing (and proactively fixing a second, not-yet-triggered
+instance in the Untagged row) every other identifier in the new file.
+The next run,
+[`37035641052`](https://github.com/Bonginkosi7/vision-ios/actions/runs/37035641052),
+failed identically on two separate real attempts — not a flake, since
+the exact same assertion ("expected the real Education submenu to
+exist") kept failing right after the new Review-tab test's
+`app.swipeDown()` — plus one pure GitHub Actions infrastructure failure
+("runner lost communication with the server") in between, unrelated to
+the code. The real root cause: `OfflineLibraryView` had no "Done"
+button at all, unlike every other sheet in this app — `swipeDown()`
+was never a proven dismissal technique in this suite, and the real fix
+was adding the same real `Done` button every sibling screen already
+has, then using it instead of a gesture. Run
+[`37055528045`](https://github.com/Bonginkosi7/vision-ios/actions/runs/37055528045)
+then passed fully green: all 27 UI tests, all 154 VisionCore unit
+tests.
+
 **Phase 17** (VISION Ready) is done — a genuinely multi-push real bug
 hunt, every failure a different kind. Run
 [`36994419107`](https://github.com/Bonginkosi7/vision-ios/actions/runs/36994419107)
@@ -219,6 +246,70 @@ tests), no fix-and-repush cycle needed that time — applying Phase 1's own
 lessons (real `@ObservedObject` reactivity, real keyboard taps, `List`-based
 rows instead of a merge-prone VStack-of-Buttons) preemptively instead of
 rediscovering them.
+
+## Phase 18: Study Material hub
+
+A port of `StudyMaterialActivity.kt`/`StudyTaxonomy.kt`/
+`StudyReviewDbHelper.kt` — a real taxonomy browser (Home → Grades/
+Categories → Subjects/Resources, with breadcrumb back-navigation,
+search, and a filter panel), tagging for the user's own uploaded
+documents, and a folded-in spaced-repetition Review tab over offline-
+saved "education"-category pages.
+
+- **`Sources/VisionCore/StudyTaxonomy.swift`** (pure): the real level/
+  grade/subject/resource-type/language option lists — direct port of
+  the CAPS-curriculum data in `StudyTaxonomy.kt`, never fabricated
+  textbook content, just real public category *names* the user assigns
+  to their own files.
+- **`Sources/VisionCore/StudyDocumentMatching.swift`** (pure): unifies
+  Android's two real filter call sites — `docsFor`'s in-memory browse
+  filtering and `search`'s SQL `WHERE` clause — into one matcher, since
+  iOS loads every document into memory either way.
+- **`Sources/VisionCore/StudyReviewLogic.swift`** (pure): the real
+  Leitner-tier due/not-due/streak math, `now`/`calendar` injectable for
+  testability, same pattern `MasteryEngine` established. 44 standalone-
+  harness checks during development + 23 real `XCTest` cases across
+  `StudyTaxonomyTests`/`StudyDocumentMatchingTests`/`StudyReviewLogicTests`.
+- **`App/AppDatabase.swift`**: `v11_phase18` adds the real taxonomy/
+  `offlineReadyAt` columns to `studyDocument` — closing the exact gap
+  the Phase 5 migration's own comment named as deferred — plus the two
+  `studyReview` tables.
+- **`App/StudyReviewStore.swift`** (new): GRDB I/O wrapping the pure
+  `StudyReviewLogic`.
+- **`App/StudyMaterialView.swift`** (new): the real screen — Browse and
+  Review tabs, a real tag-assignment sheet (level drives grade+subject
+  or category), and `ShareLink` for "Open" (see below).
+
+**Disclosed, deliberate difference from Android.** Android folds "View"
+and "Download" into one `FileProvider` + `ACTION_VIEW` intent. iOS's
+real equivalent of "hand this file to another app" is a share sheet —
+"Open" here presents a `ShareLink` instead, same real app-interop
+philosophy, different OS-native mechanism.
+
+**Also closes a real, pre-existing gap versus Android**, found while
+scoping the Review tab: `OfflineLibraryView` had no way to ever set a
+non-"general" category, so Review could never have had anything real
+to show. Added the real per-item category reassignment menu Android's
+own `OfflineAdapter.kt` already has, plus (found during this phase's
+own bug hunt, see "Real, current status") the `Done` button
+`OfflineLibraryView` had been missing entirely.
+
+### Phase 18 UI tests
+
+`test_studyMaterialTagsAUntaggedDocumentAndTheRealTaxonomyRoundTrips` —
+uses My Materials' own `-UITestSeedMaterial` fixture (it starts
+genuinely untagged), tags it with a real level/grade/subject/year/
+language, and confirms the exact same real taxonomy routes back through
+Home → Basic Education → Grade 7–9 → Physical Sciences, then confirms
+"Mark offline" flips to "Offline ready".
+
+`test_studyMaterialReviewTabTracksARealOfflineSavedEducationPage` —
+saves a real page (`example.net`, untouched by any other test in this
+suite), reassigns its category to "Education" from the Offline
+Library, confirms a real due entry appears in Review, and that "Got it"
+advances the real schedule into a genuine caught-up state with a real
+1-day streak — straight from `StudyReviewLogic`'s tier math, never a
+fabricated schedule.
 
 ## Phase 17: VISION Ready
 
@@ -1252,8 +1343,9 @@ comment.
 - `WebViewRepresentable.swift` — `UIViewRepresentable` wrapping one `WKWebView` per tab; real history recording + real `WKDownloadDelegate` handling
 - `BrowserTab.swift` — mirrors `Tab.kt` (id, title, url, isNewTab, isPrivate)
 - `TabManager.swift` — mirrors `MainActivity.kt`'s `tabs`/`activeTabIndex` + create/switch/close/navigate/openOfflineFile, delegates close-index math to `VisionCore.TabIndexing`
-- `AppDatabase.swift` — GRDB `DatabaseQueue` + migrator (`v1_bookmarks`, `v2_phase2`, `v3_phase6`, `v4_phase7`, `v5_phase8`, `v6_phase9`, `v7_phase10`, `v8_phase11`, `v9_phase13`, `v10_phase16`) — no new migration for Phase 17 (VISION Ready is a pure read-aggregate over existing `bookmark`/`offlineItem` rows, same reasoning as Phase 12's Performance)
-- `BookmarkStore.swift` / `HistoryStore.swift` / `DownloadStore.swift` / `OfflineStore.swift` — GRDB ports of the matching `*DbHelper.kt`
+- `AppDatabase.swift` — GRDB `DatabaseQueue` + migrator (`v1_bookmarks`, `v2_phase2`, `v3_phase6`, `v4_phase7`, `v5_phase8`, `v6_phase9`, `v7_phase10`, `v8_phase11`, `v9_phase13`, `v10_phase16`, `v11_phase18`) — no new migration for Phase 17 (VISION Ready is a pure read-aggregate over existing `bookmark`/`offlineItem` rows, same reasoning as Phase 12's Performance)
+- `BookmarkStore.swift` / `HistoryStore.swift` / `DownloadStore.swift` / `OfflineStore.swift` — GRDB ports of the matching `*DbHelper.kt`; `OfflineStore` also has the real per-item category reassignment (Phase 18)
+- `StudyReviewStore.swift` — GRDB I/O wrapping the pure `VisionCore.StudyReviewLogic`, port of `StudyReviewDbHelper.kt`
 - `OfflineSaver.swift` — real `createWebArchiveData` capture + file write
 - `KeychainStore.swift` / `AiSettings.swift` — real Keychain-backed AI key storage, port of `AiSettings.kt`
 - `AppSettings.swift` — `UserDefaults`/`@AppStorage`-backed theme + search engine (Phase 3) + offline storage limit (Phase 17), port of `VisionSettings.kt`'s matching slice
@@ -1267,7 +1359,7 @@ comment.
 - `RewardStore.swift` / `RewardEngine.swift` — real GRDB points ledger + the eligibility-checked award gate, port of `RewardDbHelper.kt`/`RewardEngine.kt`
 - `DocumentExtractors.swift` — real PDFKit/ZIPFoundation+XMLParser/plain-text extraction, port of `PdfExtractor.kt`/`DocxExtractor.kt`/`TxtExtractor.kt`
 - `DocumentImport.swift` — real file copy + per-stage honest processing failure, port of `DocumentImport.kt`
-- `StudyDocumentStore.swift` / `TopicStore.swift` — GRDB ports of the `MaterialsActivity.kt`-used slice of `StudyDocumentDbHelper.kt` / `TopicDbHelper.kt`
+- `StudyDocumentStore.swift` / `TopicStore.swift` — GRDB ports of `StudyDocumentDbHelper.kt` / `TopicDbHelper.kt`; `StudyDocumentStore` carries the full real taxonomy/offlineReadyAt columns as of Phase 18, not just the `MaterialsActivity.kt` slice
 - `StructuredAI.swift` / `TopicExtractor.swift` — the real AI call orchestration, port of `StructuredAi.kt` + the networking half of `TopicExtractionLogic.kt`
 - `FlashcardStore.swift` / `FlashcardGenerator.swift` — real card storage, due-queue sorting (never-reviewed first, then shortest-interval first), and `markReviewed`'s real schedule update, plus the real AI call orchestration reusing the exact `StructuredAI`/`CloudAIProvider` plumbing `TopicExtractor` already proved reaches the real Anthropic/OpenAI APIs
 - `ExamStore.swift` / `ExamGenerator.swift` / `ShortAnswerMarker.swift` — real test/question/attempt/answer GRDB storage, instant local MCQ/true-false marking, and the real AI orchestration for AI-generated tests and batched short-answer marking, reusing the same `StructuredAI`/`CloudAIProvider` plumbing
@@ -1278,6 +1370,7 @@ comment.
 - `HelpContent.swift` — real, static in-app documentation data
 - `ChatSessionStore.swift` / `ChatAI.swift` — real multi-session GRDB storage and the real free-text AI call loop behind Ask VISION chat
 - `VisionReadyView.swift` — real Offline Readiness card (reads `VisionCore.ReadinessLogic` over `BookmarkStore`/`OfflineStore`) plus honest disabled states for Keeping Pages Up to Date/Sports/Maps, port of `VisionReadyActivity.kt`
+- `StudyMaterialView.swift` — the real taxonomy browser/tagging/Review screen, port of `StudyMaterialActivity.kt`
 - `NewTabView.swift` / `HistoryView.swift` / `DownloadsView.swift` / `OfflineLibraryView.swift` / `SettingsView.swift` / `RewriteView.swift` / `FocusView.swift` / `TasksView.swift` / `AdvisorView.swift` / `RewardsView.swift` / `MaterialsView.swift` / `FlashcardsView.swift` / `ExamsView.swift` / `CreateExamView.swift` / `GenerateExamView.swift` / `TakeExamView.swift` / `TutorView.swift` / `PerformanceView.swift` / `StudyPlanView.swift` / `PaperReviewView.swift` / `HelpView.swift` / `AskVisionView.swift` — real list/empty-state/settings/rewrite/focus/tasks/advisor/rewards/materials/flashcards/exams/tutor/performance/study-plan/paper-review/help/ask-vision screens
 - `DesignSystem.swift` — same component list and color tokens as `DesignSystem.kt`, ported to `@ViewBuilder` functions; drawable XML collapses into inline SwiftUI modifiers (disclosed simplification, noted in-file)
 
@@ -1291,13 +1384,10 @@ every run.
 ## Explicitly NOT built yet (disclosed scope trims, not oversights)
 
 Profile/credentials/offline-AI-model/memory settings, on-device local
-model fallback, Android's separate "Study Material hub" (taxonomy
-tagging, browse/search, offline-ready marking, folded-in spaced-
-repetition review — a distinct, bigger feature than My Materials, left
-for its own later phase), and Redeem. Redeem specifically needs real
-Firebase project credentials and anonymous-auth infrastructure this
-repo doesn't have — see Phase 7's own writeup for why that's a
-disclosed trim rather than fabricated.
+model fallback, and Redeem. Redeem specifically needs real Firebase
+project credentials and anonymous-auth infrastructure this repo
+doesn't have — see Phase 7's own writeup for why that's a disclosed
+trim rather than fabricated.
 
 Within VISION Ready specifically: no real background-refresh worker
 exists to back a working "Keeping Pages Up to Date" toggle (Smart
@@ -1316,13 +1406,12 @@ left for its own phase).
 
 ## Next steps
 
-Phase 17 (VISION Ready) is done. Every screen from the build plan's
-original roadmap is now built except Redeem (blocked on real Firebase
-project credentials and anonymous-auth infrastructure this repo
-doesn't have — not something to attempt without that) and the Study
-Material hub (a distinct, bigger taxonomy/browse/search/spaced-
-repetition feature than My Materials, not yet scoped). Confirm before
-starting either.
+Phase 18 (Study Material hub) is done. Every screen from the build
+plan's original roadmap is now built except Redeem, which stays hard-
+blocked on real Firebase project credentials and anonymous-auth
+infrastructure this repo doesn't have — not something to attempt
+without that. Confirm before starting it (or decide the port is
+otherwise complete).
 
 **If local Xcode ever exists on this machine**: `xcodegen generate`, open
 `VisionIOS.xcodeproj`, and everything here still works locally too — CI
