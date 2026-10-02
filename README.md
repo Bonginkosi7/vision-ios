@@ -18,6 +18,36 @@ macOS runners, triggered on every push to `main`). The acceptance bar for
 every phase is the same: not "it compiles," but launched, driven in a real
 booted Simulator, and behaviorally confirmed by `UITests/VisionIOSUITests.swift`.
 
+**Phase 16** (Ask VISION chat) is done — run
+[`36985916405`](https://github.com/Bonginkosi7/vision-ios/actions/runs/36985916405)
+passed fully green on the first attempt after a genuinely hard real bug
+hunt spanning five pushes. The symptom first showed up as the AI Tutor
+UI test failing, looking like one isolated flake — but fixing that (and
+reverting a wrong first diagnosis along the way) didn't fix the next
+run, which failed six *different*, previously rock-solid tests at their
+first `openMenu` call. Three more attempts to make `openMenu` itself
+smarter (`isHittable` + swipe-up; retry-if-tapped-item-still-exists;
+retry-if-moreMenuButton-still-exists) each got disproven by the very
+next real CI run — one introduced a new error class, one left a real
+failure uncaught, one failed almost the entire suite outright. Reverting
+`openMenu` to the exact version that had been reliable across Phases
+1–10 *still* showed the same failures on this same build, which was the
+real turning point: it proved the test helper was never the bug.
+
+The actual cause was architectural, not a test problem at all: the
+overflow menu had grown to 21 flat items, and Android's own
+`MainActivity.kt` — read for the first time specifically to check this
+— has a doc comment on its own `showOverflowMenu()` confirming Android
+hit this *exact* wall already: a single flat popup became genuinely
+unmanageable, and Android restructured into a real accordion with
+"Education"/"Settings" sub-groups (PopupMenu silently drops nested
+submenus, so Android built a custom `PopupWindow` to get real nesting).
+Matching that real architecture — an actual nested SwiftUI `Menu` for
+the 8 education screens, dropping the top level from 21 items to 14 —
+is what actually fixed it; no test-side change was needed once the real
+over-sized menu was gone. Final counts: 24 UI tests, 127 VisionCore unit
+tests.
+
 **Phase 15** (Help) is done — run
 [`36942376967`](https://github.com/Bonginkosi7/vision-ios/actions/runs/36942376967)
 passed fully green after four re-runs: three different, completely
@@ -159,6 +189,53 @@ tests), no fix-and-repush cycle needed that time — applying Phase 1's own
 lessons (real `@ObservedObject` reactivity, real keyboard taps, `List`-based
 rows instead of a merge-prone VStack-of-Buttons) preemptively instead of
 rediscovering them.
+
+## Phase 16: Ask VISION chat
+
+A scoped-down port of `ChatActivity.kt`/`ChatAiLogic.kt`/
+`ChatCategoryLogic.kt`/`ChatSessionDbHelper.kt`.
+
+- **`Sources/VisionCore/ChatCategoryLogic.swift`** (pure): classifies
+  each message locally into one of six real categories (Learn/
+  Research/Create/Plan/Work/General) via plain keyword/pattern
+  matching — deliberately not a second LLM call pretending to be deep
+  understanding — and builds a category-specific system instruction.
+  `ChatSessionTitle.derive` titles a session from its own real first
+  message, same "no AI call pretending to summarize" discipline.
+- **`App/ChatAI.swift`**: tries each configured provider in order and
+  returns the first real free-text reply, same shape as `TutorAI`.
+- **`App/ChatSessionStore.swift`** (GRDB): real, persisted multi-session
+  conversations.
+- **`App/AskVisionView.swift`**: a flat real session list (newest
+  first) plus a plain conversation view.
+
+**Disclosed scope trim.** Android's voice input, chat export, date-
+grouped/searchable session history, and per-message "Remember this"/
+"Save for offline" quick actions aren't ported — each is tied to a
+real capability this app doesn't have yet: a Memory feature, or a
+hidden-`WKWebView` live-page-fetch (`FetchLivePage.kt` — loads an
+arbitrary URL in an off-screen `WKWebView` and reads
+`document.body.innerText`, a genuinely trickier, higher-risk capability
+than anything built so far, deliberately left for its own phase rather
+than rushed in alongside everything else here).
+
+### Phase 16 UI test
+
+`test_askingVisionWithNoCloudKeyConfigured` — the same honest "not
+configured" path as every other AI feature, through a real session's
+full round-trip: a fresh empty session list, starting a new chat,
+sending a message and getting the real reply with the real "Learn"
+category label, then confirming that same real session reappears in
+the list titled from its own first message, and can be deleted.
+
+### The real menu restructuring (also this push)
+
+Explained in full in "Real, current status" above — the overflow menu's
+8 education screens now live under a real nested "Education" submenu,
+matching a real, documented decision in Android's own `MainActivity.kt`
+rather than a test-side workaround. `UITests/VisionIOSUITests.swift`
+gained `openEducationMenu`, mirroring `openMenu` but drilling into the
+submenu first.
 
 ## Phase 15: Help
 
@@ -1085,11 +1162,11 @@ comment.
 
 **`App/`** (SwiftUI + UIKit + WebKit + GRDB, real iOS target):
 - `VisionIOSApp.swift` — `@main` entry point
-- `MainBrowserView.swift` — one toolbar row (back/forward/address bar/bookmark/tab count) plus a single real overflow `Menu` for every other action, matching `MainActivity.kt`'s own `showOverflowMenu()` architecture (see Phase 7's bug writeup for why); hosts the active tab via `ActiveTabContent`
+- `MainBrowserView.swift` — one toolbar row (back/forward/address bar/bookmark/tab count) plus a real overflow `Menu` for every other action, with the 8 education screens under a real nested "Education" submenu — matching `MainActivity.kt`'s own `showOverflowMenu()` architecture exactly (both the original single-popup shape from Phase 7, and its own later Education/Settings accordion restructuring once that popup grew too large, see Phase 16's bug writeup for why iOS hit the same wall and matched the same real fix); hosts the active tab via `ActiveTabContent`
 - `WebViewRepresentable.swift` — `UIViewRepresentable` wrapping one `WKWebView` per tab; real history recording + real `WKDownloadDelegate` handling
 - `BrowserTab.swift` — mirrors `Tab.kt` (id, title, url, isNewTab, isPrivate)
 - `TabManager.swift` — mirrors `MainActivity.kt`'s `tabs`/`activeTabIndex` + create/switch/close/navigate/openOfflineFile, delegates close-index math to `VisionCore.TabIndexing`
-- `AppDatabase.swift` — GRDB `DatabaseQueue` + migrator (`v1_bookmarks`, `v2_phase2`, `v3_phase6`, `v4_phase7`, `v5_phase8`, `v6_phase9`, `v7_phase10`, `v8_phase11`, `v9_phase13`)
+- `AppDatabase.swift` — GRDB `DatabaseQueue` + migrator (`v1_bookmarks`, `v2_phase2`, `v3_phase6`, `v4_phase7`, `v5_phase8`, `v6_phase9`, `v7_phase10`, `v8_phase11`, `v9_phase13`, `v10_phase16`)
 - `BookmarkStore.swift` / `HistoryStore.swift` / `DownloadStore.swift` / `OfflineStore.swift` — GRDB ports of the matching `*DbHelper.kt`
 - `OfflineSaver.swift` — real `createWebArchiveData` capture + file write
 - `KeychainStore.swift` / `AiSettings.swift` — real Keychain-backed AI key storage, port of `AiSettings.kt`
@@ -1112,7 +1189,8 @@ comment.
 - `StudyPlanStore.swift` / `StudySessionManager.swift` / `SessionConfidencePrompt.swift` — real plan/item/session GRDB storage, the real session-lifecycle orchestration behind My Week's "Start session", and the shared post-session confidence prompt reused by Flashcards/Exams
 - `PaperReviewer.swift` — the real AI call orchestration behind Paper Review
 - `HelpContent.swift` — real, static in-app documentation data
-- `NewTabView.swift` / `HistoryView.swift` / `DownloadsView.swift` / `OfflineLibraryView.swift` / `SettingsView.swift` / `RewriteView.swift` / `FocusView.swift` / `TasksView.swift` / `AdvisorView.swift` / `RewardsView.swift` / `MaterialsView.swift` / `FlashcardsView.swift` / `ExamsView.swift` / `CreateExamView.swift` / `GenerateExamView.swift` / `TakeExamView.swift` / `TutorView.swift` / `PerformanceView.swift` / `StudyPlanView.swift` / `PaperReviewView.swift` / `HelpView.swift` — real list/empty-state/settings/rewrite/focus/tasks/advisor/rewards/materials/flashcards/exams/tutor/performance/study-plan/paper-review/help screens
+- `ChatSessionStore.swift` / `ChatAI.swift` — real multi-session GRDB storage and the real free-text AI call loop behind Ask VISION chat
+- `NewTabView.swift` / `HistoryView.swift` / `DownloadsView.swift` / `OfflineLibraryView.swift` / `SettingsView.swift` / `RewriteView.swift` / `FocusView.swift` / `TasksView.swift` / `AdvisorView.swift` / `RewardsView.swift` / `MaterialsView.swift` / `FlashcardsView.swift` / `ExamsView.swift` / `CreateExamView.swift` / `GenerateExamView.swift` / `TakeExamView.swift` / `TutorView.swift` / `PerformanceView.swift` / `StudyPlanView.swift` / `PaperReviewView.swift` / `HelpView.swift` / `AskVisionView.swift` — real list/empty-state/settings/rewrite/focus/tasks/advisor/rewards/materials/flashcards/exams/tutor/performance/study-plan/paper-review/help/ask-vision screens
 - `DesignSystem.swift` — same component list and color tokens as `DesignSystem.kt`, ported to `@ViewBuilder` functions; drawable XML collapses into inline SwiftUI modifiers (disclosed simplification, noted in-file)
 
 **`UITests/`** — `VisionIOSUITests.swift`, the real behavioral verification described above.
@@ -1133,24 +1211,23 @@ needs real Firebase project credentials and anonymous-auth
 infrastructure this repo doesn't have — see Phase 7's own writeup for
 why that's a disclosed trim rather than fabricated.
 
-Ask VISION chat (Phase 16) is scoped down from Android's own
-`ChatActivity.kt`/`ChatAiLogic.kt`: real local message classification,
-a real persisted multi-session conversation, and a real honest "not
-configured" reply reusing the same provider-loop shape as AI Tutor.
-Deliberately NOT ported — Android's voice input, chat export,
-date-grouped/searchable session history, and per-message "Remember
-this"/"Save for offline" quick actions, each tied to a Memory feature
-or a hidden-`WKWebView` live-page-fetch capability (`FetchLivePage.kt`)
-that don't exist on iOS yet.
+Within Ask VISION chat specifically: Android's voice input, chat
+export, date-grouped/searchable session history, and per-message
+"Remember this"/"Save for offline" quick actions aren't ported — each
+tied to a real capability this app doesn't have yet (a Memory feature,
+or a hidden-`WKWebView` live-page-fetch, `FetchLivePage.kt` — loads an
+arbitrary URL in an off-screen `WKWebView` and reads
+`document.body.innerText`, a genuinely trickier capability deliberately
+left for its own phase).
 
 ## Next steps
 
-Phase 15 (Help) is done, and with it, every education screen from the
-build plan's original "Phase 9" bundle except the remaining Study
-Material hub taxonomy. The real next slices still open are Redeem
-(blocked on real Firebase credentials this repo doesn't have) and
-VISION Ready — neither has been scoped yet. Confirm before starting
-either.
+Phase 16 (Ask VISION chat) is done, and with it, every education
+screen from the build plan's original "Phase 9" bundle except the
+remaining Study Material hub taxonomy. The real next slices still open
+are Redeem (blocked on real Firebase credentials this repo doesn't
+have) and VISION Ready — neither has been scoped yet. Confirm before
+starting either.
 
 **If local Xcode ever exists on this machine**: `xcodegen generate`, open
 `VisionIOS.xcodeproj`, and everything here still works locally too — CI
