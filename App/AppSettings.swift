@@ -4,10 +4,12 @@ import SwiftUI
 /// scoped the same way Android's own Phase 1 comment describes: a handful
 /// of scalar values, so UserDefaults (not GRDB) is the right data shape —
 /// same reasoning as why Bookmarks/History/etc. use real SQLite instead.
-/// Phase 3 ports exactly the two prefs this phase's own scope needs
-/// (search engine, theme); Android's weather/profile/storage-limit/
-/// background-refresh prefs land in later phases alongside the features
-/// that actually use them.
+/// Phase 3 ports exactly the two prefs that phase's own scope needs
+/// (search engine, theme); the real offline storage limit lands in the
+/// VISION Ready phase alongside the screen that displays it. Android's
+/// weather/profile/background-refresh prefs stay deferred — background
+/// refresh has no real worker to flip on yet (see README's Smart Cache
+/// scope trim, disclosed as far back as the Phase 2 migration comment).
 enum AppSettings {
     enum SearchEngine: String, CaseIterable, Identifiable {
         case google, bing, duckduckgo
@@ -61,6 +63,10 @@ enum AppSettings {
     // routes to the same preference from drifting apart.
     static let searchEngineKey = "search_engine"
     static let themeKey = "theme"
+    static let offlineStorageLimitMbKey = "offline_storage_limit_mb"
+
+    /// Real options, direct port of VisionSettings.kt's own spinner list.
+    static let offlineStorageLimitOptionsMb = [200, 500, 1000, 2000, 5000]
 
     static var searchEngine: SearchEngine {
         get {
@@ -77,6 +83,16 @@ enum AppSettings {
         }
         set {
             UserDefaults.standard.set(newValue.rawValue, forKey: themeKey)
+        }
+    }
+
+    static var offlineStorageLimitMb: Int {
+        get {
+            let stored = UserDefaults.standard.integer(forKey: offlineStorageLimitMbKey)
+            return offlineStorageLimitOptionsMb.contains(stored) ? stored : 500
+        }
+        set {
+            UserDefaults.standard.set(newValue, forKey: offlineStorageLimitMbKey)
         }
     }
 }

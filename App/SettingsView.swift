@@ -1,15 +1,16 @@
 import SwiftUI
 
 /// Real settings — port of the slice of SettingsActivity.kt this phase's
-/// scope actually needs: theme, search engine, and the two cloud AI key
-/// rows (save/clear/status, same real UX pattern as
+/// scope actually needs: theme, search engine, offline storage limit, and
+/// the two cloud AI key rows (save/clear/status, same real UX pattern as
 /// SettingsActivity.kt's setUpAiKeyRow). Profile, credentials, offline AI
-/// model, memory, and storage are later-phase scope — see README.
+/// model, and memory are later-phase scope — see README.
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
 
     @AppStorage(AppSettings.themeKey) private var themeRaw: String = AppSettings.Theme.system.rawValue
     @AppStorage(AppSettings.searchEngineKey) private var searchEngineRaw: String = AppSettings.SearchEngine.google.rawValue
+    @AppStorage(AppSettings.offlineStorageLimitMbKey) private var offlineStorageLimitMb: Int = 500
 
     @State private var anthropicInput: String = ""
     @State private var openAiInput: String = ""
@@ -37,6 +38,16 @@ struct SettingsView: View {
                     }
                     .pickerStyle(.menu)
                     .accessibilityIdentifier("searchEnginePicker")
+                }
+
+                Section("Offline Storage") {
+                    Picker("Storage limit", selection: $offlineStorageLimitMb) {
+                        ForEach(AppSettings.offlineStorageLimitOptionsMb, id: \.self) { mb in
+                            Text(Self.byteCountFormatter.string(fromByteCount: Int64(mb) * 1024 * 1024)).tag(mb)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .accessibilityIdentifier("offlineStorageLimitPicker")
                 }
 
                 Section {
@@ -122,6 +133,12 @@ struct SettingsView: View {
         }
         .padding(.vertical, 4)
     }
+
+    private static let byteCountFormatter: ByteCountFormatter = {
+        let formatter = ByteCountFormatter()
+        formatter.countStyle = .file
+        return formatter
+    }()
 
     private func refreshKeyStatus() {
         anthropicConfigured = AiSettings.getAnthropicKey() != nil

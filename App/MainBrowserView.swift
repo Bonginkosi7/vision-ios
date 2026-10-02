@@ -68,6 +68,7 @@ struct MainBrowserView: View {
     @State private var showPaperReview = false
     @State private var showHelp = false
     @State private var showAskVision = false
+    @State private var showVisionReady = false
     @State private var saveOfflineStatus: String?
 
     var body: some View {
@@ -169,6 +170,11 @@ struct MainBrowserView: View {
         }
         .sheet(isPresented: $showAskVision) {
             AskVisionView(chatSessionStore: chatSessionStore)
+        }
+        .sheet(isPresented: $showVisionReady) {
+            VisionReadyView(bookmarkStore: bookmarkStore, offlineStore: offlineStore) { fileURL in
+                tabManager.openOfflineFile(fileURL)
+            }
         }
     }
 
@@ -316,6 +322,11 @@ struct MainBrowserView: View {
                 Label("Rewards", systemImage: "star.circle")
             }
             .accessibilityIdentifier("menu_rewards")
+
+            Button(action: { showVisionReady = true }) {
+                Label("VISION Ready", systemImage: "checkmark.shield")
+            }
+            .accessibilityIdentifier("menu_visionReady")
 
             Button(action: { showOfflineLibrary = true }) {
                 Label("Offline Library", systemImage: "icloud.and.arrow.down")

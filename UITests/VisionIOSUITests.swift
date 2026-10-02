@@ -1049,6 +1049,55 @@ final class VisionIOSUITests: XCTestCase {
         app.navigationBars.buttons["Done"].tap()
     }
 
+    /// Real VISION Ready proof: a fresh install has no bookmarks, so the
+    /// honest "nothing to measure yet" empty state must show (never a
+    /// fabricated 0%) — then bookmark a real page, save it offline, and
+    /// confirm the real 100%/1-of-1/"General: 1" numbers appear, straight
+    /// from ReadinessLogic.compute over the real BookmarkStore/OfflineStore
+    /// rows. Also exercises "Manage offline content" opening the real
+    /// Offline Library on top of it.
+    func test_visionReadyShowsHonestEmptyStateThenRealNumbersAfterBookmarkingAndSavingOffline() {
+        let app = XCUIApplication()
+        app.launch()
+
+        openMenu(app, item: "menu_visionReady")
+        XCTAssertTrue(app.staticTexts["visionReadyEmptyReadiness"].waitForExistence(timeout: 5), "a fresh install has no real bookmarks yet, so there must be nothing real to measure")
+        XCTAssertFalse(app.staticTexts["visionReadyPercent"].exists)
+        app.navigationBars.buttons["Done"].tap()
+
+        let addressField = app.textFields["addressBarField"]
+        XCTAssertTrue(addressField.waitForExistence(timeout: 5))
+        navigate(app: app, addressField: addressField, to: "example.com")
+        assertAddressBarEventuallyShows(addressField, "https://example.com/", in: self)
+
+        let bookmarkButton = app.buttons["bookmarkButton"]
+        XCTAssertTrue(bookmarkButton.waitForExistence(timeout: 5))
+        bookmarkButton.tap()
+        let bookmarkedExpectation = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "Remove bookmark"), object: bookmarkButton)
+        XCTAssertEqual(XCTWaiter().wait(for: [bookmarkedExpectation], timeout: 5), .completed)
+
+        openMenu(app, item: "menu_saveOffline")
+        let okButton = app.alerts["Save for Offline"].buttons["OK"]
+        XCTAssertTrue(okButton.waitForExistence(timeout: 10), "expected a real save-confirmation alert")
+        okButton.tap()
+
+        openMenu(app, item: "menu_visionReady")
+        let percentText = app.staticTexts["visionReadyPercent"]
+        if !percentText.waitForExistence(timeout: 5) {
+            attachDiagnostics(app: app, name: "visionready-percent-missing")
+        }
+        XCTAssertTrue(percentText.label.contains("100%"), "one real bookmark, saved offline, should read back as 100%, got: \(percentText.label)")
+        XCTAssertTrue(app.staticTexts["visionReadyStatsSaved"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["visionReadyCategory_general"].waitForExistence(timeout: 5), "OfflineSaver's real default category is 'general'")
+
+        app.buttons["btnManageOfflineContent"].tap()
+        let savedRowText = app.staticTexts.matching(NSPredicate(format: "label == %@", "Example Domain")).firstMatch
+        XCTAssertTrue(savedRowText.waitForExistence(timeout: 5), "the same real saved page should show up in the real Offline Library opened from here")
+        app.navigationBars.buttons["Done"].tap()
+
+        app.navigationBars.buttons["Done"].tap()
+    }
+
     // MARK: - Helpers
 
     /// Taps the real overflow ("⋮") menu button, then the named menu item
