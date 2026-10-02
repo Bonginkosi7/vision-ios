@@ -92,24 +92,27 @@ struct VisionReadyView: View {
 
             if let result, let percent = result.percent {
                 HStack(alignment: .bottom, spacing: 8) {
-                    Text("\(percent)%").font(.system(size: 28, weight: .bold)).foregroundStyle(.white)
+                    Text("\(percent)%")
+                        .font(.system(size: 28, weight: .bold)).foregroundStyle(.white)
+                        .accessibilityIdentifier("visionReadyPercent")
                     Text("of bookmarks saved offline").font(.system(size: 14)).foregroundStyle(DesignSystem.textMuted2)
                 }
                 .padding(.top, 16)
-                .accessibilityIdentifier("visionReadyPercent")
 
                 ProgressView(value: Double(percent), total: 100)
                     .tint(DesignSystem.visionBlue)
                     .padding(.top, 12)
 
                 HStack(spacing: 24) {
-                    statColumn(value: "\(result.savedCount)", label: "of \(result.bookmarkCount) bookmarks saved offline")
-                        .accessibilityIdentifier("visionReadyStatsSaved")
+                    statColumn(
+                        value: "\(result.savedCount)", label: "of \(result.bookmarkCount) bookmarks saved offline",
+                        valueId: "visionReadyStatsSaved"
+                    )
                     statColumn(
                         value: Self.byteCountFormatter.string(fromByteCount: usedBytes),
-                        label: "used of \(AppSettings.offlineStorageLimitMb) MB storage limit"
+                        label: "used of \(AppSettings.offlineStorageLimitMb) MB storage limit",
+                        valueId: "visionReadyStatsStorage"
                     )
-                    .accessibilityIdentifier("visionReadyStatsStorage")
                 }
                 .padding(.top, 18)
 
@@ -133,9 +136,11 @@ struct VisionReadyView: View {
     }
 
     @ViewBuilder
-    private func statColumn(value: String, label: String) -> some View {
+    private func statColumn(value: String, label: String, valueId: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(value).font(.system(size: 17, weight: .bold)).foregroundStyle(.white)
+            Text(value)
+                .font(.system(size: 17, weight: .bold)).foregroundStyle(.white)
+                .accessibilityIdentifier(valueId)
             Text(label).font(.system(size: 12)).foregroundStyle(DesignSystem.textMuted2)
         }
     }
