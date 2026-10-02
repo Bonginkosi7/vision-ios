@@ -15,11 +15,12 @@ struct TopicsUIState {
 /// the exact "Study Materials & Documents...unlocks Flashcards/Exams/
 /// Tutor via topic extraction" slice from the build plan.
 ///
-/// Android's separate, later-added "Study Material hub"
-/// (StudyMaterialActivity.kt — taxonomy tagging, browse/search,
-/// offline-ready marking, folded-in spaced-repetition review) is a real,
-/// distinct feature this phase deliberately does NOT port — see
-/// README's disclosed scope trim.
+/// Android's separate "Study Material hub" (StudyMaterialActivity.kt —
+/// taxonomy tagging, browse/search, offline-ready marking, folded-in
+/// spaced-repetition review) is a distinct, bigger feature than this
+/// screen — it lives in `StudyMaterialView.swift` instead. Documents
+/// uploaded here land in that hub untagged, same real architecture as
+/// Android/desktop.
 struct MaterialsView: View {
     @ObservedObject var studyDocumentStore: StudyDocumentStore
     @ObservedObject var topicStore: TopicStore

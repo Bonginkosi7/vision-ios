@@ -142,12 +142,11 @@ enum AppDatabase {
         migrator.registerMigration("v5_phase8") { db in
             // My Materials — the slice of StudyDocumentDbHelper.kt's real
             // columns MaterialsActivity.kt actually uses. Deliberately
-            // narrower than Android's own final schema: no taxonomy
-            // (level/grade/category/subject/resourceType/year/language)
-            // or offlineReadyAt columns yet — those belong to Android's
-            // separate, bigger "Study Material hub" this phase does not
-            // port (see README's disclosed scope trim). They land in
-            // their own migration if/when that hub gets built.
+            // narrower than Android's own final schema at this point: no
+            // taxonomy (level/grade/category/subject/resourceType/year/
+            // language) or offlineReadyAt columns yet — those belong to
+            // Android's separate, bigger "Study Material hub", added
+            // later in v11_phase18 once that hub actually got built.
             try db.create(table: "studyDocument") { t in
                 t.primaryKey("id", .text)
                 t.column("title", .text).notNull()
@@ -320,6 +319,39 @@ enum AppDatabase {
                 t.column("createdAt", .datetime).notNull()
             }
             try db.create(index: "idx_chatMessage_sessionId", on: "chatMessage", columns: ["sessionId"])
+        }
+
+        migrator.registerMigration("v11_phase18") { db in
+            // Study Material hub — the real taxonomy columns Phase 5's own
+            // migration comment named as deferred ("those columns land in
+            // their own migration if/when that hub gets built"), port of
+            // StudyDocumentDbHelper.kt's Phase 23 schema addition.
+            try db.alter(table: "studyDocument") { t in
+                t.add(column: "level", .text)
+                t.add(column: "grade", .text)
+                t.add(column: "category", .text)
+                t.add(column: "subject", .text)
+                t.add(column: "resourceType", .text)
+                t.add(column: "year", .integer)
+                t.add(column: "language", .text)
+                t.add(column: "offlineReadyAt", .datetime)
+            }
+
+            // Spaced review scheduling — port of StudyReviewDbHelper.kt's
+            // two tables.
+            try db.create(table: "studyReview") { t in
+                t.primaryKey("offlineItemId", .text)
+                t.column("intervalTier", .integer).notNull()
+                t.column("reviewCount", .integer).notNull()
+                t.column("nextDueAt", .datetime).notNull()
+            }
+            try db.create(table: "studyReviewEvent") { t in
+                t.primaryKey("id", .text)
+                t.column("offlineItemId", .text).notNull()
+                t.column("confident", .boolean).notNull()
+                t.column("createdAt", .datetime).notNull()
+            }
+            try db.create(index: "idx_studyReviewEvent_offlineItemId", on: "studyReviewEvent", columns: ["offlineItemId"])
         }
 
         return migrator

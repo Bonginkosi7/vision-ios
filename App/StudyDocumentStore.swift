@@ -2,14 +2,10 @@ import Foundation
 import GRDB
 import VisionCore
 
-/// Real uploaded study document — direct port of StudyDocument.kt's core
-/// fields. Deliberately narrower than Android's own final schema: it
-/// doesn't carry Android's later-added taxonomy (level/grade/category/
-/// subject/resourceType/year/language) or offlineReadyAt columns, since
-/// those belong to Android's separate, bigger "Study Material hub"
-/// feature (StudyMaterialActivity.kt) this phase does not port — see
-/// README. Those columns land in their own migration if/when that hub
-/// gets built, not speculatively now.
+/// Real uploaded study document — direct port of StudyDocument.kt's
+/// fields, including the real taxonomy (level/grade/category/subject/
+/// resourceType/year/language) and offlineReadyAt columns added in
+/// v11_phase18 for the Study Material hub.
 struct StudyDocument: Codable, Identifiable, FetchableRecord, PersistableRecord {
     static let databaseTableName = "studyDocument"
     var id: String
@@ -22,6 +18,18 @@ struct StudyDocument: Codable, Identifiable, FetchableRecord, PersistableRecord 
     var processingError: String?
     var extractedText: String?
     var createdAt: Date
+    var level: StudyLevel? = nil
+    var grade: String? = nil
+    var category: String? = nil
+    var subject: String? = nil
+    var resourceType: String? = nil
+    var year: Int? = nil
+    var language: String? = nil
+    var offlineReadyAt: Date? = nil
+
+    var taxonomy: StudyDocumentTaxonomy {
+        StudyDocumentTaxonomy(level: level, grade: grade, category: category, subject: subject, resourceType: resourceType, year: year, language: language)
+    }
 }
 
 /// Real local storage for uploaded study documents — GRDB port of the
@@ -61,5 +69,21 @@ final class StudyDocumentStore: ObservableObject {
 
     func remove(id: String) throws {
         _ = try dbQueue.write { db in try StudyDocument.deleteOne(db, key: id) }
+    }
+
+    /// Real user-assigned taxonomy on their own uploaded document — never inferred or fabricated.
+    func setTaxonomy(id: String, taxonomy: StudyDocumentTaxonomy) throws {
+        try dbQueue.write { db in
+            try db.execute(
+                sql: "UPDATE studyDocument SET level = ?, grade = ?, category = ?, subject = ?, resourceType = ?, year = ?, language = ? WHERE id = ?",
+                arguments: [taxonomy.level?.rawValue, taxonomy.grade, taxonomy.category, taxonomy.subject, taxonomy.resourceType, taxonomy.year, taxonomy.language, id]
+            )
+        }
+    }
+
+    func markOfflineReady(id: String) throws {
+        try dbQueue.write { db in
+            try db.execute(sql: "UPDATE studyDocument SET offlineReadyAt = ? WHERE id = ?", arguments: [Date(), id])
+        }
     }
 }

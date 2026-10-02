@@ -18,6 +18,11 @@ struct OfflineItem: Codable, Identifiable, FetchableRecord, PersistableRecord {
     var category: String
 }
 
+/// Real, user-reassignable categories — matching desktop's library.ts
+/// category select (port of Android's own `OFFLINE_CATEGORIES`).
+/// "education" is what the Study Material hub's Review tab filters on.
+let offlineCategories = ["education", "work", "maps", "sports", "news", "knowledge", "general"]
+
 /// Real local storage for offline-saved pages — GRDB port of
 /// OfflineDbHelper.kt's core add/remove/list surface. The actual page
 /// snapshot is captured by `WKWebView.createWebArchiveData(completionHandler:)`
@@ -68,6 +73,18 @@ final class OfflineStore: ObservableObject {
     func totalSizeBytes() throws -> Int64 {
         try dbQueue.read { db in
             try Int64.fetchOne(db, sql: "SELECT COALESCE(SUM(sizeBytes), 0) FROM offlineItem") ?? 0
+        }
+    }
+
+    func listByCategory(_ category: String) throws -> [OfflineItem] {
+        try dbQueue.read { db in
+            try OfflineItem.filter(Column("category") == category).order(Column("savedAt").desc).fetchAll(db)
+        }
+    }
+
+    func updateCategory(id: String, category: String) throws {
+        try dbQueue.write { db in
+            try db.execute(sql: "UPDATE offlineItem SET category = ? WHERE id = ?", arguments: [category, id])
         }
     }
 }

@@ -1107,6 +1107,133 @@ final class VisionIOSUITests: XCTestCase {
         app.navigationBars.buttons["Done"].tap()
     }
 
+    /// Real Study Material hub proof (Browse + tagging): uses the same
+    /// `-UITestSeedMaterial` fixture My Materials' own tests use — it
+    /// starts genuinely untagged, so it must appear in this hub's
+    /// Untagged section. Tags it with a real level/grade/subject/year/
+    /// language, confirms the exact same real taxonomy round-trips all
+    /// the way through Home → Basic Education → Grade 7–9 → Physical
+    /// Sciences, then confirms a real "Mark offline" flips to "Offline
+    /// ready". Cleans up via My Materials' own delete at the end, same
+    /// as Performance's/Study Plan's own tests.
+    func test_studyMaterialTagsAUntaggedDocumentAndTheRealTaxonomyRoundTrips() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-UITestSeedMaterial"]
+        app.launch()
+
+        openEducationMenu(app, item: "menu_studyMaterial")
+        XCTAssertTrue(app.buttons["studySection_BASIC_EDUCATION"].waitForExistence(timeout: 5))
+
+        XCTAssertTrue(app.staticTexts["studyUntaggedBanner"].waitForExistence(timeout: 5), "the real fixture document starts untagged")
+        app.buttons["btnStudyReviewUntagged"].tap()
+
+        let untaggedRow = app.staticTexts["studyUntaggedRow_ui-test-fixture"]
+        if !untaggedRow.waitForExistence(timeout: 5) {
+            attachDiagnostics(app: app, name: "studymaterial-untagged-fixture-missing")
+        }
+        XCTAssertTrue(untaggedRow.exists)
+        app.buttons["btnStudyAddDetails_ui-test-fixture"].tap()
+
+        app.buttons["tagLevelPicker"].tap()
+        app.buttons["Basic Education"].tap()
+        app.buttons["tagGradePicker"].tap()
+        app.buttons["Grade 7–9"].tap()
+        app.buttons["tagSubjectPicker"].tap()
+        app.buttons["Physical Sciences"].tap()
+        let yearInput = app.textFields["tagYearInput"]
+        yearInput.tap()
+        yearInput.typeText("2024")
+        app.buttons["tagLanguagePicker"].tap()
+        app.buttons["English"].tap()
+        app.buttons["btnTagSave"].tap()
+
+        // Saving the tag dismisses the sheet back onto the Untagged view
+        // it was opened from, not Home — one real "‹ Back" tap returns
+        // to Home before drilling down the newly-tagged taxonomy path.
+        app.buttons["btnStudyBack"].tap()
+        app.buttons["studySection_BASIC_EDUCATION"].tap()
+        app.buttons["studySection_grade_7-9"].tap()
+        let subjectCard = app.buttons["studySection_subject_Physical Sciences"]
+        XCTAssertTrue(subjectCard.waitForExistence(timeout: 5))
+        subjectCard.tap()
+
+        let taggedTitle = app.staticTexts["studyDocTitle_ui-test-fixture"]
+        if !taggedTitle.waitForExistence(timeout: 5) {
+            attachDiagnostics(app: app, name: "studymaterial-taxonomy-roundtrip-failed")
+        }
+        XCTAssertTrue(taggedTitle.exists, "the real level/grade/subject just saved should route back here, not leave the fixture stuck in Untagged")
+
+        app.buttons["btnStudyMarkOffline_ui-test-fixture"].tap()
+        XCTAssertTrue(app.staticTexts["studyOfflineReady_ui-test-fixture"].waitForExistence(timeout: 5))
+
+        app.navigationBars.buttons["Done"].tap()
+
+        openEducationMenu(app, item: "menu_materials")
+        let materialRow = app.staticTexts["materialTitle_ui-test-fixture"]
+        XCTAssertTrue(materialRow.waitForExistence(timeout: 5))
+        materialRow.swipeLeft()
+        let deleteMaterialButton = app.buttons["btnDeleteDocument_ui-test-fixture"]
+        XCTAssertTrue(deleteMaterialButton.waitForExistence(timeout: 5))
+        deleteMaterialButton.tap()
+        app.navigationBars.buttons["Done"].tap()
+    }
+
+    /// Real Study Material hub proof (Review tab): saves a real page
+    /// (`example.net`, untouched by any other test in this suite) offline,
+    /// reassigns its real category to "Education" from the Offline
+    /// Library's own new per-item category menu — the only way a real
+    /// item can ever land in this hub's Review queue — then confirms a
+    /// real due entry appears, marking it "Got it" advances the real
+    /// schedule (confirmed by the row disappearing into a real "caught
+    /// up" state and a real 1-day streak appearing), straight from
+    /// `StudyReviewLogic`'s real tier math, never a fabricated schedule.
+    func test_studyMaterialReviewTabTracksARealOfflineSavedEducationPage() {
+        let app = XCUIApplication()
+        app.launch()
+
+        let addressField = app.textFields["addressBarField"]
+        XCTAssertTrue(addressField.waitForExistence(timeout: 5))
+        navigate(app: app, addressField: addressField, to: "example.net")
+        assertAddressBarEventuallyShows(addressField, "https://example.net/", in: self)
+
+        openMenu(app, item: "menu_saveOffline")
+        let okButton = app.alerts["Save for Offline"].buttons["OK"]
+        XCTAssertTrue(okButton.waitForExistence(timeout: 10), "expected a real save-confirmation alert")
+        okButton.tap()
+
+        openMenu(app, item: "menu_offlineLibrary")
+        // offlineItem rows are ordered newest-first (OfflineStore.list()),
+        // so the page just saved above is always the first real match —
+        // order-independent of whatever other tests have already saved,
+        // unlike matching on the shared "Example Domain" title/category.
+        let categoryButton = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "offlineCategory_")).firstMatch
+        XCTAssertTrue(categoryButton.waitForExistence(timeout: 5))
+        categoryButton.tap()
+        let educationOption = app.buttons["Education"]
+        XCTAssertTrue(educationOption.waitForExistence(timeout: 5))
+        educationOption.tap()
+        app.swipeDown()
+
+        openEducationMenu(app, item: "menu_studyMaterial")
+        app.buttons["btnStudyTabReview"].tap()
+
+        let reviewRow = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "studyReviewRow_")).firstMatch
+        if !reviewRow.waitForExistence(timeout: 5) {
+            attachDiagnostics(app: app, name: "studymaterial-review-row-missing")
+        }
+        XCTAssertTrue(reviewRow.label.contains("Example Domain"), "the real page just saved and tagged Education should be the only real due entry")
+
+        let gotItButton = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "btnStudyReviewGotIt_")).firstMatch
+        XCTAssertTrue(gotItButton.exists)
+        gotItButton.tap()
+
+        XCTAssertTrue(app.staticTexts["studyReviewCaughtUp"].waitForExistence(timeout: 5), "marking the only real due item reviewed should show the real caught-up state")
+        XCTAssertTrue(app.staticTexts["studyReviewStreak"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.staticTexts["studyReviewStreak"].label, "🔥 1-day streak")
+
+        app.navigationBars.buttons["Done"].tap()
+    }
+
     // MARK: - Helpers
 
     /// Taps the real overflow ("⋮") menu button, then the named menu item

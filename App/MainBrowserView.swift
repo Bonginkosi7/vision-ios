@@ -33,6 +33,7 @@ struct MainBrowserView: View {
     @StateObject private var focusStore = FocusStore()
     @StateObject private var rewardStore = RewardStore()
     @StateObject private var studyDocumentStore = StudyDocumentStore()
+    @StateObject private var studyReviewStore = StudyReviewStore()
     @StateObject private var topicStore = TopicStore()
     @StateObject private var flashcardStore = FlashcardStore()
     @StateObject private var examStore = ExamStore()
@@ -60,6 +61,7 @@ struct MainBrowserView: View {
     @State private var showAdvisor = false
     @State private var showRewards = false
     @State private var showMaterials = false
+    @State private var showStudyMaterial = false
     @State private var showFlashcards = false
     @State private var showExams = false
     @State private var showTutor = false
@@ -143,6 +145,11 @@ struct MainBrowserView: View {
         }
         .sheet(isPresented: $showMaterials) {
             MaterialsView(studyDocumentStore: studyDocumentStore, topicStore: topicStore)
+        }
+        .sheet(isPresented: $showStudyMaterial) {
+            StudyMaterialView(studyDocumentStore: studyDocumentStore, offlineStore: offlineStore, studyReviewStore: studyReviewStore) { url in
+                tabManager.navigateActiveTab(to: url)
+            }
         }
         .sheet(isPresented: $showFlashcards) {
             FlashcardsView(studyDocumentStore: studyDocumentStore, flashcardStore: flashcardStore, topicStore: topicStore, studySessionManager: studySessionManager)
@@ -380,6 +387,11 @@ struct MainBrowserView: View {
                 Label("My Materials", systemImage: "books.vertical")
             }
             .accessibilityIdentifier("menu_materials")
+
+            Button(action: { showStudyMaterial = true }) {
+                Label("Study Material", systemImage: "square.grid.2x2")
+            }
+            .accessibilityIdentifier("menu_studyMaterial")
 
             Button(action: { showFlashcards = true }) {
                 Label("Flashcards", systemImage: "rectangle.on.rectangle")
