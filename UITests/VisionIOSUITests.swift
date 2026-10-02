@@ -999,6 +999,56 @@ final class VisionIOSUITests: XCTestCase {
         app.navigationBars.buttons["Done"].tap()
     }
 
+    /// Real Ask VISION chat proof — same honest "not configured" path
+    /// already established for every other AI feature, confirming:
+    /// a fresh launch shows the real empty session list; starting a new
+    /// chat, sending a real message, and getting the real honest reply
+    /// with the real local category classification ("Learn", since the
+    /// message matches that pattern); and that the real session this
+    /// created now appears back in the session list with its real
+    /// derived title. The input bar is a plain HStack (no scrolling
+    /// container), matching the fix applied to the Tutor test's own
+    /// manual-input path rather than any button living inside one.
+    func test_askingVisionWithNoCloudKeyConfigured() {
+        let app = XCUIApplication()
+        app.launch()
+
+        openMenu(app, item: "menu_askVision")
+
+        XCTAssertTrue(app.staticTexts["askVisionEmptySessions"].waitForExistence(timeout: 5), "expected a real empty session list on a fresh launch")
+
+        app.buttons["askVisionNewChatButton"].tap()
+
+        let messageInput = app.textFields["chatMessageInput"]
+        XCTAssertTrue(messageInput.waitForExistence(timeout: 5))
+        messageInput.tap()
+        messageInput.typeText("Explain how tides work")
+        app.buttons["btnChatSend"].tap()
+
+        let assistantMessage = app.staticTexts.element(matching: NSPredicate(format: "identifier BEGINSWITH 'chatAssistantMessage_'"))
+        if !assistantMessage.waitForExistence(timeout: 10) {
+            attachDiagnostics(app: app, name: "askvision-assistant-reply-missing")
+        }
+        XCTAssertTrue(assistantMessage.label.contains("no cloud AI is configured"), "expected the real honest 'not configured' reply, got: \(assistantMessage.label)")
+
+        let categoryLabel = app.staticTexts.element(matching: NSPredicate(format: "identifier BEGINSWITH 'chatCategory_'"))
+        XCTAssertTrue(categoryLabel.waitForExistence(timeout: 5))
+        XCTAssertEqual(categoryLabel.label, "Learn", "this message should classify as Learn")
+
+        app.buttons["btnBackToChats"].tap()
+
+        let sessionRow = app.buttons.element(matching: NSPredicate(format: "identifier BEGINSWITH 'askVisionSessionRow_'"))
+        XCTAssertTrue(sessionRow.waitForExistence(timeout: 5), "expected the real session just created to appear back in the session list")
+        XCTAssertEqual(sessionRow.label, "Explain how tides work")
+
+        sessionRow.swipeLeft()
+        let deleteButton = app.buttons.element(matching: NSPredicate(format: "identifier BEGINSWITH 'btnDeleteSession_'"))
+        XCTAssertTrue(deleteButton.waitForExistence(timeout: 5))
+        deleteButton.tap()
+
+        app.navigationBars.buttons["Done"].tap()
+    }
+
     // MARK: - Helpers
 
     /// Taps the real overflow ("⋮") menu button, then the named menu item
@@ -1021,17 +1071,19 @@ final class VisionIOSUITests: XCTestCase {
     /// skips that failing step entirely; applied to the menu item too
     /// since it's built the same way.
     ///
-    /// A second, later real failure (caught via the same `.xcresult`
-    /// forensics: the captured post-tap hierarchy showed the base New Tab
-    /// page, not the sheet the tapped item should have opened) traced to
-    /// the menu itself genuinely outgrowing one screen's height — 18 real
-    /// items by Phase 13 — so an item near the end exists in the
-    /// accessibility tree (passing `waitForExistence`) but isn't actually
-    /// on screen yet, and a coordinate computed from its current,
-    /// off-screen frame taps the wrong spot. `isHittable` (true only when
-    /// an element is both visible and interactable) plus a bounded
-    /// swipe-up loop scrolls the open menu just enough to bring it
-    /// genuinely on-screen first — a no-op for items already near the top.
+    /// A later, genuinely confusing CI failure here (the captured post-tap
+    /// hierarchy showed the base New Tab page, not the sheet the tapped
+    /// item should have opened) was misdiagnosed once as "the menu has
+    /// outgrown one screen's height" and this helper grew an `isHittable`
+    /// wait plus a bounded swipe-up loop to compensate. That fix was
+    /// itself wrong: `isHittable` can throw "Activation point invalid" on
+    /// a perfectly reachable item (confirmed by a different, previously
+    /// rock-solid test failing on it in CI), making the helper *less*
+    /// reliable than the plain coordinate tap it replaced. The real
+    /// Tutor-screen bug turned out to be unrelated to this helper
+    /// entirely — a suggestion-chip tap being silently swallowed by its
+    /// own enclosing `ScrollView` — so this stays the plain
+    /// wait-then-coordinate-tap it always was.
     private func openMenu(_ app: XCUIApplication, item identifier: String) {
         let menuButton = app.buttons["moreMenuButton"]
         XCTAssertTrue(menuButton.waitForExistence(timeout: 5))
@@ -1039,19 +1091,6 @@ final class VisionIOSUITests: XCTestCase {
 
         let menuItem = app.buttons[identifier]
         XCTAssertTrue(menuItem.waitForExistence(timeout: 5), "expected menu item '\(identifier)' to exist in the overflow menu")
-
-        // First, a brief real wait for the menu's own opening animation to
-        // settle (covers an item that's already on-screen but not yet
-        // hittable the instant it appears in the tree). If that alone
-        // doesn't resolve it, fall back to scrolling — genuinely needed
-        // for an item far enough down this now-18-item menu to start
-        // off-screen.
-        let hittableExpectation = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isHittable == true"), object: menuItem)
-        if XCTWaiter().wait(for: [hittableExpectation], timeout: 2) != .completed {
-            for _ in 0..<8 where !menuItem.isHittable {
-                app.swipeUp()
-            }
-        }
         menuItem.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
     }
 

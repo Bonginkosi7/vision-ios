@@ -38,6 +38,7 @@ struct MainBrowserView: View {
     @StateObject private var examStore = ExamStore()
     @StateObject private var tutorStore = TutorStore()
     @StateObject private var studyPlanStore = StudyPlanStore()
+    @StateObject private var chatSessionStore = ChatSessionStore()
     @ObservedObject private var focusManager = FocusManager.shared
 
     private var performanceCalculator: PerformanceCalculator {
@@ -66,6 +67,7 @@ struct MainBrowserView: View {
     @State private var showStudyPlan = false
     @State private var showPaperReview = false
     @State private var showHelp = false
+    @State private var showAskVision = false
     @State private var saveOfflineStatus: String?
 
     var body: some View {
@@ -164,6 +166,9 @@ struct MainBrowserView: View {
         }
         .sheet(isPresented: $showHelp) {
             HelpView()
+        }
+        .sheet(isPresented: $showAskVision) {
+            AskVisionView(chatSessionStore: chatSessionStore)
         }
     }
 
@@ -367,6 +372,11 @@ struct MainBrowserView: View {
                 Label("Paper Review", systemImage: "doc.text.magnifyingglass")
             }
             .accessibilityIdentifier("menu_paperReview")
+
+            Button(action: { showAskVision = true }) {
+                Label("Ask VISION", systemImage: "bubble.left.and.text.bubble.right")
+            }
+            .accessibilityIdentifier("menu_askVision")
 
             Button(action: { showSettings = true }) {
                 Label("Settings", systemImage: "gearshape")

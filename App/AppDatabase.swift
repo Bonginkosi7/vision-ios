@@ -299,6 +299,29 @@ enum AppDatabase {
             }
         }
 
+        migrator.registerMigration("v10_phase16") { db in
+            // Ask VISION chat — port of ChatSessionDbHelper.kt's two
+            // tables, minus offlineUrl/liveSourceUrl/memoryCandidate
+            // (no hidden-WKWebView fetch or Memory feature yet to
+            // populate them — see README's disclosed scope trim).
+            try db.create(table: "chatSession") { t in
+                t.primaryKey("id", .text)
+                t.column("title", .text).notNull()
+                t.column("createdAt", .datetime).notNull()
+                t.column("updatedAt", .datetime).notNull()
+            }
+            try db.create(table: "chatMessage") { t in
+                t.primaryKey("id", .text)
+                t.column("sessionId", .text).notNull()
+                t.column("role", .text).notNull()
+                t.column("content", .text).notNull()
+                t.column("category", .text)
+                t.column("providerName", .text)
+                t.column("createdAt", .datetime).notNull()
+            }
+            try db.create(index: "idx_chatMessage_sessionId", on: "chatMessage", columns: ["sessionId"])
+        }
+
         return migrator
     }
 }
