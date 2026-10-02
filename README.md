@@ -18,6 +18,36 @@ macOS runners, triggered on every push to `main`). The acceptance bar for
 every phase is the same: not "it compiles," but launched, driven in a real
 booted Simulator, and behaviorally confirmed by `UITests/VisionIOSUITests.swift`.
 
+**Phase 17** (VISION Ready) is done — a genuinely multi-push real bug
+hunt, every failure a different kind. Run
+[`36994419107`](https://github.com/Bonginkosi7/vision-ios/actions/runs/36994419107)
+failed on the exact same accessibility-identifier merging quirk Phase 6
+found by its own mirror path: `.accessibilityIdentifier("visionReadyPercent")`
+applied to an `HStack` wrapping two `Text` views made SwiftUI propagate
+that one identifier onto *both* child `StaticText`s, so reading `.label`
+on it threw a real "multiple matching elements" error — confirmed via
+the actual captured accessibility-tree dump in the failure, not a guess.
+Fixed by moving the identifier onto the one `Text` actually asserted on.
+The next run,
+[`36998118327`](https://github.com/Bonginkosi7/vision-ios/actions/runs/36998118327),
+failed on the new UI test's own first assertion — "a fresh install has
+no bookmarks yet" was false, because this whole UI test suite shares one
+real app install/database for the entire run, and
+`test_bookmarkingAPage_survivesAppTermination` (alphabetically first)
+had already bookmarked `example.com` and left it bookmarked permanently
+by the time this test ran alphabetically late — a real, previously-
+undocumented fact about how this suite's state actually works. Rewritten
+to use `example.org` (untouched by any other test) and assert only
+order-independent real facts. The next run,
+[`37001961452`](https://github.com/Bonginkosi7/vision-ios/actions/runs/37001961452),
+failed because `OfflineLibraryView` has no "Done" toolbar button of its
+own — it only ever dismisses by tapping a row — so the test's "Done" tap
+actually targeted VisionReadyView's own button, still covered by the
+presented sheet, and the real AX layer refused to scroll to it. Fixed by
+tapping the saved row to dismiss, the view's own real behavior. Run
+[`37006001658`](https://github.com/Bonginkosi7/vision-ios/actions/runs/37006001658)
+then passed fully green: all 25 UI tests, all 133 VisionCore unit tests.
+
 **Phase 16** (Ask VISION chat) is done — run
 [`36985916405`](https://github.com/Bonginkosi7/vision-ios/actions/runs/36985916405)
 passed fully green on the first attempt after a genuinely hard real bug
@@ -189,6 +219,62 @@ tests), no fix-and-repush cycle needed that time — applying Phase 1's own
 lessons (real `@ObservedObject` reactivity, real keyboard taps, `List`-based
 rows instead of a merge-prone VStack-of-Buttons) preemptively instead of
 rediscovering them.
+
+## Phase 17: VISION Ready
+
+A port of `VisionReadyActivity.kt`/`ReadinessLogic.kt`, itself the
+Android counterpart of desktop's vision-ready page
+(`src/renderer/vision-ready/vision-ready.ts`): a real "is my offline
+setup actually ready" screen.
+
+- **`Sources/VisionCore/ReadinessLogic.swift`** (pure): `compute(bookmarkUrls:offlineUrls:offlineCategories:) -> ReadinessResult`
+  — percent of bookmarks also saved offline, `nil` (not `0`) when there
+  are no bookmarks yet, plus a per-category breakdown. Direct port of
+  Android's own `ReadinessLogic.kt`, reshaped to take plain `[String]`s
+  instead of `Bookmark`/`OfflineItem` so this file stays free of any
+  App-layer/GRDB dependency. 23 real test cases (17 from a standalone
+  `swiftc` harness during development, 6 real `XCTest` cases in
+  `Tests/VisionCoreTests/ReadinessLogicTests.swift`, all passing in CI).
+- **`App/ConnectivityMonitor.swift`** (new): real, current network
+  reachability via `NWPathMonitor` — the iOS counterpart of Android's
+  `ConnectivityUtil.kt`. Published/observed rather than a one-shot call,
+  since iOS has no synchronous "is online right now" API the way
+  Android's `ConnectivityManager.getNetworkCapabilities` does.
+- **`App/AppSettings.swift`**: a real, adjustable offline storage limit
+  (200/500/1000/2000/5000 MB, default 500 — the exact same options as
+  Android's own spinner), backing the "used of N MB" stat on this
+  screen. Exposed as a real picker in `App/SettingsView.swift`.
+- **`App/VisionReadyView.swift`** (new): connectivity row, the real
+  Offline Readiness card (percent/progress bar, saved-vs-bookmarked and
+  storage-used-vs-limit stats, category breakdown, tapping either the
+  card or "Manage offline content" opens the real Offline Library), and
+  three honest cards below it.
+
+**Disclosed, deliberate difference from Android, not a missed port.**
+Android's own "Keeping Pages Up to Date" card has a real `Switch`
+because Android ships a real Smart Cache background-refresh worker
+(`BackgroundRefreshScheduler`) for it to control. iOS has never had that
+worker — disclosed as far back as the Phase 2 migration comment in
+`AppDatabase.swift` — so a switch here would control nothing real. This
+card instead states that honestly in its own words, the same way Sports
+(no live data provider configured, true on any platform) and Maps (not
+built on iOS yet) are already honestly disabled below it.
+
+New `menu_visionReady` entry in the overflow menu, same flat placement
+Android's own `MainActivity.kt` uses (right after Rewards, before
+Offline Library).
+
+### Phase 17 UI test
+
+`test_visionReadyShowsRealNumbersAfterBookmarkingAndSavingOffline` —
+bookmarks a real page (`example.org`, specifically chosen because no
+other test in this suite ever touches its bookmark/offline state),
+saves it offline, and confirms a real percent, real stats, and a real
+"general" category entry appear — never a fabricated number — then
+opens Offline Library from this screen and confirms the same real saved
+page is there. Doesn't assert an exact percent or a pristine starting
+state: see the real bug hunt in "Real, current status" above for why
+that's genuinely unsafe in this suite, not just over-caution.
 
 ## Phase 16: Ask VISION chat
 
@@ -1166,11 +1252,12 @@ comment.
 - `WebViewRepresentable.swift` — `UIViewRepresentable` wrapping one `WKWebView` per tab; real history recording + real `WKDownloadDelegate` handling
 - `BrowserTab.swift` — mirrors `Tab.kt` (id, title, url, isNewTab, isPrivate)
 - `TabManager.swift` — mirrors `MainActivity.kt`'s `tabs`/`activeTabIndex` + create/switch/close/navigate/openOfflineFile, delegates close-index math to `VisionCore.TabIndexing`
-- `AppDatabase.swift` — GRDB `DatabaseQueue` + migrator (`v1_bookmarks`, `v2_phase2`, `v3_phase6`, `v4_phase7`, `v5_phase8`, `v6_phase9`, `v7_phase10`, `v8_phase11`, `v9_phase13`, `v10_phase16`)
+- `AppDatabase.swift` — GRDB `DatabaseQueue` + migrator (`v1_bookmarks`, `v2_phase2`, `v3_phase6`, `v4_phase7`, `v5_phase8`, `v6_phase9`, `v7_phase10`, `v8_phase11`, `v9_phase13`, `v10_phase16`) — no new migration for Phase 17 (VISION Ready is a pure read-aggregate over existing `bookmark`/`offlineItem` rows, same reasoning as Phase 12's Performance)
 - `BookmarkStore.swift` / `HistoryStore.swift` / `DownloadStore.swift` / `OfflineStore.swift` — GRDB ports of the matching `*DbHelper.kt`
 - `OfflineSaver.swift` — real `createWebArchiveData` capture + file write
 - `KeychainStore.swift` / `AiSettings.swift` — real Keychain-backed AI key storage, port of `AiSettings.kt`
-- `AppSettings.swift` — `UserDefaults`/`@AppStorage`-backed theme + search engine, port of `VisionSettings.kt`'s Phase 3 slice
+- `AppSettings.swift` — `UserDefaults`/`@AppStorage`-backed theme + search engine (Phase 3) + offline storage limit (Phase 17), port of `VisionSettings.kt`'s matching slice
+- `ConnectivityMonitor.swift` — real `NWPathMonitor`-backed online/offline state, port of `ConnectivityUtil.kt`
 - `CloudAIProvider.swift` — real `URLSession` networking for the two cloud AI providers, port of `CloudAiProvider.kt`
 - `RewriteWriter.swift` — real OpenAI-then-Anthropic rewrite orchestration, port of `RewriteWriter.kt`
 - `FocusManager.swift` / `FocusStore.swift` / `FocusBlockedPage.swift` — real Focus Mode session timer, GRDB blocklist/session history, and the local blocked-page HTML, port of `FocusManager.kt`/`FocusDbHelper.kt`/`FocusBlockedPage.kt`
@@ -1190,6 +1277,7 @@ comment.
 - `PaperReviewer.swift` — the real AI call orchestration behind Paper Review
 - `HelpContent.swift` — real, static in-app documentation data
 - `ChatSessionStore.swift` / `ChatAI.swift` — real multi-session GRDB storage and the real free-text AI call loop behind Ask VISION chat
+- `VisionReadyView.swift` — real Offline Readiness card (reads `VisionCore.ReadinessLogic` over `BookmarkStore`/`OfflineStore`) plus honest disabled states for Keeping Pages Up to Date/Sports/Maps, port of `VisionReadyActivity.kt`
 - `NewTabView.swift` / `HistoryView.swift` / `DownloadsView.swift` / `OfflineLibraryView.swift` / `SettingsView.swift` / `RewriteView.swift` / `FocusView.swift` / `TasksView.swift` / `AdvisorView.swift` / `RewardsView.swift` / `MaterialsView.swift` / `FlashcardsView.swift` / `ExamsView.swift` / `CreateExamView.swift` / `GenerateExamView.swift` / `TakeExamView.swift` / `TutorView.swift` / `PerformanceView.swift` / `StudyPlanView.swift` / `PaperReviewView.swift` / `HelpView.swift` / `AskVisionView.swift` — real list/empty-state/settings/rewrite/focus/tasks/advisor/rewards/materials/flashcards/exams/tutor/performance/study-plan/paper-review/help/ask-vision screens
 - `DesignSystem.swift` — same component list and color tokens as `DesignSystem.kt`, ported to `@ViewBuilder` functions; drawable XML collapses into inline SwiftUI modifiers (disclosed simplification, noted in-file)
 
@@ -1202,14 +1290,20 @@ every run.
 
 ## Explicitly NOT built yet (disclosed scope trims, not oversights)
 
-Profile/credentials/offline-AI-model/memory/storage settings, on-device
-local model fallback, Android's separate "Study Material hub" (taxonomy
+Profile/credentials/offline-AI-model/memory settings, on-device local
+model fallback, Android's separate "Study Material hub" (taxonomy
 tagging, browse/search, offline-ready marking, folded-in spaced-
 repetition review — a distinct, bigger feature than My Materials, left
-for its own later phase), Redeem, and VISION Ready. Redeem specifically
-needs real Firebase project credentials and anonymous-auth
-infrastructure this repo doesn't have — see Phase 7's own writeup for
-why that's a disclosed trim rather than fabricated.
+for its own later phase), and Redeem. Redeem specifically needs real
+Firebase project credentials and anonymous-auth infrastructure this
+repo doesn't have — see Phase 7's own writeup for why that's a
+disclosed trim rather than fabricated.
+
+Within VISION Ready specifically: no real background-refresh worker
+exists to back a working "Keeping Pages Up to Date" toggle (Smart
+Cache — disclosed since the Phase 2 migration comment), no live sports
+data provider, and no offline maps — all three show as honest disabled
+states rather than fabricated ones. See Phase 17's own writeup.
 
 Within Ask VISION chat specifically: Android's voice input, chat
 export, date-grouped/searchable session history, and per-message
@@ -1222,11 +1316,12 @@ left for its own phase).
 
 ## Next steps
 
-Phase 16 (Ask VISION chat) is done, and with it, every education
-screen from the build plan's original "Phase 9" bundle except the
-remaining Study Material hub taxonomy. The real next slices still open
-are Redeem (blocked on real Firebase credentials this repo doesn't
-have) and VISION Ready — neither has been scoped yet. Confirm before
+Phase 17 (VISION Ready) is done. Every screen from the build plan's
+original roadmap is now built except Redeem (blocked on real Firebase
+project credentials and anonymous-auth infrastructure this repo
+doesn't have — not something to attempt without that) and the Study
+Material hub (a distinct, bigger taxonomy/browse/search/spaced-
+repetition feature than My Materials, not yet scoped). Confirm before
 starting either.
 
 **If local Xcode ever exists on this machine**: `xcodegen generate`, open
