@@ -128,7 +128,7 @@ final class VisionIOSUITests: XCTestCase {
         navigate(app: app, addressField: addressField, to: "example.com")
         assertAddressBarEventuallyShows(addressField, "https://example.com/", in: self)
 
-        openMenu(app, item: "menu_saveOffline")
+        openMenu(app, item: "menu_saveOffline", expectsSheet: false)
 
         let okButton = app.alerts["Save for Offline"].buttons["OK"]
         XCTAssertTrue(okButton.waitForExistence(timeout: 10), "expected a real save-confirmation alert")
@@ -155,7 +155,7 @@ final class VisionIOSUITests: XCTestCase {
         let app = XCUIApplication()
         app.launch()
 
-        openMenu(app, item: "menu_newPrivateTab")
+        openMenu(app, item: "menu_newPrivateTab", expectsSheet: false)
         XCTAssertTrue(app.staticTexts["privateIndicator"].waitForExistence(timeout: 5), "a new private tab should show the real Private indicator")
 
         let addressField = app.textFields["addressBarField"]
@@ -460,7 +460,7 @@ final class VisionIOSUITests: XCTestCase {
         navigate(app: app, addressField: addressField, to: "example.com")
         assertAddressBarEventuallyShows(addressField, "https://example.com/", in: self)
 
-        openMenu(app, item: "menu_saveOffline")
+        openMenu(app, item: "menu_saveOffline", expectsSheet: false)
 
         let okButton = app.alerts["Save for Offline"].buttons["OK"]
         XCTAssertTrue(okButton.waitForExistence(timeout: 10))
@@ -1081,38 +1081,59 @@ final class VisionIOSUITests: XCTestCase {
     /// rock-solid test failing on it in CI), making the helper *less*
     /// reliable than the plain coordinate tap it replaced.
     ///
-    /// The real root cause, confirmed twice now via this project's own
-    /// `.xcresult` forensics on two *different* menu items in two
-    /// different CI runs: a coordinate tap on a menu item can
+    /// The real root cause, confirmed via this project's own `.xcresult`
+    /// forensics across *three* different CI runs and different menu
+    /// items each time: a coordinate tap on a menu item can
     /// intermittently fail to register at all — the OS reports the tap
-    /// as having completed with no error, but the SwiftUI `Menu` never
-    /// actually dismisses and the item's own action never fires, leaving
-    /// the app sitting on the base screen. Not tied to any one item, its
-    /// position, or a `ScrollView` — a genuine, if rare, flake in the
-    /// tap itself. The fix is to verify and retry: a real tap on a menu
-    /// item always dismisses the whole popover, so if `menuItem` is still
-    /// around shortly after tapping it, the tap didn't register — tap it
-    /// again (re-querying fresh each time, since a missed tap can leave
-    /// the old reference stale) rather than failing outright.
-    private func openMenu(_ app: XCUIApplication, item identifier: String) {
-        let menuButton = app.buttons["moreMenuButton"]
-        XCTAssertTrue(menuButton.waitForExistence(timeout: 5))
-        menuButton.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
-
+    /// as having completed with no error, but the tapped button's own
+    /// action never fires, leaving the app sitting on the base screen.
+    /// Not tied to any one item, its position, or a `ScrollView` — a
+    /// genuine, if rare, flake in the tap itself. A first fix attempt
+    /// checked whether the *tapped item* had disappeared (reasoning that
+    /// a real tap always dismisses the popover) — wrong: a real captured
+    /// failure showed the popover dismissing, satisfying that check,
+    /// while the actual destination never opened, because the tap landed
+    /// in the popover's own dismiss-on-tap-outside scrim rather than on
+    /// the button itself.
+    ///
+    /// The reliable signal instead: every menu item except
+    /// "menu_newPrivateTab" (creates a tab in place, no modal) and
+    /// "menu_saveOffline" (a real `.alert`, not a `.sheet`) opens one of
+    /// MainBrowserView's own `.sheet(isPresented:)` screens, which cover
+    /// the *whole root view* — including `moreMenuButton` itself.
+    /// `moreMenuButton` becoming inaccessible only happens once a real
+    /// full-screen sheet is genuinely covering the root view, so that's
+    /// what's checked here, retrying the whole open-then-tap sequence
+    /// from the top (re-querying everything fresh, since a missed tap
+    /// can leave old references stale) when it doesn't. Pass
+    /// `expectsSheet: false` for the two call sites with no sheet to
+    /// check for.
+    private func openMenu(_ app: XCUIApplication, item identifier: String, expectsSheet: Bool = true) {
         for attempt in 1...3 {
+            let menuButton = app.buttons["moreMenuButton"]
+            guard menuButton.waitForExistence(timeout: 5) else {
+                XCTFail("expected the real overflow menu button to exist")
+                return
+            }
+            menuButton.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+
             let menuItem = app.buttons[identifier]
             guard menuItem.waitForExistence(timeout: 5) else {
-                if attempt == 1 {
-                    XCTFail("expected menu item '\(identifier)' to exist in the overflow menu")
-                }
+                XCTFail("expected menu item '\(identifier)' to exist in the overflow menu")
                 return
             }
             menuItem.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
 
-            let dismissedExpectation = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: menuItem)
-            if XCTWaiter().wait(for: [dismissedExpectation], timeout: 2) == .completed {
+            guard expectsSheet else { return }
+
+            let coveredExpectation = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: menuButton)
+            if XCTWaiter().wait(for: [coveredExpectation], timeout: 2) == .completed {
                 return
             }
+            // Tap didn't register — a real, intermittent flake confirmed
+            // via this project's own `.xcresult` forensics across two
+            // different CI runs and two different menu items. Retry the
+            // whole sequence from the top rather than failing outright.
         }
         XCTFail("menu item '\(identifier)' tap did not register after 3 attempts")
     }
