@@ -18,6 +18,23 @@ macOS runners, triggered on every push to `main`). The acceptance bar for
 every phase is the same: not "it compiles," but launched, driven in a real
 booted Simulator, and behaviorally confirmed by `UITests/VisionIOSUITests.swift`.
 
+**A real cross-source sweep** (comparing the overflow menu's real entry
+list against `MainActivity.kt`'s own `showOverflowMenu()`, item by
+item, rather than assuming everything already landed) found two real,
+previously-undisclosed gaps — and a stale code comment that had
+actually already flagged them months ago and was never revisited:
+`Autofill` (stays deferred — it depends on real credential storage this
+app doesn't have, a bigger, security-sensitive undertaking, not a quick
+fix) and a dedicated **Bookmarks screen** (`BookmarksActivity.kt`) —
+New Tab's own bookmarks row was never a substitute for Android's real
+standalone manage screen. Closed the second one: `BookmarksView.swift`
+mirrors `HistoryView.swift`'s established list/open/delete pattern
+exactly, since `BookmarkStore.swift` already had every real method this
+screen needed since Phase 1 — no new data-layer work required. Run
+[`37080415562`](https://github.com/Bonginkosi7/vision-ios/actions/runs/37080415562)
+passed fully green on the first attempt: all 28 UI tests, all 154
+VisionCore unit tests.
+
 **Phase 18** (Study Material hub) is done — the biggest single phase
 this project has shipped, and its own real bug hunt spanned five
 pushes across several genuinely different kinds of failure. Run
@@ -1371,6 +1388,7 @@ comment.
 - `ChatSessionStore.swift` / `ChatAI.swift` — real multi-session GRDB storage and the real free-text AI call loop behind Ask VISION chat
 - `VisionReadyView.swift` — real Offline Readiness card (reads `VisionCore.ReadinessLogic` over `BookmarkStore`/`OfflineStore`) plus honest disabled states for Keeping Pages Up to Date/Sports/Maps, port of `VisionReadyActivity.kt`
 - `StudyMaterialView.swift` — the real taxonomy browser/tagging/Review screen, port of `StudyMaterialActivity.kt`
+- `BookmarksView.swift` — the real dedicated manage-bookmarks screen, port of `BookmarksActivity.kt`, found as a gap during a cross-source sweep
 - `NewTabView.swift` / `HistoryView.swift` / `DownloadsView.swift` / `OfflineLibraryView.swift` / `SettingsView.swift` / `RewriteView.swift` / `FocusView.swift` / `TasksView.swift` / `AdvisorView.swift` / `RewardsView.swift` / `MaterialsView.swift` / `FlashcardsView.swift` / `ExamsView.swift` / `CreateExamView.swift` / `GenerateExamView.swift` / `TakeExamView.swift` / `TutorView.swift` / `PerformanceView.swift` / `StudyPlanView.swift` / `PaperReviewView.swift` / `HelpView.swift` / `AskVisionView.swift` — real list/empty-state/settings/rewrite/focus/tasks/advisor/rewards/materials/flashcards/exams/tutor/performance/study-plan/paper-review/help/ask-vision screens
 - `DesignSystem.swift` — same component list and color tokens as `DesignSystem.kt`, ported to `@ViewBuilder` functions; drawable XML collapses into inline SwiftUI modifiers (disclosed simplification, noted in-file)
 
@@ -1389,6 +1407,16 @@ project credentials and anonymous-auth infrastructure this repo
 doesn't have — see Phase 7's own writeup for why that's a disclosed
 trim rather than fabricated.
 
+**Autofill** (the overflow menu's `action_autofill`, filling a saved
+login into the active tab's form) isn't ported — it depends entirely
+on real credential storage (`CredentialDbHelper.kt`/`CredentialCrypto.kt`
+on Android), which falls under the "credentials" deferral above. Found
+as a genuine gap during a cross-source sweep against Android's own
+`MainActivity.kt`; building it for real means storing actual user
+passwords, a bigger, security-sensitive undertaking than a quick fix,
+so it's named here explicitly rather than left silently bundled into
+the vaguer "credentials" line.
+
 Within VISION Ready specifically: no real background-refresh worker
 exists to back a working "Keeping Pages Up to Date" toggle (Smart
 Cache — disclosed since the Phase 2 migration comment), no live sports
@@ -1406,12 +1434,15 @@ left for its own phase).
 
 ## Next steps
 
-Phase 18 (Study Material hub) is done. Every screen from the build
-plan's original roadmap is now built except Redeem, which stays hard-
-blocked on real Firebase project credentials and anonymous-auth
-infrastructure this repo doesn't have — not something to attempt
-without that. Confirm before starting it (or decide the port is
-otherwise complete).
+Phase 18 (Study Material hub) is done, and a real cross-source sweep
+against `MainActivity.kt`'s own menu closed the one gap worth closing
+right now (the dedicated Bookmarks screen). Every screen from the
+build plan's original roadmap — plus everything real the overflow menu
+itself points to — is now built except Redeem (hard-blocked on real
+Firebase project credentials and anonymous-auth infrastructure this
+repo doesn't have) and Autofill (needs real credential storage, a
+bigger, security-sensitive undertaking). Confirm before starting
+either, or decide the port is otherwise complete.
 
 **If local Xcode ever exists on this machine**: `xcodegen generate`, open
 `VisionIOS.xcodeproj`, and everything here still works locally too — CI
