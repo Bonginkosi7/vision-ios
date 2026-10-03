@@ -22,6 +22,18 @@ import VisionCore
 /// horizontal ScrollView), since the same overflow would only have
 /// recurred as later phases (Flashcards, Exams, Redeem, Chat, ...) kept
 /// adding more always-visible buttons.
+/// Carries Ask VISION's real, order-independent-of-presentation state
+/// into `.sheet(item:)` as one atomic value (query and
+/// presented-or-not together) instead of two separate `@State` vars
+/// that have to agree with each other — a real CI failure proved the
+/// two-var version genuinely raced: the sheet could present with its
+/// content closure still reading the old `initialQuery` value,
+/// landing on the real session list instead of auto-asking.
+private struct AskVisionRequest: Identifiable {
+    let id = UUID()
+    let query: String?
+}
+
 struct MainBrowserView: View {
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var tabManager = TabManager()
@@ -72,8 +84,7 @@ struct MainBrowserView: View {
     @State private var showStudyPlan = false
     @State private var showPaperReview = false
     @State private var showHelp = false
-    @State private var showAskVision = false
-    @State private var askVisionInitialQuery: String?
+    @State private var askVisionRequest: AskVisionRequest?
     @State private var showVisionReady = false
     @State private var saveOfflineStatus: String?
 
@@ -206,8 +217,8 @@ struct MainBrowserView: View {
         .sheet(isPresented: $showHelp) {
             HelpView()
         }
-        .sheet(isPresented: $showAskVision) {
-            AskVisionView(chatSessionStore: chatSessionStore, initialQuery: askVisionInitialQuery)
+        .sheet(item: $askVisionRequest) { request in
+            AskVisionView(chatSessionStore: chatSessionStore, initialQuery: request.query)
         }
         .sheet(isPresented: $showVisionReady) {
             VisionReadyView(bookmarkStore: bookmarkStore, offlineStore: offlineStore) { fileURL in
@@ -400,7 +411,7 @@ struct MainBrowserView: View {
             }
             .accessibilityIdentifier("menu_advisor")
 
-            Button(action: { askVisionInitialQuery = nil; showAskVision = true }) {
+            Button(action: { askVisionRequest = AskVisionRequest(query: nil) }) {
                 Label("Ask VISION", systemImage: "bubble.left.and.text.bubble.right")
             }
             .accessibilityIdentifier("menu_askVision")
@@ -500,7 +511,7 @@ struct MainBrowserView: View {
                 wellbeingStore: wellbeingStore,
                 rewardStore: rewardStore,
                 onNavigate: { destination in tabManager.navigateActiveTab(to: destination) },
-                onAskVision: { query in askVisionInitialQuery = query; showAskVision = true },
+                onAskVision: { query in askVisionRequest = AskVisionRequest(query: query) },
                 onOpenVisionReady: { showVisionReady = true }
             )
             .onReceive(tab.$url) { _ in syncAddressBar() }
