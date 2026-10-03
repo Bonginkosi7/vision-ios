@@ -30,6 +30,13 @@ targets:
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         MARKETING_VERSION: "0.1.0"
         CURRENT_PROJECT_VERSION: "1"
+        # No real app-icon artwork exists in this repo yet (a disclosed
+        # gap, not an oversight — fabricating placeholder icon art isn't
+        # this project's call to make). Adding Assets.xcassets (for the
+        # real New Tab background photo) made actool start requiring an
+        # "AppIcon" set to exist in it by default — this explicitly opts
+        # out of that requirement rather than ship an invented icon.
+        ASSETCATALOG_COMPILER_APPICON_NAME: ""
 
   # Real behavioral verification — launches the actual built app in a
   # booted simulator and drives it (navigate, bookmark, relaunch, confirm
