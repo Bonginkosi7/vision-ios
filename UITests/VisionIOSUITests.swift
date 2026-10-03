@@ -20,8 +20,8 @@ final class VisionIOSUITests: XCTestCase {
         app.launch()
 
         XCTAssertTrue(app.textFields["addressBarField"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["tabCountLabel"].waitForExistence(timeout: 5))
-        XCTAssertEqual(app.staticTexts["tabCountLabel"].label, "1")
+        XCTAssertTrue(app.buttons["tabCountLabel"].waitForExistence(timeout: 5), "the tab count is a real, tappable button into the tab switcher, not a plain label")
+        XCTAssertEqual(app.buttons["tabCountLabel"].label, "1")
     }
 
     /// Real end-to-end navigation: type a real address, submit it, and
@@ -1300,13 +1300,18 @@ final class VisionIOSUITests: XCTestCase {
         let app = XCUIApplication()
         app.launch()
 
+        // This whole UI test suite shares one real app install/database
+        // for the entire run (confirmed the hard way earlier — see
+        // VisionReadyView's own test), so by the time this test runs,
+        // other tests may have already created real bookmarks/points —
+        // these checks confirm each card renders a real, valid state
+        // either way, not a specific pristine-install value.
         XCTAssertTrue(app.staticTexts["newTabGreeting"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["advisorMessage"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["newTabReadinessEmpty"].waitForExistence(timeout: 5), "a fresh install has no real bookmarks yet, so Offline Readiness must show its real empty state")
+        let readinessShowsRealState = app.staticTexts["newTabReadinessEmpty"].waitForExistence(timeout: 5) || app.staticTexts["newTabReadinessPercent"].waitForExistence(timeout: 5)
+        XCTAssertTrue(readinessShowsRealState, "Offline Readiness should show a real empty or real percent state, never neither")
         XCTAssertTrue(app.staticTexts["newTabOverviewNote"].waitForExistence(timeout: 5))
-        let pointsBalance = app.staticTexts["newTabPointsBalance"]
-        XCTAssertTrue(pointsBalance.waitForExistence(timeout: 5))
-        XCTAssertEqual(pointsBalance.label, "0", "a fresh install has earned no real points yet")
+        XCTAssertTrue(app.staticTexts["newTabPointsBalance"].waitForExistence(timeout: 5))
 
         let askInput = app.textFields["newTabSearchInput"]
         XCTAssertTrue(askInput.waitForExistence(timeout: 5))
@@ -1365,6 +1370,92 @@ final class VisionIOSUITests: XCTestCase {
             attachDiagnostics(app: app, name: "reload-second-history-entry-missing")
         }
         XCTAssertGreaterThanOrEqual(entries.count, 2, "a real reload should record a real second History entry for the same URL, not just redraw the existing page")
+    }
+
+    /// Real Clear Browsing Data proof — found missing entirely during
+    /// the same cross-source sweep (Android's own Settings has a real
+    /// setUpPrivacy() button clearing History/cookies/WebStorage/cache;
+    /// iOS had no such control anywhere). Confirms the real History
+    /// wipe specifically — bookmarks are deliberately untouched by this
+    /// action on both platforms, so this doesn't collide with any other
+    /// test's own permanently-bookmarked pages.
+    func test_clearBrowsingDataRemovesRealHistory() {
+        let app = XCUIApplication()
+        app.launch()
+
+        let addressField = app.textFields["addressBarField"]
+        XCTAssertTrue(addressField.waitForExistence(timeout: 5))
+        navigate(app: app, addressField: addressField, to: "example.com")
+        assertAddressBarEventuallyShows(addressField, "https://example.com/", in: self)
+
+        openMenu(app, item: "menu_settings")
+        let clearButton = app.buttons["btnClearBrowsingData"]
+        XCTAssertTrue(clearButton.waitForExistence(timeout: 5))
+        clearButton.tap()
+
+        let confirmButton = app.buttons["Clear Browsing Data"]
+        XCTAssertTrue(confirmButton.waitForExistence(timeout: 5), "expected a real confirmation dialog, not an immediate destructive action")
+        confirmButton.tap()
+
+        let clearedExpectation = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "Cleared"), object: clearButton)
+        XCTAssertEqual(XCTWaiter().wait(for: [clearedExpectation], timeout: 5), .completed)
+        app.navigationBars.buttons["settingsDoneButton"].tap()
+
+        openMenu(app, item: "menu_history")
+        XCTAssertTrue(app.staticTexts["emptyHistoryState"].waitForExistence(timeout: 5), "a real clear should really empty History, not just hide the row just created")
+    }
+
+    /// Real Tab Switcher proof — the single most severe gap this whole
+    /// sweep found: `TabManager.switchToTab`/`closeTab` were already
+    /// real, fully working, already-tested methods, but nothing in the
+    /// UI ever called either one — the tab-count badge was a plain,
+    /// inert `Text`. Opening a second tab silently made the first one
+    /// permanently unreachable. Confirms both real behaviors: switching
+    /// back to an earlier tab actually re-shows its own real content,
+    /// and closing a tab actually removes it (not just hides a row).
+    func test_tabSwitcherSwitchesAndClosesRealTabs() {
+        let app = XCUIApplication()
+        app.launch()
+
+        XCTAssertTrue(app.buttons["tabCountLabel"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.buttons["tabCountLabel"].label, "1")
+
+        openMenu(app, item: "menu_newTab")
+        let addressField = app.textFields["addressBarField"]
+        XCTAssertTrue(app.textFields["newTabSearchInput"].waitForExistence(timeout: 5), "New Tab should create and switch to a real second, still-blank tab")
+        navigate(app: app, addressField: addressField, to: "example.com")
+        assertAddressBarEventuallyShows(addressField, "https://example.com/", in: self)
+
+        let tabCountButton = app.buttons["tabCountLabel"]
+        XCTAssertEqual(tabCountButton.label, "2", "a real second tab should be reflected in the real tab count")
+        tabCountButton.tap()
+
+        let newTabRow = app.buttons.element(matching: NSPredicate(format: "identifier BEGINSWITH 'tabRow_' AND label CONTAINS 'New Tab'"))
+        let exampleRow = app.buttons.element(matching: NSPredicate(format: "identifier BEGINSWITH 'tabRow_' AND label CONTAINS 'Example Domain'"))
+        if !newTabRow.waitForExistence(timeout: 5) || !exampleRow.waitForExistence(timeout: 5) {
+            attachDiagnostics(app: app, name: "tabswitcher-rows-missing")
+        }
+        XCTAssertTrue(newTabRow.exists, "expected the real first (still-blank) tab to show up in the real switcher")
+        XCTAssertTrue(exampleRow.exists, "expected the real second (example.com) tab to show up in the real switcher")
+
+        newTabRow.tap()
+        // Switching back to the real first tab should really re-show its
+        // own New Tab content, not just dismiss the switcher.
+        XCTAssertTrue(app.textFields["newTabSearchInput"].waitForExistence(timeout: 5), "switching tabs should really change the active tab's own real content")
+
+        tabCountButton.tap()
+        let exampleRowAgain = app.buttons.element(matching: NSPredicate(format: "identifier BEGINSWITH 'tabRow_' AND label CONTAINS 'Example Domain'"))
+        XCTAssertTrue(exampleRowAgain.waitForExistence(timeout: 5))
+        exampleRowAgain.swipeLeft()
+        let closeButton = app.buttons.element(matching: NSPredicate(format: "identifier BEGINSWITH 'btnCloseTab_'"))
+        XCTAssertTrue(closeButton.waitForExistence(timeout: 5))
+        closeButton.tap()
+
+        let exampleRowAfterClose = app.buttons.element(matching: NSPredicate(format: "identifier BEGINSWITH 'tabRow_' AND label CONTAINS 'Example Domain'"))
+        XCTAssertFalse(exampleRowAfterClose.exists, "closing a real tab should really remove it from the real switcher, not just hide a row")
+        app.navigationBars.buttons["Done"].tap()
+
+        XCTAssertEqual(app.buttons["tabCountLabel"].label, "1", "closing the real second tab should bring the real count back down")
     }
 
     // MARK: - Helpers

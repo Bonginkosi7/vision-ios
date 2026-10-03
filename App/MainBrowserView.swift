@@ -53,6 +53,7 @@ struct MainBrowserView: View {
     @State private var addressText: String = ""
     @State private var isBookmarked: Bool = false
     @State private var showHistory = false
+    @State private var showTabSwitcher = false
     @State private var showBookmarksList = false
     @State private var showDownloads = false
     @State private var showOfflineLibrary = false
@@ -134,6 +135,9 @@ struct MainBrowserView: View {
             seedMaterialsFixtureIfRequested()
         }
         .onChange(of: tabManager.activeTabIndex) { _ in syncAddressBar() }
+        .sheet(isPresented: $showTabSwitcher) {
+            TabSwitcherView(tabManager: tabManager)
+        }
         .sheet(isPresented: $showHistory) {
             HistoryView(historyStore: historyStore) { url in
                 tabManager.navigateActiveTab(to: url)
@@ -153,7 +157,7 @@ struct MainBrowserView: View {
             }
         }
         .sheet(isPresented: $showSettings) {
-            SettingsView()
+            SettingsView(historyStore: historyStore)
         }
         .sheet(isPresented: $showRewrite) {
             RewriteView()
@@ -282,11 +286,13 @@ struct MainBrowserView: View {
             .accessibilityIdentifier("bookmarkButton")
             .accessibilityLabel(isBookmarked ? "Remove bookmark" : "Add bookmark")
 
-            Text("\(tabManager.tabs.count)")
-                .font(.system(size: 12, weight: .bold))
-                .frame(width: 24, height: 24)
-                .overlay(RoundedRectangle(cornerRadius: 6).stroke(DesignSystem.borderCard, lineWidth: 1))
-                .accessibilityIdentifier("tabCountLabel")
+            Button(action: { showTabSwitcher = true }) {
+                Text("\(tabManager.tabs.count)")
+                    .font(.system(size: 12, weight: .bold))
+                    .frame(width: 24, height: 24)
+                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(DesignSystem.borderCard, lineWidth: 1))
+            }
+            .accessibilityIdentifier("tabCountLabel")
 
             if focusManager.activeSession != nil {
                 Text("Focus")

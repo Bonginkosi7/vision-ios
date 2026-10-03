@@ -1,11 +1,15 @@
 import SwiftUI
+import WebKit
 
 /// Real settings — port of the slice of SettingsActivity.kt this phase's
-/// scope actually needs: theme, search engine, offline storage limit, and
+/// scope actually needs: theme, search engine, offline storage limit,
 /// the two cloud AI key rows (save/clear/status, same real UX pattern as
-/// SettingsActivity.kt's setUpAiKeyRow). Profile, credentials, offline AI
-/// model, and memory are later-phase scope — see README.
+/// SettingsActivity.kt's setUpAiKeyRow), and real Clear Browsing Data
+/// (found missing during a cross-source sweep — port of setUpPrivacy()).
+/// Profile, credentials, offline AI model, and memory are later-phase
+/// scope — see README.
 struct SettingsView: View {
+    @ObservedObject var historyStore: HistoryStore
     @Environment(\.dismiss) private var dismiss
 
     @AppStorage(AppSettings.themeKey) private var themeRaw: String = AppSettings.Theme.system.rawValue
@@ -16,6 +20,8 @@ struct SettingsView: View {
     @State private var openAiInput: String = ""
     @State private var anthropicConfigured: Bool = false
     @State private var openAiConfigured: Bool = false
+    @State private var clearedBrowsingData = false
+    @State private var showClearConfirm = false
 
     var body: some View {
         NavigationStack {
@@ -48,6 +54,13 @@ struct SettingsView: View {
                     }
                     .pickerStyle(.menu)
                     .accessibilityIdentifier("offlineStorageLimitPicker")
+                }
+
+                Section("Privacy") {
+                    Button(clearedBrowsingData ? "Cleared" : "Clear Browsing Data", role: .destructive) {
+                        showClearConfirm = true
+                    }
+                    .accessibilityIdentifier("btnClearBrowsingData")
                 }
 
                 Section {
@@ -99,6 +112,10 @@ struct SettingsView: View {
                         .accessibilityIdentifier("settingsDoneButton")
                 }
             }
+            .confirmationDialog("Clear all browsing data? This removes History, cookies, and cached site data.", isPresented: $showClearConfirm, titleVisibility: .visible) {
+                Button("Clear Browsing Data", role: .destructive, action: clearBrowsingData)
+                Button("Cancel", role: .cancel) {}
+            }
         }
         .onAppear(perform: refreshKeyStatus)
     }
@@ -139,6 +156,23 @@ struct SettingsView: View {
         formatter.countStyle = .file
         return formatter
     }()
+
+    /// Real clear — History, cookies, and all real `WKWebsiteDataStore`
+    /// site data (storage/cache), the iOS counterpart of Android's own
+    /// `historyDb.clear()` + `CookieManager`/`WebStorage`/`clearCache`
+    /// combination. The real per-tab `WKWebView`s stay open with their
+    /// in-memory page already loaded — same real limitation Android's
+    /// own cache clear has (a live WebView keeps serving what's already
+    /// rendered until its next real navigation).
+    private func clearBrowsingData() {
+        try? historyStore.clear()
+        WKWebsiteDataStore.default().removeData(
+            ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(),
+            modifiedSince: Date(timeIntervalSince1970: 0)
+        ) {
+            clearedBrowsingData = true
+        }
+    }
 
     private func refreshKeyStatus() {
         anthropicConfigured = AiSettings.getAnthropicKey() != nil
