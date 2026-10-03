@@ -18,6 +18,69 @@ macOS runners, triggered on every push to `main`). The acceptance bar for
 every phase is the same: not "it compiles," but launched, driven in a real
 booted Simulator, and behaviorally confirmed by `UITests/VisionIOSUITests.swift`.
 
+**A deep cross-source design sweep of "the home browser" specifically**
+(`activity_main.xml`/`NewTabController.kt` vs. `MainBrowserView.swift`/
+`NewTabView.swift`, line by line) found the real gaps the earlier menu-
+level sweep couldn't see, and closing them took six pushes — three real
+app bugs CI caught, each a genuinely different kind, on top of the real
+features themselves:
+
+- **New Tab had stayed at its original Phase 1 cut** (bookmarks row
+  only) ever since, even though two separate doc comments elsewhere in
+  this codebase already said the real widget cards belonged here "in a
+  later phase" that never arrived. Added the real greeting, the real
+  "Ask VISION" box (`NewTabController.kt`'s own `submitAsk()` split — a
+  direct URL navigates, everything else auto-asks a real new session,
+  port of `ChatActivity`'s `EXTRA_INITIAL_QUERY`), and the VISION
+  Advisor/Offline Readiness/Today's Overview/VISION Points cards, each
+  reusing real logic/stores this app already had and had already tested
+  elsewhere.
+- **The toolbar had no Reload button and no real page-load progress
+  indicator** at all — both added (the latter via real KVO observation
+  of `WKWebView`'s own `estimatedProgress`/`isLoading`).
+- **Private Browsing had no equivalent of Android's `FLAG_SECURE`** — iOS
+  has no API to block an in-app screenshot the way that flag does (a
+  genuine, disclosed platform gap), but the achievable half (hiding
+  real content before the OS captures its own app-switcher snapshot) is
+  now covered.
+- **The single most severe gap this whole project has found**:
+  `TabManager.switchToTab`/`closeTab` were already real, fully working,
+  already-tested methods — the pure index math behind `closeTab` has
+  its own `TabIndexing` test suite — but nothing in the UI layer ever
+  called either one. The tab-count badge was a plain, inert `Text`, so
+  opening a second tab silently made the first permanently unreachable
+  through any real UI: a core browser primitive, not just a cosmetic
+  gap. New `TabSwitcherView.swift` (port of `showTabsDialog()`) makes
+  the badge real.
+- **Settings had no Clear Browsing Data control at all** (Android's own
+  `setUpPrivacy()` clears History/cookies/WebStorage/cache) — added.
+
+Three real bugs, found and fixed via CI, not guessed: (1) the Ask
+VISION box's submit button registered a successful tap at the OS level
+but its SwiftUI action never fired — root cause was the box living
+inside the same `ScrollView` as the widget cards, so the keyboard's own
+scroll-into-view adjustment on focus could shift the button out from
+under an already-computed tap coordinate (the same real "tap succeeds,
+the target never receives it" class of bug Phase 11's Tutor screen hit
+once before for a different reason) — fixed by pinning the box outside
+the `ScrollView`, which also matches `NewTabController.kt`'s own real
+fixed-position search row more accurately than the original port did.
+(2) Even pinned, the box still failed — the real captured accessibility
+hierarchy proved the sheet opened but landed on the session list
+instead of auto-asking: two separate `@State` vars (which query, and
+whether to present) were genuinely racing. Fixed by carrying both as
+one atomic value through `.sheet(item:)` instead of `.sheet(isPresented:)`,
+the same pattern already proven reliable elsewhere in this codebase.
+(3) The Clear Browsing Data confirmation dialog's button shared its
+exact label with its own trigger button, a real "multiple matching
+elements" ambiguity — checking Android's actual `strings.xml` showed
+the real source uses different text for each ("Clear data" vs. "Clear
+browsing data"), which my first port had collapsed into one string.
+Run
+[`37099888642`](https://github.com/Bonginkosi7/vision-ios/actions/runs/37099888642)
+passed fully green after one re-run of an unrelated, already-documented
+Focus Mode flake: 32 UI tests, 154 VisionCore unit tests.
+
 **A real cross-source sweep** (comparing the overflow menu's real entry
 list against `MainActivity.kt`'s own `showOverflowMenu()`, item by
 item, rather than assuming everything already landed) found two real,
@@ -1356,9 +1419,9 @@ comment.
 
 **`App/`** (SwiftUI + UIKit + WebKit + GRDB, real iOS target):
 - `VisionIOSApp.swift` — `@main` entry point
-- `MainBrowserView.swift` — one toolbar row (back/forward/address bar/bookmark/tab count) plus a real overflow `Menu` for every other action, with the 8 education screens under a real nested "Education" submenu — matching `MainActivity.kt`'s own `showOverflowMenu()` architecture exactly (both the original single-popup shape from Phase 7, and its own later Education/Settings accordion restructuring once that popup grew too large, see Phase 16's bug writeup for why iOS hit the same wall and matched the same real fix); hosts the active tab via `ActiveTabContent`
-- `WebViewRepresentable.swift` — `UIViewRepresentable` wrapping one `WKWebView` per tab; real history recording + real `WKDownloadDelegate` handling
-- `BrowserTab.swift` — mirrors `Tab.kt` (id, title, url, isNewTab, isPrivate)
+- `MainBrowserView.swift` — one toolbar row (back/forward/**reload**/address bar/bookmark/**real tappable** tab count) plus a real overflow `Menu` for every other action, with the 8 education screens under a real nested "Education" submenu — matching `MainActivity.kt`'s own `showOverflowMenu()` architecture exactly (both the original single-popup shape from Phase 7, and its own later Education/Settings accordion restructuring once that popup grew too large, see Phase 16's bug writeup for why iOS hit the same wall and matched the same real fix); hosts the active tab via `ActiveTabContent`; a real overlay hides content the instant the app backgrounds during an active private tab, the achievable half of Android's `FLAG_SECURE` (iOS has no API to block an in-app screenshot the way that flag does)
+- `WebViewRepresentable.swift` — `UIViewRepresentable` wrapping one `WKWebView` per tab; real history recording, real `WKDownloadDelegate` handling, real KVO observation of `estimatedProgress`/`isLoading` driving the toolbar's real page-load progress bar
+- `BrowserTab.swift` — mirrors `Tab.kt` (id, title, url, isNewTab, isPrivate, estimatedProgress, isLoading)
 - `TabManager.swift` — mirrors `MainActivity.kt`'s `tabs`/`activeTabIndex` + create/switch/close/navigate/openOfflineFile, delegates close-index math to `VisionCore.TabIndexing`
 - `AppDatabase.swift` — GRDB `DatabaseQueue` + migrator (`v1_bookmarks`, `v2_phase2`, `v3_phase6`, `v4_phase7`, `v5_phase8`, `v6_phase9`, `v7_phase10`, `v8_phase11`, `v9_phase13`, `v10_phase16`, `v11_phase18`) — no new migration for Phase 17 (VISION Ready is a pure read-aggregate over existing `bookmark`/`offlineItem` rows, same reasoning as Phase 12's Performance)
 - `BookmarkStore.swift` / `HistoryStore.swift` / `DownloadStore.swift` / `OfflineStore.swift` — GRDB ports of the matching `*DbHelper.kt`; `OfflineStore` also has the real per-item category reassignment (Phase 18)
@@ -1389,7 +1452,9 @@ comment.
 - `VisionReadyView.swift` — real Offline Readiness card (reads `VisionCore.ReadinessLogic` over `BookmarkStore`/`OfflineStore`) plus honest disabled states for Keeping Pages Up to Date/Sports/Maps, port of `VisionReadyActivity.kt`
 - `StudyMaterialView.swift` — the real taxonomy browser/tagging/Review screen, port of `StudyMaterialActivity.kt`
 - `BookmarksView.swift` — the real dedicated manage-bookmarks screen, port of `BookmarksActivity.kt`, found as a gap during a cross-source sweep
-- `NewTabView.swift` / `HistoryView.swift` / `DownloadsView.swift` / `OfflineLibraryView.swift` / `SettingsView.swift` / `RewriteView.swift` / `FocusView.swift` / `TasksView.swift` / `AdvisorView.swift` / `RewardsView.swift` / `MaterialsView.swift` / `FlashcardsView.swift` / `ExamsView.swift` / `CreateExamView.swift` / `GenerateExamView.swift` / `TakeExamView.swift` / `TutorView.swift` / `PerformanceView.swift` / `StudyPlanView.swift` / `PaperReviewView.swift` / `HelpView.swift` / `AskVisionView.swift` — real list/empty-state/settings/rewrite/focus/tasks/advisor/rewards/materials/flashcards/exams/tutor/performance/study-plan/paper-review/help/ask-vision screens
+- `TabSwitcherView.swift` — the real multi-tab switcher (list every open tab, switch, close, new tab), port of `MainActivity.kt`'s `showTabsDialog()`/`TabsAdapter` — the single most severe gap this project has found: `TabManager.switchToTab`/`closeTab` were already real and tested, but nothing in the UI ever called either one
+- `NewTabView.swift` — the real New Tab page: greeting, the real "Ask VISION" box (`NewTabController.kt`'s own URL-vs-chat split), and the VISION Advisor/Offline Readiness/Today's Overview/VISION Points widget cards, each reusing real logic/stores this app already had elsewhere — plus the real bookmarks row
+- `HistoryView.swift` / `DownloadsView.swift` / `OfflineLibraryView.swift` / `SettingsView.swift` (now with real Clear Browsing Data) / `RewriteView.swift` / `FocusView.swift` / `TasksView.swift` / `AdvisorView.swift` / `RewardsView.swift` / `MaterialsView.swift` / `FlashcardsView.swift` / `ExamsView.swift` / `CreateExamView.swift` / `GenerateExamView.swift` / `TakeExamView.swift` / `TutorView.swift` / `PerformanceView.swift` / `StudyPlanView.swift` / `PaperReviewView.swift` / `HelpView.swift` / `AskVisionView.swift` (now accepts a real auto-submitted initial query from New Tab) — real list/empty-state/settings/rewrite/focus/tasks/advisor/rewards/materials/flashcards/exams/tutor/performance/study-plan/paper-review/help/ask-vision screens
 - `DesignSystem.swift` — same component list and color tokens as `DesignSystem.kt`, ported to `@ViewBuilder` functions; drawable XML collapses into inline SwiftUI modifiers (disclosed simplification, noted in-file)
 
 **`UITests/`** — `VisionIOSUITests.swift`, the real behavioral verification described above.
@@ -1417,6 +1482,16 @@ passwords, a bigger, security-sensitive undertaking than a quick fix,
 so it's named here explicitly rather than left silently bundled into
 the vaguer "credentials" line.
 
+Within New Tab specifically: Android's real Weather pill (`WeatherLogic`,
+a real location-based API call) and BBC World News headline list
+(`NewsLogic`, a real feed fetch) aren't ported — each is a genuine new
+external-API integration (weather also needing a new location-permission
+flow) that deserves its own real-source-verified phase. Same real trim
+for the user-managed Shortcuts row (`ShortcutDbHelper` — a new data
+table with no existing iOS counterpart) and full onboarding — every
+destination either would point to is already one tap away from the
+toolbar/menu.
+
 Within VISION Ready specifically: no real background-refresh worker
 exists to back a working "Keeping Pages Up to Date" toggle (Smart
 Cache — disclosed since the Phase 2 migration comment), no live sports
@@ -1434,15 +1509,20 @@ left for its own phase).
 
 ## Next steps
 
-Phase 18 (Study Material hub) is done, and a real cross-source sweep
-against `MainActivity.kt`'s own menu closed the one gap worth closing
-right now (the dedicated Bookmarks screen). Every screen from the
-build plan's original roadmap — plus everything real the overflow menu
-itself points to — is now built except Redeem (hard-blocked on real
-Firebase project credentials and anonymous-auth infrastructure this
-repo doesn't have) and Autofill (needs real credential storage, a
-bigger, security-sensitive undertaking). Confirm before starting
-either, or decide the port is otherwise complete.
+Phase 18 (Study Material hub) is done, and two rounds of real cross-
+source sweeps have since closed every gap worth closing without new
+external dependencies: the dedicated Bookmarks screen, and — the
+bigger one — the home browser itself (New Tab's real widget cards, the
+Reload button, real page-load progress, the real Tab Switcher, Clear
+Browsing Data, and the achievable half of private-session screen
+protection). Every screen from the build plan's original roadmap, plus
+everything real the overflow menu and the home browser's own toolbar
+point to, is now built except Redeem (hard-blocked on real Firebase
+project credentials), Autofill (needs real credential storage, a
+bigger, security-sensitive undertaking), and New Tab's real Weather/
+News/Shortcuts (each a genuine new external-API or data-layer
+integration deserving its own phase). Confirm before starting any of
+these, or decide the port is otherwise complete.
 
 **If local Xcode ever exists on this machine**: `xcodegen generate`, open
 `VisionIOS.xcodeproj`, and everything here still works locally too — CI
