@@ -1324,6 +1324,11 @@ final class VisionIOSUITests: XCTestCase {
             attachDiagnostics(app: app, name: "newtab-askvision-reply-missing")
         }
         XCTAssertTrue(assistantMessage.label.contains("no cloud AI is configured"), "a non-URL query from New Tab should auto-ask a real new Ask VISION session, got: \(assistantMessage.label)")
+        // Auto-asking lands straight in the real conversation view (mode
+        // .session), which has no "Done" of its own — same real toolbar
+        // test_askingVisionWithNoCloudKeyConfigured already exercises:
+        // "Chats" backs out to the real session list first.
+        app.buttons["btnBackToChats"].tap()
         app.navigationBars.buttons["Done"].tap()
 
         // Back on the real New Tab page (the active tab never navigated,
