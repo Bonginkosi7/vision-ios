@@ -1393,7 +1393,7 @@ final class VisionIOSUITests: XCTestCase {
         XCTAssertTrue(clearButton.waitForExistence(timeout: 5))
         clearButton.tap()
 
-        let confirmButton = app.buttons["Clear Browsing Data"]
+        let confirmButton = app.buttons["Clear Data"]
         XCTAssertTrue(confirmButton.waitForExistence(timeout: 5), "expected a real confirmation dialog, not an immediate destructive action")
         confirmButton.tap()
 
@@ -1431,7 +1431,7 @@ final class VisionIOSUITests: XCTestCase {
         tabCountButton.tap()
 
         let newTabRow = app.buttons.element(matching: NSPredicate(format: "identifier BEGINSWITH 'tabRow_' AND label CONTAINS 'New Tab'"))
-        let exampleRow = app.buttons.element(matching: NSPredicate(format: "identifier BEGINSWITH 'tabRow_' AND label CONTAINS 'Example Domain'"))
+        let exampleRow = app.buttons.element(matching: NSPredicate(format: "identifier BEGINSWITH 'tabRow_' AND label CONTAINS 'example.com'"))
         if !newTabRow.waitForExistence(timeout: 5) || !exampleRow.waitForExistence(timeout: 5) {
             attachDiagnostics(app: app, name: "tabswitcher-rows-missing")
         }
@@ -1444,14 +1444,14 @@ final class VisionIOSUITests: XCTestCase {
         XCTAssertTrue(app.textFields["newTabSearchInput"].waitForExistence(timeout: 5), "switching tabs should really change the active tab's own real content")
 
         tabCountButton.tap()
-        let exampleRowAgain = app.buttons.element(matching: NSPredicate(format: "identifier BEGINSWITH 'tabRow_' AND label CONTAINS 'Example Domain'"))
+        let exampleRowAgain = app.buttons.element(matching: NSPredicate(format: "identifier BEGINSWITH 'tabRow_' AND label CONTAINS 'example.com'"))
         XCTAssertTrue(exampleRowAgain.waitForExistence(timeout: 5))
         exampleRowAgain.swipeLeft()
         let closeButton = app.buttons.element(matching: NSPredicate(format: "identifier BEGINSWITH 'btnCloseTab_'"))
         XCTAssertTrue(closeButton.waitForExistence(timeout: 5))
         closeButton.tap()
 
-        let exampleRowAfterClose = app.buttons.element(matching: NSPredicate(format: "identifier BEGINSWITH 'tabRow_' AND label CONTAINS 'Example Domain'"))
+        let exampleRowAfterClose = app.buttons.element(matching: NSPredicate(format: "identifier BEGINSWITH 'tabRow_' AND label CONTAINS 'example.com'"))
         XCTAssertFalse(exampleRowAfterClose.exists, "closing a real tab should really remove it from the real switcher, not just hide a row")
         app.navigationBars.buttons["Done"].tap()
 

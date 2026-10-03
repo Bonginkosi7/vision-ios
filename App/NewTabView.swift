@@ -59,19 +59,33 @@ struct NewTabView: View {
     @State private var latestReward: RewardEvent?
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                Text(greeting).font(.system(size: 20, weight: .bold)).foregroundStyle(.white)
-                    .accessibilityIdentifier("newTabGreeting")
+        VStack(spacing: 0) {
+            // Deliberately pinned outside the ScrollView below, matching
+            // NewTabController.kt's own fixed-position search row (it
+            // never scrolls away with the widget cards) — found the hard
+            // way via a real CI failure, not by design: with this box
+            // inside the ScrollView, the keyboard's own scroll-into-view
+            // adjustment on focus could shift the submit button out from
+            // under an already-computed tap coordinate, the same real
+            // "tap reports success, the real target never receives it"
+            // class of bug Phase 11's Tutor screen hit for a different
+            // reason (a horizontal ScrollView swallowing the gesture).
+            askVisionBox
+                .padding(.horizontal, 20).padding(.top, 16).padding(.bottom, 8)
 
-                askVisionBox
-                advisorCard
-                readinessCard
-                overviewCard
-                pointsCard
-                bookmarksSection
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text(greeting).font(.system(size: 20, weight: .bold)).foregroundStyle(.white)
+                        .accessibilityIdentifier("newTabGreeting")
+
+                    advisorCard
+                    readinessCard
+                    overviewCard
+                    pointsCard
+                    bookmarksSection
+                }
+                .padding(20)
             }
-            .padding(20)
         }
         .background(DesignSystem.bgCanvas.ignoresSafeArea())
         .onAppear(perform: refresh)

@@ -112,8 +112,8 @@ struct SettingsView: View {
                         .accessibilityIdentifier("settingsDoneButton")
                 }
             }
-            .confirmationDialog("Clear all browsing data? This removes History, cookies, and cached site data.", isPresented: $showClearConfirm, titleVisibility: .visible) {
-                Button("Clear Browsing Data", role: .destructive, action: clearBrowsingData)
+            .confirmationDialog("Clear all browsing history, cookies, and cached site data?", isPresented: $showClearConfirm, titleVisibility: .visible) {
+                Button("Clear Data", role: .destructive, action: clearBrowsingData)
                 Button("Cancel", role: .cancel) {}
             }
         }
