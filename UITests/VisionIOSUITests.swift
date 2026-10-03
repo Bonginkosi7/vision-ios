@@ -1284,6 +1284,89 @@ final class VisionIOSUITests: XCTestCase {
         app.navigationBars.buttons["Done"].tap()
     }
 
+    /// Real New Tab page proof — found as a major, previously-
+    /// undisclosed gap during a cross-source design sweep: this screen
+    /// had stayed at its original Phase 1 cut (bookmarks row only) even
+    /// though two separate doc comments elsewhere in this codebase
+    /// already said these real widgets belonged here "in a later phase"
+    /// that never arrived. Confirms the real honest-empty states for a
+    /// fresh install (no session/break/reward data yet), then the real
+    /// URL-vs-Ask-VISION routing split `NewTabController.kt`'s own
+    /// `submitAsk()` makes: a non-URL query opens a real new Ask VISION
+    /// session and auto-asks it (same real honest "not configured" reply
+    /// every other AI feature's own test already proves), while a real
+    /// URL navigates the active tab directly, same as the address bar.
+    func test_newTabPageShowsRealWidgetsAndSplitsUrlsFromAskVisionQueries() {
+        let app = XCUIApplication()
+        app.launch()
+
+        XCTAssertTrue(app.staticTexts["newTabGreeting"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["advisorMessage"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["newTabReadinessEmpty"].waitForExistence(timeout: 5), "a fresh install has no real bookmarks yet, so Offline Readiness must show its real empty state")
+        XCTAssertTrue(app.staticTexts["newTabOverviewNote"].waitForExistence(timeout: 5))
+        let pointsBalance = app.staticTexts["newTabPointsBalance"]
+        XCTAssertTrue(pointsBalance.waitForExistence(timeout: 5))
+        XCTAssertEqual(pointsBalance.label, "0", "a fresh install has earned no real points yet")
+
+        let askInput = app.textFields["newTabSearchInput"]
+        XCTAssertTrue(askInput.waitForExistence(timeout: 5))
+        askInput.tap()
+        askInput.typeText("why is the sky blue")
+        app.buttons["newTabAskSubmit"].tap()
+
+        let assistantMessage = app.staticTexts.element(matching: NSPredicate(format: "identifier BEGINSWITH 'chatAssistantMessage_'"))
+        if !assistantMessage.waitForExistence(timeout: 10) {
+            attachDiagnostics(app: app, name: "newtab-askvision-reply-missing")
+        }
+        XCTAssertTrue(assistantMessage.label.contains("no cloud AI is configured"), "a non-URL query from New Tab should auto-ask a real new Ask VISION session, got: \(assistantMessage.label)")
+        app.navigationBars.buttons["Done"].tap()
+
+        // Back on the real New Tab page (the active tab never navigated,
+        // only a real Ask VISION session was created alongside it).
+        XCTAssertTrue(app.textFields["newTabSearchInput"].waitForExistence(timeout: 5))
+
+        askInput.tap()
+        askInput.typeText("example.com")
+        app.buttons["newTabAskSubmit"].tap()
+
+        let addressField = app.textFields["addressBarField"]
+        assertAddressBarEventuallyShows(addressField, "https://example.com/", in: self)
+    }
+
+    /// Real Reload button proof — found missing entirely during the same
+    /// cross-source sweep (Android's own toolbar has a real, always-
+    /// visible `btnReload`; iOS had no way to reload a page at all).
+    /// `HistoryStore.record` inserts a fresh row on every real
+    /// `didFinish` callback with no dedup, so a real reload is
+    /// observable as a second real History entry for the same URL —
+    /// proof the button drove an actual new page load, not just a
+    /// cosmetic no-op.
+    func test_reloadButtonTriggersARealSecondPageLoad() {
+        let app = XCUIApplication()
+        app.launch()
+
+        let addressField = app.textFields["addressBarField"]
+        XCTAssertTrue(addressField.waitForExistence(timeout: 5))
+        navigate(app: app, addressField: addressField, to: "example.org")
+        assertAddressBarEventuallyShows(addressField, "https://example.org/", in: self)
+
+        let reloadButton = app.buttons["reloadButton"]
+        XCTAssertTrue(reloadButton.waitForExistence(timeout: 5))
+        reloadButton.tap()
+
+        openMenu(app, item: "menu_history")
+        // The address bar already read the right value before reload even
+        // started, so it can't signal when the reload's own real didFinish
+        // lands — poll History's own row count instead, which can only
+        // reach 2 once a real second page load has actually completed.
+        let entries = app.staticTexts.matching(NSPredicate(format: "label == %@", "https://example.org/"))
+        let sawSecondEntry = XCTNSPredicateExpectation(predicate: NSPredicate(format: "count >= 2"), object: entries)
+        if XCTWaiter().wait(for: [sawSecondEntry], timeout: 15) != .completed {
+            attachDiagnostics(app: app, name: "reload-second-history-entry-missing")
+        }
+        XCTAssertGreaterThanOrEqual(entries.count, 2, "a real reload should record a real second History entry for the same URL, not just redraw the existing page")
+    }
+
     // MARK: - Helpers
 
     /// Taps the real overflow ("⋮") menu button, then the named menu item

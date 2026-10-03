@@ -57,12 +57,27 @@ struct WebViewRepresentable: UIViewRepresentable {
         let downloadStore: DownloadStore
         let wellbeingStore: WellbeingStore
         private var recordsByDownload: [ObjectIdentifier: DownloadRecord] = [:]
+        /// Real page-load progress/loading-state observation — the iOS
+        /// counterpart of Android's `WebChromeClient.onProgressChanged`.
+        /// Kept alive for this Coordinator's own lifetime (itself retained
+        /// by the WKWebView's userContentController, see the class doc
+        /// comment above on why `tab` is held weakly here).
+        private var observations: [NSKeyValueObservation] = []
 
         init(tab: BrowserTab, historyStore: HistoryStore, downloadStore: DownloadStore, wellbeingStore: WellbeingStore) {
             self.tab = tab
             self.historyStore = historyStore
             self.downloadStore = downloadStore
             self.wellbeingStore = wellbeingStore
+            super.init()
+            observations = [
+                tab.webView.observe(\.estimatedProgress, options: [.new]) { [weak tab] webView, _ in
+                    tab?.estimatedProgress = webView.estimatedProgress
+                },
+                tab.webView.observe(\.isLoading, options: [.new]) { [weak tab] webView, _ in
+                    tab?.isLoading = webView.isLoading
+                },
+            ]
         }
 
         func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {

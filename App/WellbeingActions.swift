@@ -2,10 +2,10 @@ import Foundation
 import VisionCore
 
 /// The real "take a break" side effect, shared between AdvisorView and
-/// (in a later phase) the New Tab VISION Advisor widget so both trigger
-/// the exact same behavior rather than two copies that could drift.
-/// Direct port of WellbeingActions.kt, now including its real
-/// reward-eligibility hook (Phase 7 closes the trim Phase 6 disclosed).
+/// New Tab's own VISION Advisor widget so both trigger the exact same
+/// behavior rather than two copies that could drift. Direct port of
+/// WellbeingActions.kt, now including its real reward-eligibility hook
+/// (Phase 7 closes the trim Phase 6 disclosed).
 @MainActor
 enum WellbeingActions {
     private static let minSessionForRewardMs: Double = 10 * 60 * 1000

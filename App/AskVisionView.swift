@@ -30,6 +30,13 @@ private struct ChatBubble: Identifiable {
 /// "smallest real slice" scoping this project has used throughout.
 struct AskVisionView: View {
     @ObservedObject var chatSessionStore: ChatSessionStore
+    /// Real auto-submit on open — port of `ChatActivity`'s own
+    /// `EXTRA_INITIAL_QUERY` handling (`startNewChat(); ask(initialQuery)`),
+    /// reached from New Tab's own Ask VISION box when the typed text isn't
+    /// a direct URL. `nil` for every other real entry point into this
+    /// screen (the overflow menu, My Week's "Ask VISION" follow-ups, …),
+    /// which still open onto the real session list exactly as before.
+    var initialQuery: String? = nil
     @Environment(\.dismiss) private var dismiss
 
     @State private var mode: ChatMode = .sessionList
@@ -74,7 +81,16 @@ struct AskVisionView: View {
                 }
             }
         }
-        .onAppear(perform: loadSessions)
+        .onAppear {
+            if let initialQuery, !initialQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                mode = .newChat
+                bubbles = []
+                messageText = initialQuery
+                send()
+            } else {
+                loadSessions()
+            }
+        }
     }
 
     private var navigationTitleText: String {

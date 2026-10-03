@@ -20,6 +20,13 @@ final class BrowserTab: Identifiable, ObservableObject {
     /// True until this tab's first real navigation — while true, the
     /// shared New Tab view is shown instead of this (still blank) WKWebView.
     @Published var isNewTab: Bool = true
+    /// Real page-load progress — KVO-observed from the real WKWebView in
+    /// WebViewRepresentable's Coordinator, the iOS counterpart of
+    /// Android's `WebChromeClient.onProgressChanged` driving
+    /// `activity_main.xml`'s own toolbar progress bar. Found missing
+    /// entirely during a cross-source design sweep of the home browser.
+    @Published var estimatedProgress: Double = 0
+    @Published var isLoading: Bool = false
 
     init(id: UUID = UUID(), webView: WKWebView, isPrivate: Bool = false) {
         self.id = id

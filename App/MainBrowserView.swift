@@ -23,6 +23,7 @@ import VisionCore
 /// recurred as later phases (Flashcards, Exams, Redeem, Chat, ...) kept
 /// adding more always-visible buttons.
 struct MainBrowserView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @StateObject private var tabManager = TabManager()
     @StateObject private var bookmarkStore = BookmarkStore()
     @StateObject private var historyStore = HistoryStore()
@@ -71,6 +72,7 @@ struct MainBrowserView: View {
     @State private var showPaperReview = false
     @State private var showHelp = false
     @State private var showAskVision = false
+    @State private var askVisionInitialQuery: String?
     @State private var showVisionReady = false
     @State private var saveOfflineStatus: String?
 
@@ -81,6 +83,25 @@ struct MainBrowserView: View {
             content
         }
         .background(DesignSystem.bgCanvas.ignoresSafeArea())
+        .overlay {
+            // Real privacy for the real content, not just a label — the
+            // iOS counterpart of PrivateBrowsingActivity.kt's own
+            // `FLAG_SECURE` (blanks the system Recents thumbnail). iOS has
+            // no API to block an in-app screenshot the way Android's flag
+            // does — a genuine platform gap, not something this can close
+            // — but hiding real content the instant the app leaves the
+            // foreground closes the thumbnail half of it: covering a
+            // private tab's page before the OS captures its own app-
+            // switcher snapshot. Found missing entirely during a
+            // cross-source design sweep.
+            if scenePhase != .active && tabManager.activeTab?.isPrivate == true {
+                DesignSystem.bgCanvas.ignoresSafeArea()
+                    .overlay {
+                        Text("Private").font(.system(size: 15, weight: .bold)).foregroundStyle(DesignSystem.visionBlue)
+                    }
+                    .accessibilityIdentifier("privateSessionCover")
+            }
+        }
         .onAppear {
             if tabManager.tabs.isEmpty {
                 tabManager.createTab(url: nil)
@@ -182,7 +203,7 @@ struct MainBrowserView: View {
             HelpView()
         }
         .sheet(isPresented: $showAskVision) {
-            AskVisionView(chatSessionStore: chatSessionStore)
+            AskVisionView(chatSessionStore: chatSessionStore, initialQuery: askVisionInitialQuery)
         }
         .sheet(isPresented: $showVisionReady) {
             VisionReadyView(bookmarkStore: bookmarkStore, offlineStore: offlineStore) { fileURL in
@@ -241,6 +262,11 @@ struct MainBrowserView: View {
             }
             .disabled(!(tabManager.activeTab?.webView.canGoForward ?? false))
             .accessibilityIdentifier("forwardButton")
+
+            Button(action: reloadActiveTab) {
+                Image(systemName: "arrow.clockwise")
+            }
+            .accessibilityIdentifier("reloadButton")
 
             TextField("Search or enter address", text: $addressText, onCommit: navigateFromAddressBar)
                 .textFieldStyle(.plain)
@@ -368,7 +394,7 @@ struct MainBrowserView: View {
             }
             .accessibilityIdentifier("menu_advisor")
 
-            Button(action: { showAskVision = true }) {
+            Button(action: { askVisionInitialQuery = nil; showAskVision = true }) {
                 Label("Ask VISION", systemImage: "bubble.left.and.text.bubble.right")
             }
             .accessibilityIdentifier("menu_askVision")
@@ -462,12 +488,15 @@ struct MainBrowserView: View {
             ActiveTabContent(
                 tab: tab,
                 bookmarkStore: bookmarkStore,
+                offlineStore: offlineStore,
                 historyStore: historyStore,
                 downloadStore: downloadStore,
-                wellbeingStore: wellbeingStore
-            ) { destination in
-                tabManager.navigateActiveTab(to: destination)
-            }
+                wellbeingStore: wellbeingStore,
+                rewardStore: rewardStore,
+                onNavigate: { destination in tabManager.navigateActiveTab(to: destination) },
+                onAskVision: { query in askVisionInitialQuery = query; showAskVision = true },
+                onOpenVisionReady: { showVisionReady = true }
+            )
             .onReceive(tab.$url) { _ in syncAddressBar() }
             .onReceive(tab.$isNewTab) { _ in refreshBookmarkState() }
         } else {
@@ -490,6 +519,7 @@ struct MainBrowserView: View {
 
     private func goBack() { tabManager.activeTab?.webView.goBack() }
     private func goForward() { tabManager.activeTab?.webView.goForward() }
+    private func reloadActiveTab() { tabManager.activeTab?.webView.reload() }
 
     private func syncAddressBar() {
         addressText = tabManager.activeTab?.url ?? ""
@@ -543,16 +573,37 @@ struct MainBrowserView: View {
 private struct ActiveTabContent: View {
     @ObservedObject var tab: BrowserTab
     let bookmarkStore: BookmarkStore
+    let offlineStore: OfflineStore
     let historyStore: HistoryStore
     let downloadStore: DownloadStore
     let wellbeingStore: WellbeingStore
+    let rewardStore: RewardStore
     let onNavigate: (String) -> Void
+    let onAskVision: (String) -> Void
+    let onOpenVisionReady: () -> Void
 
     var body: some View {
         if tab.isNewTab {
-            NewTabView(bookmarkStore: bookmarkStore, onNavigate: onNavigate)
+            NewTabView(
+                bookmarkStore: bookmarkStore, offlineStore: offlineStore, wellbeingStore: wellbeingStore, rewardStore: rewardStore,
+                onNavigate: onNavigate, onAskVision: onAskVision, onOpenVisionReady: onOpenVisionReady
+            )
         } else {
-            WebViewRepresentable(tab: tab, historyStore: historyStore, downloadStore: downloadStore, wellbeingStore: wellbeingStore)
+            VStack(spacing: 0) {
+                // Real page-load progress — the iOS counterpart of
+                // activity_main.xml's own toolbar ProgressBar, bound to
+                // WebChromeClient.onProgressChanged on Android. Only
+                // takes up real layout space while a page is actually
+                // loading, matching Android's View.GONE when idle.
+                if tab.isLoading {
+                    ProgressView(value: tab.estimatedProgress, total: 1.0)
+                        .progressViewStyle(.linear)
+                        .tint(DesignSystem.visionPurple)
+                        .frame(height: 2)
+                        .accessibilityIdentifier("pageLoadProgress")
+                }
+                WebViewRepresentable(tab: tab, historyStore: historyStore, downloadStore: downloadStore, wellbeingStore: wellbeingStore)
+            }
         }
     }
 }
