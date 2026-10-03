@@ -71,6 +71,21 @@ struct BookmarksView: View {
                                 .accessibilityLabel("Delete")
                             }
                             .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 8))
+                            // A second real CI run found a second, different
+                            // half of the same accessibility-merging class of
+                            // bug fixed above: without this, SwiftUI's default
+                            // behavior re-merges a row's multiple interactive
+                            // children into one accessibility element for
+                            // VoiceOver — which swallowed the trailing delete
+                            // button's own identity entirely (app.buttons["Delete"]
+                            // stopped resolving to anything after the open
+                            // button gained its own identifier). Confirmed via
+                            // the real captured log: the delete button simply
+                            // never appeared after an otherwise-successful
+                            // swipe. `.contain` keeps every child independently
+                            // accessible — same fix New Tab's own bookmarks row
+                            // already needed for the identical reason.
+                            .accessibilityElement(children: .contain)
                         }
                     }
                     .listStyle(.plain)

@@ -1275,7 +1275,9 @@ final class VisionIOSUITests: XCTestCase {
         openMenu(app, item: "menu_bookmarks")
         let rowAgain = app.buttons["bookmarksListRow_https://example.net/"]
         XCTAssertTrue(rowAgain.waitForExistence(timeout: 5))
-        rowAgain.swipeLeft()
+        // Android has no swipe-to-delete on this screen (see BookmarksView's
+        // own doc comment) — the real delete affordance is this always-
+        // visible trailing button, no swipe needed to reveal it.
         let deleteButton = app.buttons["Delete"]
         XCTAssertTrue(deleteButton.waitForExistence(timeout: 5))
         deleteButton.tap()
