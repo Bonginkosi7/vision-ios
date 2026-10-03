@@ -1486,11 +1486,17 @@ Within New Tab specifically: Android's real Weather pill (`WeatherLogic`,
 a real location-based API call) and BBC World News headline list
 (`NewsLogic`, a real feed fetch) aren't ported — each is a genuine new
 external-API integration (weather also needing a new location-permission
-flow) that deserves its own real-source-verified phase. Same real trim
-for the user-managed Shortcuts row (`ShortcutDbHelper` — a new data
-table with no existing iOS counterpart) and full onboarding — every
-destination either would point to is already one tap away from the
-toolbar/menu.
+flow) that deserves its own real-source-verified phase. Full onboarding
+is trimmed too — every destination it would point to is already one tap
+away from the toolbar/menu.
+
+The photo background (the same real `bg_new_tab.jpg` asset Android
+bundles, not a different stock photo standing in for it) and the real
+user-managed Shortcuts row (`ShortcutStore`, a GRDB port of
+`ShortcutDbHelper.kt`, icons sourced from the same real `FaviconLoader`
+service already used elsewhere — add/navigate/long-press-to-remove, all
+real) were the two remaining disclosed trims here; both are now built
+and live-verified (`test_newTabShortcutsAddNavigateAndRemove`).
 
 Within VISION Ready specifically: no real background-refresh worker
 exists to back a working "Keeping Pages Up to Date" toggle (Smart
@@ -1518,11 +1524,29 @@ Browsing Data, and the achievable half of private-session screen
 protection). Every screen from the build plan's original roadmap, plus
 everything real the overflow menu and the home browser's own toolbar
 point to, is now built except Redeem (hard-blocked on real Firebase
-project credentials), Autofill (needs real credential storage, a
-bigger, security-sensitive undertaking), and New Tab's real Weather/
-News/Shortcuts (each a genuine new external-API or data-layer
-integration deserving its own phase). Confirm before starting any of
-these, or decide the port is otherwise complete.
+project credentials — though a presentational `RedeemView.swift` now
+exists, unwired, from the Android/iOS design-parity sweep below),
+Autofill (needs real credential storage, a bigger, security-sensitive
+undertaking), and New Tab's real Weather/News (each a genuine new
+external-API integration deserving its own phase). Confirm before
+starting any of these, or decide the port is otherwise complete.
+
+## Android/iOS design-parity sweep
+
+A full visual comparison against the real Android app, screen by screen
+(Home/New Tab, Downloads, History, Bookmarks, VISION Ready, Rewards,
+Settings, Chats), found that Android itself isn't visually consistent —
+some screens (New Tab, History, VISION Ready, Rewards) use the Phase-30
+dark `DesignSystem.kt` card system, while others (Downloads, Bookmarks,
+Settings, the Ask VISION chat bubbles) are older, legacy-styled,
+theme-adaptive AppCompat screens that never got migrated to it. Each iOS
+screen was matched to its own real Android counterpart's actual styling
+rather than one look imposed everywhere, with real before/after
+screenshots captured via a dedicated CI UI test
+(`test_captureAllScreensForDesignReview`) for verification — not
+guessed from reading layout XML alone. New Tab additionally gained its
+real photo background and user-managed Shortcuts row in the same pass
+(see above).
 
 **If local Xcode ever exists on this machine**: `xcodegen generate`, open
 `VisionIOS.xcodeproj`, and everything here still works locally too — CI

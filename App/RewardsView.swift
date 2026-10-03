@@ -56,26 +56,41 @@ struct RewardsView: View {
         DesignSystem.card {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
+                    // Plain colored label, matching levelBadgeText (vision_blue,
+                    // bold, no background) in activity_rewards.xml — distinct
+                    // from the filled levelTrendPill chip beside it.
                     Text("Level \(level)")
-                        .font(.system(size: 13, weight: .bold)).foregroundStyle(.white)
-                        .padding(.horizontal, 10).padding(.vertical, 4)
-                        .background(Capsule().fill(DesignSystem.brandGradient))
+                        .font(.system(size: 13, weight: .bold)).foregroundStyle(DesignSystem.visionBlue)
                         .accessibilityIdentifier("rewardsLevelBadge")
                     Spacer()
+                    // Android's levelTrendPill: "↗ Level X" chip with the
+                    // bg_chip_inactive drawable (bg_card fill + border_card stroke).
+                    Text("↗ Level \(level)")
+                        .font(.system(size: 12)).foregroundStyle(.white)
+                        .padding(.horizontal, 10).padding(.vertical, 4)
+                        .background(Capsule().fill(DesignSystem.bgCard))
+                        .overlay(Capsule().stroke(DesignSystem.borderCard, lineWidth: 1))
+                        .accessibilityIdentifier("rewardsLevelTrendPill")
                 }
                 Text(RewardRules.levelName(level))
-                    .font(.system(size: 20, weight: .bold)).foregroundStyle(.white)
+                    .font(.system(size: 22, weight: .bold)).foregroundStyle(.white)
                     .accessibilityIdentifier("rewardsLevelName")
-                Text("\(total) points")
+                Text("\(total) points total")
                     .font(.system(size: 14)).foregroundStyle(DesignSystem.textMuted2)
                     .accessibilityIdentifier("rewardsTotalPoints")
                 ProgressView(value: Double(pointsIntoLevel), total: Double(RewardRules.levelSize))
                     .tint(DesignSystem.visionPurple)
-                Text("\(pointsIntoLevel) / \(RewardRules.levelSize) to next level")
-                    .font(.system(size: 12)).foregroundStyle(DesignSystem.textMuted2)
-                Text("\(availableBalance) available to redeem")
-                    .font(.system(size: 12)).foregroundStyle(DesignSystem.textMuted2)
-                    .accessibilityIdentifier("rewardsAvailableBalance")
+                HStack {
+                    Text("\(pointsIntoLevel) / \(RewardRules.levelSize) to next level")
+                        .font(.system(size: 12)).foregroundStyle(DesignSystem.textMuted2)
+                    Spacer()
+                    // Android's availableBalance: status_success, bold — the one
+                    // visually "hot" number in this card, previously rendered here
+                    // as plain muted text stacked on its own line.
+                    Text("\(availableBalance) available to redeem")
+                        .font(.system(size: 12, weight: .bold)).foregroundStyle(DesignSystem.statusSuccess)
+                        .accessibilityIdentifier("rewardsAvailableBalance")
+                }
             }
         }
     }
@@ -118,7 +133,7 @@ struct RewardsView: View {
     @ViewBuilder
     private var recentEventsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            DesignSystem.sectionLabel("Recent activity")
+            DesignSystem.sectionLabel("Recent Activity")
             if recentEvents.isEmpty {
                 Text("Nothing earned yet — go save a page offline, complete a task, or finish a focus session.")
                     .font(.system(size: 13)).foregroundStyle(DesignSystem.textMuted2)

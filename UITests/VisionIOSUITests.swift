@@ -1572,6 +1572,117 @@ final class VisionIOSUITests: XCTestCase {
         )
     }
 
+    /// Real Shortcuts proof: the real default row renders on a fresh
+    /// launch, adding a new shortcut through the real "+" tile persists it
+    /// and it's immediately tappable — navigating to its real URL exactly
+    /// like the address bar would — and long-pressing a shortcut offers a
+    /// real "Remove" action that actually deletes it. Exercises
+    /// ShortcutStore's real GRDB add/remove/list round trip (and its
+    /// default-row seeding), not a hardcoded row — the SwiftUI
+    /// counterpart of NewTabController.kt's refreshShortcuts()/
+    /// buildShortcutTile()/showAddShortcutDialog().
+    func test_newTabShortcutsAddNavigateAndRemove() {
+        let app = XCUIApplication()
+        app.launch()
+
+        let shortcutsRow = app.scrollViews["newTabShortcutsRow"]
+        XCTAssertTrue(shortcutsRow.waitForExistence(timeout: 5), "expected the real shortcuts row to render on a fresh launch")
+
+        let addTile = app.buttons["newTabAddShortcut"]
+        XCTAssertTrue(addTile.waitForExistence(timeout: 5), "expected a real default-seeded shortcut row plus a trailing Add tile")
+        addTile.tap()
+
+        let titleField = app.alerts.textFields.element(boundBy: 0)
+        XCTAssertTrue(titleField.waitForExistence(timeout: 5), "expected the real Add Shortcut alert")
+        titleField.tap()
+        titleField.typeText("UI Test Shortcut")
+
+        let urlField = app.alerts.textFields.element(boundBy: 1)
+        urlField.tap()
+        urlField.typeText("example.com")
+
+        app.alerts.buttons["Add"].tap()
+
+        let newTile = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'newTabShortcut_' AND label == %@", "UI Test Shortcut")).firstMatch
+        if !newTile.waitForExistence(timeout: 5) {
+            attachDiagnostics(app: app, name: "shortcut-not-added")
+        }
+        XCTAssertTrue(newTile.exists, "expected the real newly-added shortcut to appear in the row")
+
+        newTile.tap()
+        let addressField = app.textFields["addressBarField"]
+        assertAddressBarEventuallyShows(addressField, "https://example.com/", in: self)
+
+        // A fresh New Tab to get back to the shortcuts row, then remove
+        // the real shortcut just added via its real long-press menu.
+        openMenu(app, item: "menu_newTab")
+        let tileAgain = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'newTabShortcut_' AND label == %@", "UI Test Shortcut")).firstMatch
+        XCTAssertTrue(tileAgain.waitForExistence(timeout: 5))
+        tileAgain.press(forDuration: 1.0)
+
+        let removeButton = app.buttons["Remove"]
+        if !removeButton.waitForExistence(timeout: 5) {
+            attachDiagnostics(app: app, name: "shortcut-remove-menu-not-found")
+        }
+        XCTAssertTrue(removeButton.exists, "expected a real Remove action from long-pressing a shortcut")
+        removeButton.tap()
+
+        XCTAssertFalse(tileAgain.waitForExistence(timeout: 3), "removing a shortcut should really delete it, not just hide the menu")
+    }
+
+    /// Captures one real, full-screen screenshot per major screen, purely
+    /// for a visual design-parity review against the Android app — not a
+    /// behavioral assertion. `attachDiagnostics`'s `.keepAlways` lifetime
+    /// means every one of these persists in the real .xcresult bundle
+    /// regardless of pass/fail, so this test only needs to actually reach
+    /// each screen once. Each screen is reached from its own fresh launch
+    /// rather than reusing one session and hunting for each screen's own
+    /// real dismiss affordance (a genuine mix across this app of "Done", a
+    /// leading back-chevron, and "Chats" — see the other tests above) —
+    /// simpler, and avoids coupling this test to those differences.
+    func test_captureAllScreensForDesignReview() {
+        captureScreen(name: "design-review-01-home") { app in
+            XCTAssertTrue(app.textFields["addressBarField"].waitForExistence(timeout: 5))
+        }
+        captureScreen(name: "design-review-02-downloads") { app in
+            self.openMenu(app, item: "menu_downloads")
+            XCTAssertTrue(app.navigationBars["Downloads"].waitForExistence(timeout: 5))
+        }
+        captureScreen(name: "design-review-03-history") { app in
+            self.openMenu(app, item: "menu_history")
+            XCTAssertTrue(app.navigationBars["History"].waitForExistence(timeout: 5))
+        }
+        captureScreen(name: "design-review-04-bookmarks") { app in
+            self.openMenu(app, item: "menu_bookmarks")
+            XCTAssertTrue(app.navigationBars["Bookmarks"].waitForExistence(timeout: 5))
+        }
+        captureScreen(name: "design-review-05-visionready") { app in
+            self.openMenu(app, item: "menu_visionReady")
+            XCTAssertTrue(app.navigationBars["VISION Ready"].waitForExistence(timeout: 5))
+        }
+        captureScreen(name: "design-review-06-rewards") { app in
+            self.openMenu(app, item: "menu_rewards")
+            XCTAssertTrue(app.navigationBars["Rewards"].waitForExistence(timeout: 5))
+        }
+        captureScreen(name: "design-review-07-settings") { app in
+            self.openMenu(app, item: "menu_settings")
+            XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))
+        }
+        captureScreen(name: "design-review-08-chats") { app in
+            self.openMenu(app, item: "menu_askVision")
+            XCTAssertTrue(app.staticTexts["askVisionEmptySessions"].waitForExistence(timeout: 5))
+        }
+    }
+
+    /// Launches a fresh app instance, runs `setup` to reach the screen to
+    /// capture, then attaches a real screenshot named for later retrieval.
+    private func captureScreen(name: String, setup: (XCUIApplication) -> Void) {
+        let app = XCUIApplication()
+        app.launch()
+        setup(app)
+        attachDiagnostics(app: app, name: name)
+    }
+
     /// Attaches a screenshot AND the full real accessibility tree
     /// (`app.debugDescription`, plain text — no image/video decoding needed
     /// to read it back afterward) to the test's failure output. A first CI

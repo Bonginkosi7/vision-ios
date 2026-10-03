@@ -26,7 +26,13 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Appearance") {
+                // Section header text matches Android's own bold labels verbatim
+                // (settings_theme = "Theme", settings_search_engine =
+                // "Default search engine", settings_offline_storage = "Offline
+                // storage", settings_ai_providers = "Cloud AI providers") —
+                // Android has no generic "Appearance"/"Search" supersection, so
+                // inventing those names here would be a real grouping mismatch.
+                Section("Theme") {
                     Picker("Theme", selection: $themeRaw) {
                         ForEach(AppSettings.Theme.allCases) { theme in
                             Text(theme.label).tag(theme.rawValue)
@@ -36,7 +42,7 @@ struct SettingsView: View {
                     .accessibilityIdentifier("themePicker")
                 }
 
-                Section("Search") {
+                Section("Default search engine") {
                     Picker("Search Engine", selection: $searchEngineRaw) {
                         ForEach(AppSettings.SearchEngine.allCases) { engine in
                             Text(engine.label).tag(engine.rawValue)
@@ -46,7 +52,7 @@ struct SettingsView: View {
                     .accessibilityIdentifier("searchEnginePicker")
                 }
 
-                Section("Offline Storage") {
+                Section {
                     Picker("Storage limit", selection: $offlineStorageLimitMb) {
                         ForEach(AppSettings.offlineStorageLimitOptionsMb, id: \.self) { mb in
                             Text(Self.byteCountFormatter.string(fromByteCount: Int64(mb) * 1024 * 1024)).tag(mb)
@@ -54,38 +60,34 @@ struct SettingsView: View {
                     }
                     .pickerStyle(.menu)
                     .accessibilityIdentifier("offlineStorageLimitPicker")
-                }
-
-                Section("Privacy") {
-                    Button(clearedBrowsingData ? "Cleared" : "Clear Browsing Data", role: .destructive) {
-                        showClearConfirm = true
-                    }
-                    .accessibilityIdentifier("btnClearBrowsingData")
+                } header: {
+                    Text("Offline storage")
+                } footer: {
+                    // Verbatim port of settings_storage_limit_desc.
+                    Text("A cap for your own reference. Nothing here pre-caches or auto-saves pages, so there's no lower-priority content to remove automatically when you're over — every saved page is an explicit save.")
                 }
 
                 Section {
-                    aiKeyRow(
-                        label: "Anthropic (Claude)",
-                        configured: anthropicConfigured,
-                        input: $anthropicInput,
-                        idPrefix: "anthropic",
-                        onSave: {
-                            AiSettings.setAnthropicKey(anthropicInput)
-                            anthropicInput = ""
-                            refreshKeyStatus()
-                        },
-                        onClear: {
-                            AiSettings.clearAnthropicKey()
-                            anthropicInput = ""
-                            refreshKeyStatus()
-                        }
-                    )
+                    // Android's own Clear browsing data button is a plain
+                    // OutlinedButton (brand-purple, never red) — no
+                    // statusDangerText anywhere on this screen — so this is a
+                    // plain default-role button, not SwiftUI's red .destructive.
+                    Button(clearedBrowsingData ? "Cleared" : "Clear Data") {
+                        showClearConfirm = true
+                    }
+                    .accessibilityIdentifier("btnClearBrowsingData")
                 } header: {
-                    Text("AI Providers")
+                    Text("Privacy")
                 } footer: {
-                    Text("Your own API key, used only to call that provider directly from this device. Stored securely in the iOS Keychain, never sent anywhere except the provider itself.")
+                    // Verbatim port of settings_clear_browsing_data_desc.
+                    Text("Deletes local history and site storage (cookies, cache) for this app.")
                 }
 
+                // Android groups both key rows under ONE "Cloud AI providers"
+                // header/description, OpenAI first then Anthropic (see
+                // SettingsActivity.onCreate and activity_settings.xml row
+                // order) — previously these were two separate sections, with
+                // Anthropic first and OpenAI carrying no header at all.
                 Section {
                     aiKeyRow(
                         label: "OpenAI (ChatGPT)",
@@ -103,6 +105,26 @@ struct SettingsView: View {
                             refreshKeyStatus()
                         }
                     )
+                    aiKeyRow(
+                        label: "Anthropic (Claude)",
+                        configured: anthropicConfigured,
+                        input: $anthropicInput,
+                        idPrefix: "anthropic",
+                        onSave: {
+                            AiSettings.setAnthropicKey(anthropicInput)
+                            anthropicInput = ""
+                            refreshKeyStatus()
+                        },
+                        onClear: {
+                            AiSettings.clearAnthropicKey()
+                            anthropicInput = ""
+                            refreshKeyStatus()
+                        }
+                    )
+                } header: {
+                    Text("Cloud AI providers")
+                } footer: {
+                    Text("Your own API key, used only to call that provider directly from this device. Stored securely in the iOS Keychain, never sent anywhere except the provider itself.")
                 }
             }
             .navigationTitle("Settings")
@@ -113,7 +135,10 @@ struct SettingsView: View {
                 }
             }
             .confirmationDialog("Clear all browsing history, cookies, and cached site data?", isPresented: $showClearConfirm, titleVisibility: .visible) {
-                Button("Clear Data", role: .destructive, action: clearBrowsingData)
+                // Android's AlertDialog positive/negative buttons are both
+                // plain theme-colored text, never red — matched here with
+                // default-role buttons instead of SwiftUI's red .destructive.
+                Button("Clear Data", action: clearBrowsingData)
                 Button("Cancel", role: .cancel) {}
             }
         }
@@ -130,9 +155,15 @@ struct SettingsView: View {
         onClear: @escaping () -> Void
     ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
+            // Android's setUpAiKeyRow writes this status text in the plain
+            // default TextView color regardless of configured/not-configured
+            // state — no green "success" or muted-dark tint. DesignSystem's
+            // statusSuccess/textMuted2 are Phase-30 dark-card tokens meant for
+            // screens built on bgCanvas/bgCard, not this plain system Form, so
+            // color-coding this label here was an invented divergence.
             Text("\(label) — \(configured ? "Configured" : "Not configured")")
                 .font(.subheadline)
-                .foregroundStyle(configured ? DesignSystem.statusSuccess : DesignSystem.textMuted2)
+                .foregroundStyle(.secondary)
                 .accessibilityIdentifier("\(idPrefix)Status")
 
             SecureField("Paste your API key", text: input)
@@ -143,7 +174,9 @@ struct SettingsView: View {
                 Button("Save", action: onSave)
                     .disabled(input.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     .accessibilityIdentifier("\(idPrefix)SaveButton")
-                Button("Clear", role: .destructive, action: onClear)
+                // Android's Clear button is a plain TextButton (brand-colored,
+                // never red) — matched with a default-role Button here.
+                Button("Clear", action: onClear)
                     .disabled(!configured)
                     .accessibilityIdentifier("\(idPrefix)ClearButton")
             }

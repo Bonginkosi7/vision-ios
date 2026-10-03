@@ -99,15 +99,35 @@ struct VisionReadyView: View {
                 }
                 .padding(.top, 16)
 
-                ProgressView(value: Double(percent), total: 100)
-                    .tint(DesignSystem.visionBlue)
-                    .padding(.top, 12)
+                // Gradient fill (visionPurple -> visionBlue, left to right) over a
+                // flat track — matches Android's progress_bar_gradient layer-list
+                // (a clipped linear gradient inside an 8dp-radius track), rather
+                // than a plain single-tint ProgressView.
+                GeometryReader { geometry in
+                    ZStack(alignment: .leading) {
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(DesignSystem.bgCard)
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(
+                                LinearGradient(
+                                    colors: [DesignSystem.visionPurple, DesignSystem.visionBlue],
+                                    startPoint: .leading, endPoint: .trailing
+                                )
+                            )
+                            .frame(width: geometry.size.width * CGFloat(percent) / 100)
+                    }
+                }
+                .frame(height: 8)
+                .padding(.top, 12)
 
                 HStack(spacing: 24) {
                     statColumn(
                         value: "\(result.savedCount)", label: "of \(result.bookmarkCount) bookmarks saved offline",
                         valueId: "visionReadyStatsSaved"
                     )
+                    Rectangle()
+                        .fill(DesignSystem.borderCard)
+                        .frame(width: 1)
                     statColumn(
                         value: Self.byteCountFormatter.string(fromByteCount: usedBytes),
                         label: "used of \(AppSettings.offlineStorageLimitMb) MB storage limit",
@@ -132,6 +152,26 @@ struct VisionReadyView: View {
                     .padding(.top, 14)
                     .accessibilityIdentifier("visionReadyEmptyReadiness")
             }
+
+            // The real "Manage offline content" pill CTA — shown regardless of
+            // whether there's readiness data yet, matching Android's layout
+            // (added unconditionally below the if/else block in
+            // VisionReadyActivity.renderOfflineReadinessCard), not folded into
+            // the header-row tap target above.
+            Button(action: { showOfflineLibrary = true }) {
+                HStack(spacing: 10) {
+                    Text("⬇").font(.system(size: 15)).foregroundStyle(DesignSystem.visionBlue)
+                    Text("Manage offline content")
+                        .font(.system(size: 14, weight: .bold)).foregroundStyle(.white)
+                    Spacer()
+                    Text("›").font(.system(size: 20)).foregroundStyle(DesignSystem.textMuted2)
+                }
+                .padding(.horizontal, 14).padding(.vertical, 12)
+                .background(RoundedRectangle(cornerRadius: 16).fill(DesignSystem.bgCanvas))
+                .overlay(RoundedRectangle(cornerRadius: 16).stroke(DesignSystem.borderCard, lineWidth: 1))
+            }
+            .padding(.top, 16)
+            .accessibilityIdentifier("btnManageOfflineContentPill")
         }
     }
 

@@ -18,33 +18,50 @@ struct BookmarksView: View {
         NavigationStack {
             Group {
                 if bookmarks.isEmpty {
-                    DesignSystem.emptyState(
-                        emoji: "🔖",
-                        title: "No bookmarks yet",
-                        subtitle: "Tap the star in the address bar to save a page.",
-                        ctaText: "Got it",
-                        onCta: { dismiss() }
-                    )
-                    .accessibilityIdentifier("emptyBookmarksListState")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(DesignSystem.bgCanvas)
+                    // Android's emptyBookmarksText (activity_bookmarks.xml) is a single
+                    // plain, centered, 32dp-padded, 0.6-alpha TextView with one line of
+                    // copy — no emoji, no title/subtitle split, no CTA button. This
+                    // screen (BookmarksActivity.kt) never touches the componentized
+                    // DesignSystem.kt, so DesignSystem.emptyState (which always renders
+                    // an illustration + CTA) doesn't belong here; match the plain text.
+                    Text("No bookmarks yet — tap the star on any page to save it.")
+                        .multilineTextAlignment(.center)
+                        .opacity(0.6)
+                        .padding(32)
+                        .accessibilityIdentifier("emptyBookmarksListState")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     List {
                         ForEach(bookmarks) { bookmark in
-                            Button(action: { onOpen(bookmark.url); dismiss() }) {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(bookmark.title).foregroundStyle(.white).lineLimit(1)
-                                    Text(bookmark.url).font(.caption).foregroundStyle(DesignSystem.textMuted2).lineLimit(1)
+                            HStack(spacing: 12) {
+                                Button(action: { onOpen(bookmark.url); dismiss() }) {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        // Android's bookmarkTitle is textStyle="bold" 15sp.
+                                        Text(bookmark.title)
+                                            .font(.system(size: 15, weight: .bold))
+                                            .lineLimit(1)
+                                        // Android's bookmarkUrl is 12sp at alpha 0.65 of the
+                                        // default (theme-adaptive) text color.
+                                        Text(bookmark.url)
+                                            .font(.system(size: 12))
+                                            .foregroundStyle(.secondary)
+                                            .lineLimit(1)
+                                    }
                                 }
+                                .buttonStyle(.plain)
+                                Spacer(minLength: 8)
+                                // Android has no swipe-to-delete here: btnDeleteBookmark is an
+                                // always-visible 40dp ImageButton (ic_menu_delete) at the row's
+                                // trailing end, a separate tap target from the row body.
+                                Button(action: { delete(bookmark) }) {
+                                    Image(systemName: "trash")
+                                        .foregroundStyle(.secondary)
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel("Delete")
                             }
+                            .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 8))
                             .accessibilityIdentifier("bookmarksListRow_\(bookmark.url)")
-                            .swipeActions {
-                                Button(role: .destructive) {
-                                    delete(bookmark)
-                                } label: {
-                                    Label("Delete", systemImage: "trash")
-                                }
-                            }
                         }
                     }
                     .listStyle(.plain)

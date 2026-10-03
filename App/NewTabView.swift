@@ -26,22 +26,33 @@ import VisionCore
 /// (plus, for weather, a new location-permission flow) that deserves
 /// its own real-source-verified phase rather than being rushed in
 /// alongside everything else this sweep could close using only
-/// infrastructure this app already has, tested, elsewhere. Same real
-/// trim for the user-managed Shortcuts row (`ShortcutDbHelper` — a new
-/// data table with no existing iOS counterpart) and full onboarding —
-/// every destination either would point to is already one tap away
-/// from the toolbar/menu.
+/// infrastructure this app already has, tested, elsewhere. Full
+/// onboarding is trimmed too — every destination it would point to is
+/// already one tap away from the toolbar/menu.
+///
+/// The photo background (`bg_new_tab.jpg`, the exact same real asset
+/// Android bundles at res/drawable-nodpi/bg_new_tab.jpg — not a
+/// different stock photo standing in for it) and the real user-managed
+/// Shortcuts row (`ShortcutStore`, a GRDB port of `ShortcutDbHelper.kt`,
+/// icons sourced from the same real favicon service `FaviconLoader`
+/// already uses elsewhere) were added in a later pass, closing what had
+/// been this screen's two remaining disclosed trims.
 struct NewTabView: View {
     @ObservedObject var bookmarkStore: BookmarkStore
     @ObservedObject var offlineStore: OfflineStore
     @ObservedObject var wellbeingStore: WellbeingStore
     @ObservedObject var rewardStore: RewardStore
+    @ObservedObject var shortcutStore: ShortcutStore
     let onNavigate: (String) -> Void
     let onAskVision: (String) -> Void
     let onOpenVisionReady: () -> Void
 
     @State private var bookmarks: [Bookmark] = []
+    @State private var shortcuts: [Shortcut] = []
     @State private var askText = ""
+    @State private var showAddShortcut = false
+    @State private var newShortcutTitle = ""
+    @State private var newShortcutUrl = ""
 
     @State private var advisorSuggestion: AdvisorSuggestion?
     @State private var advisorDismissed = false
@@ -59,36 +70,196 @@ struct NewTabView: View {
     @State private var latestReward: RewardEvent?
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Deliberately pinned outside the ScrollView below, matching
-            // NewTabController.kt's own fixed-position search row (it
-            // never scrolls away with the widget cards) — found the hard
-            // way via a real CI failure, not by design: with this box
-            // inside the ScrollView, the keyboard's own scroll-into-view
-            // adjustment on focus could shift the submit button out from
-            // under an already-computed tap coordinate, the same real
-            // "tap reports success, the real target never receives it"
-            // class of bug Phase 11's Tutor screen hit for a different
-            // reason (a horizontal ScrollView swallowing the gesture).
-            askVisionBox
-                .padding(.horizontal, 20).padding(.top, 16).padding(.bottom, 8)
+        ZStack {
+            // bg_new_tab.jpg + bg_new_tab_scrim.xml: the real photo
+            // Android shows behind this whole screen, with the same
+            // top-to-bottom dark gradient scrim over it so white text
+            // stays readable over any part of the image.
+            GeometryReader { proxy in
+                Image("NewTabBackground")
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: proxy.size.width, height: proxy.size.height)
+                    .clipped()
+            }
+            .ignoresSafeArea()
+            LinearGradient(
+                colors: [
+                    Color(hex: 0x050608).opacity(0.35),
+                    Color(hex: 0x050608).opacity(0.55),
+                    Color(hex: 0x050608).opacity(0.88),
+                ],
+                startPoint: .top, endPoint: .bottom
+            )
+            .ignoresSafeArea()
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    Text(greeting).font(.system(size: 20, weight: .bold)).foregroundStyle(.white)
-                        .accessibilityIdentifier("newTabGreeting")
+            VStack(spacing: 0) {
+                // view_new_tab.xml shows the greeting ABOVE the Ask VISION
+                // box (centered, 22sp) — pinned here, above askVisionBox, in
+                // that same real order, rather than inside the ScrollView.
+                Text(greeting)
+                    .font(.system(size: 22, weight: .bold)).foregroundStyle(.white)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.horizontal, 20).padding(.top, 28)
+                    .accessibilityIdentifier("newTabGreeting")
 
-                    advisorCard
-                    readinessCard
-                    overviewCard
-                    pointsCard
-                    bookmarksSection
+                // Deliberately pinned outside the ScrollView below, matching
+                // NewTabController.kt's own fixed-position search row (it
+                // never scrolls away with the widget cards) — found the hard
+                // way via a real CI failure, not by design: with this box
+                // inside the ScrollView, the keyboard's own scroll-into-view
+                // adjustment on focus could shift the submit button out from
+                // under an already-computed tap coordinate, the same real
+                // "tap reports success, the real target never receives it"
+                // class of bug Phase 11's Tutor screen hit for a different
+                // reason (a horizontal ScrollView swallowing the gesture).
+                askVisionBox
+                    .padding(.horizontal, 20).padding(.top, 20).padding(.bottom, 2)
+
+                // new_tab_ask_label — the "✨ Ask VISION" caption under the
+                // input box, present in view_new_tab.xml but previously
+                // missing from this port entirely.
+                Text("✨ Ask VISION")
+                    .font(.system(size: 12)).foregroundStyle(.white.opacity(0.75))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 24).padding(.bottom, 10)
+                    .accessibilityIdentifier("newTabAskLabel")
+
+                shortcutsRow
+                    .padding(.top, 2).padding(.bottom, 4)
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        // view_new_tab.xml lays its four widget cards out as
+                        // a real 2x2 grid (two MaterialCardViews per
+                        // horizontal row, each layout_weight="1") — not a
+                        // single-column stack. Row order (Advisor/Readiness,
+                        // then Overview/Points) matches this port's existing
+                        // top-to-bottom order exactly; only the grouping
+                        // changes.
+                        HStack(alignment: .top, spacing: 12) {
+                            advisorCard.frame(maxWidth: .infinity)
+                            readinessCard.frame(maxWidth: .infinity)
+                        }
+                        HStack(alignment: .top, spacing: 12) {
+                            overviewCard.frame(maxWidth: .infinity)
+                            pointsCard.frame(maxWidth: .infinity)
+                        }
+
+                        bookmarksSection
+                    }
+                    .padding(20)
                 }
-                .padding(20)
             }
         }
-        .background(DesignSystem.bgCanvas.ignoresSafeArea())
         .onAppear(perform: refresh)
+        .alert("Add shortcut", isPresented: $showAddShortcut) {
+            TextField("Title", text: $newShortcutTitle)
+            TextField("URL", text: $newShortcutUrl)
+                .autocapitalization(.none)
+                .disableAutocorrection(true)
+            Button("Add", action: addShortcut)
+            Button("Cancel", role: .cancel) {
+                newShortcutTitle = ""
+                newShortcutUrl = ""
+            }
+        }
+    }
+
+    /// Horizontal row of real, user-managed shortcuts (`ShortcutStore`) —
+    /// the SwiftUI counterpart of `refreshShortcuts()`/`buildShortcutTile()`
+    /// in NewTabController.kt: one tile per real saved shortcut, a trailing
+    /// "+" tile to add another, real favicons (not fabricated brand icons)
+    /// via the same `FaviconLoader` the rest of this app already uses, and
+    /// a long-press-to-remove affordance in place of Android's long-click
+    /// popup menu.
+    @ViewBuilder
+    private var shortcutsRow: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(alignment: .top, spacing: 4) {
+                ForEach(shortcuts) { shortcut in
+                    shortcutTile(shortcut)
+                }
+                addShortcutTile
+            }
+            .padding(.horizontal, 20)
+        }
+        .accessibilityIdentifier("newTabShortcutsRow")
+    }
+
+    @ViewBuilder
+    private func shortcutTile(_ shortcut: Shortcut) -> some View {
+        Button(action: { onNavigate(shortcut.url) }) {
+            VStack(spacing: 4) {
+                ZStack {
+                    Circle().fill(Color.white.opacity(0.14))
+                    FaviconView(host: shortcutFaviconHost(shortcut.url))
+                }
+                .frame(width: 48, height: 48)
+                Text(shortcut.title)
+                    .font(.system(size: 11)).foregroundStyle(.white)
+                    .lineLimit(1)
+                    .frame(width: 72)
+            }
+        }
+        .accessibilityIdentifier("newTabShortcut_\(shortcut.id ?? 0)")
+        .contextMenu {
+            Button("Remove", role: .destructive) {
+                try? shortcutStore.remove(id: shortcut.id ?? 0)
+                refresh()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var addShortcutTile: some View {
+        Button(action: { showAddShortcut = true }) {
+            VStack(spacing: 4) {
+                Circle().fill(Color.white.opacity(0.14))
+                    .frame(width: 48, height: 48)
+                    .overlay(Image(systemName: "plus").foregroundStyle(.white))
+                Text("Add").font(.system(size: 11)).foregroundStyle(.white)
+            }
+        }
+        .accessibilityIdentifier("newTabAddShortcut")
+    }
+
+    /// web.whatsapp.com has no favicon of its own indexed by the lookup
+    /// service (it 404s to a generic globe fallback) — whatsapp.com does
+    /// have the real logo, same real host substitution NewTabController.kt
+    /// makes for this one known case; every other URL still resolves from
+    /// its own real host.
+    private func shortcutFaviconHost(_ urlString: String) -> String {
+        let host = URL(string: urlString)?.host ?? urlString
+        return host == "web.whatsapp.com" ? "whatsapp.com" : host
+    }
+
+    private func addShortcut() {
+        let title = newShortcutTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        var url = newShortcutUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+        newShortcutTitle = ""
+        newShortcutUrl = ""
+        guard !title.isEmpty, !url.isEmpty else { return }
+        if !url.hasPrefix("http://") && !url.hasPrefix("https://") {
+            url = "https://\(url)"
+        }
+        try? shortcutStore.add(title: title, url: url)
+        refresh()
+    }
+
+    /// Each of the four home-screen cards' title row: Android's
+    /// NewTabCardTitle style (13sp bold white — a dedicated, smaller
+    /// style than the 16sp DesignSystem.sectionLabel used on this app's
+    /// other, full-screen activities) plus the same translucent "›"
+    /// Android draws in the top-right corner of every one of these four
+    /// cards, not just Offline Readiness.
+    @ViewBuilder
+    private func newTabCardHeader(_ title: String) -> some View {
+        HStack {
+            Text(title).font(.system(size: 13, weight: .bold)).foregroundStyle(.white)
+            Spacer()
+            Text("›").font(.system(size: 18, weight: .bold)).foregroundStyle(.white.opacity(0.4))
+        }
     }
 
     private var greeting: String {
@@ -104,16 +275,32 @@ struct NewTabView: View {
     @ViewBuilder
     private var askVisionBox: some View {
         HStack(spacing: 8) {
-            TextField("Ask VISION or enter a URL…", text: $askText, onCommit: submitAsk)
+            // new_tab_ask_hint is literally "Ask me anything" — not this
+            // box's own invented placeholder copy.
+            TextField("Ask me anything", text: $askText, onCommit: submitAsk)
                 .textFieldStyle(.plain)
                 .autocapitalization(.none)
                 .disableAutocorrection(true)
-                .padding(.horizontal, 12).padding(.vertical, 10)
-                .background(RoundedRectangle(cornerRadius: 10).fill(DesignSystem.bgCard))
+                .frame(height: 56)
+                .padding(.horizontal, 16)
+                // bg_new_tab_input.xml: a near-pill (24dp radius on a
+                // 56dp box) translucent dark fill with a translucent
+                // white stroke — not this app's opaque, unbordered
+                // bgCard, which belongs to the regular toolbar/widget
+                // cards, not this photo-backed hero box.
+                .background(RoundedRectangle(cornerRadius: 24).fill(Color.black.opacity(0.2)))
+                .overlay(RoundedRectangle(cornerRadius: 24).stroke(Color.white.opacity(0.25), lineWidth: 1))
                 .foregroundStyle(.white)
                 .accessibilityIdentifier("newTabSearchInput")
             Button(action: submitAsk) {
+                // bg_avatar_circle.xml: a solid vision_purple circle
+                // behind the send glyph — this had been a bare,
+                // backgroundless icon.
                 Image(systemName: "paperplane.fill")
+                    .font(.system(size: 16))
+                    .foregroundStyle(.white)
+                    .frame(width: 40, height: 40)
+                    .background(Circle().fill(DesignSystem.visionPurple))
             }
             .accessibilityIdentifier("newTabAskSubmit")
         }
@@ -122,7 +309,7 @@ struct NewTabView: View {
     @ViewBuilder
     private var advisorCard: some View {
         DesignSystem.card {
-            DesignSystem.sectionLabel("VISION Advisor")
+            newTabCardHeader("VISION Advisor")
                 .accessibilityIdentifier("advisorCardTitle")
             if let advisorSuggestion, !advisorDismissed {
                 Text(advisorSuggestion.message)
@@ -150,11 +337,7 @@ struct NewTabView: View {
     private var readinessCard: some View {
         DesignSystem.card {
             Button(action: onOpenVisionReady) {
-                HStack {
-                    DesignSystem.sectionLabel("Offline Readiness")
-                    Spacer()
-                    Text("›").font(.system(size: 18)).foregroundStyle(DesignSystem.textMuted2)
-                }
+                newTabCardHeader("Offline Readiness")
             }
             if let readiness, let percent = readiness.percent {
                 HStack(alignment: .bottom, spacing: 6) {
@@ -178,7 +361,7 @@ struct NewTabView: View {
     @ViewBuilder
     private var overviewCard: some View {
         DesignSystem.card {
-            DesignSystem.sectionLabel("Today's Overview")
+            newTabCardHeader("Today's Overview")
             VStack(alignment: .leading, spacing: 6) {
                 overviewStatRow(color: DesignSystem.visionPurple, label: "Focus time", value: focusLabel)
                 overviewStatRow(color: DesignSystem.statusSuccess, label: "Breaks", value: "\(breaksToday)")
@@ -204,7 +387,7 @@ struct NewTabView: View {
     @ViewBuilder
     private var pointsCard: some View {
         DesignSystem.card {
-            DesignSystem.sectionLabel("VISION Points")
+            newTabCardHeader("VISION Points")
             Text("\(pointsBalance)").font(.system(size: 26, weight: .bold)).foregroundStyle(.white)
                 .padding(.top, 10)
                 .accessibilityIdentifier("newTabPointsBalance")
@@ -270,6 +453,7 @@ struct NewTabView: View {
 
     private func refresh() {
         bookmarks = (try? bookmarkStore.list()) ?? []
+        shortcuts = (try? shortcutStore.list()) ?? []
 
         advisorDismissed = false
         advisorSuggestion = AdvisorLogic.getSuggestion(continuousSessionMs: WellbeingManager.shared.continuousSessionMs())

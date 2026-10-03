@@ -53,6 +53,7 @@ struct MainBrowserView: View {
     @StateObject private var tutorStore = TutorStore()
     @StateObject private var studyPlanStore = StudyPlanStore()
     @StateObject private var chatSessionStore = ChatSessionStore()
+    @StateObject private var shortcutStore = ShortcutStore()
     @ObservedObject private var focusManager = FocusManager.shared
 
     private var performanceCalculator: PerformanceCalculator {
@@ -285,10 +286,18 @@ struct MainBrowserView: View {
 
             TextField("Search or enter address", text: $addressText, onCommit: navigateFromAddressBar)
                 .textFieldStyle(.plain)
+                .font(.system(size: 14))
                 .autocapitalization(.none)
                 .disableAutocorrection(true)
-                .padding(.horizontal, 12).padding(.vertical, 8)
-                .background(RoundedRectangle(cornerRadius: 10).fill(DesignSystem.bgCard))
+                .frame(height: 40)
+                .padding(.horizontal, 14)
+                // Direct port of bg_address_bar.xml: a true pill (radius ==
+                // half the 40dp height, not the boxy radius-10 this had
+                // drifted to) plus its own subtle 1dp stroke
+                // (?attr/colorSurface fill + #33808080 stroke) — the stroke
+                // had gone missing entirely on iOS.
+                .background(RoundedRectangle(cornerRadius: 20).fill(DesignSystem.bgCard))
+                .overlay(RoundedRectangle(cornerRadius: 20).stroke(Color(white: 0.5).opacity(0.2), lineWidth: 1))
                 .accessibilityIdentifier("addressBarField")
 
             Button(action: toggleBookmark) {
@@ -299,9 +308,14 @@ struct MainBrowserView: View {
 
             Button(action: { showTabSwitcher = true }) {
                 Text("\(tabManager.tabs.count)")
-                    .font(.system(size: 12, weight: .bold))
-                    .frame(width: 24, height: 24)
-                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(DesignSystem.borderCard, lineWidth: 1))
+                    .font(.system(size: 13, weight: .bold))
+                    // bg_tab_count.xml is a real 36dp square with a
+                    // 1.5dp ?attr/colorOnBackground stroke (near-white in
+                    // this app's dark theme) — this had shrunk to 24dp
+                    // with a low-contrast borderCard stroke that barely
+                    // shows up against bgCanvas.
+                    .frame(width: 36, height: 36)
+                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.white, lineWidth: 1.5))
             }
             .accessibilityIdentifier("tabCountLabel")
 
@@ -428,7 +442,10 @@ struct MainBrowserView: View {
             }
             .accessibilityIdentifier("menu_help")
         } label: {
-            Image(systemName: "ellipsis.circle")
+            // Android's own overflow glyph (ic_menu_more) is plain
+            // vertical dots with no circle outline — "ellipsis.circle"
+            // added a ring Android's toolbar never has.
+            Image(systemName: "ellipsis")
         }
         .accessibilityIdentifier("moreMenuButton")
     }
@@ -510,6 +527,7 @@ struct MainBrowserView: View {
                 downloadStore: downloadStore,
                 wellbeingStore: wellbeingStore,
                 rewardStore: rewardStore,
+                shortcutStore: shortcutStore,
                 onNavigate: { destination in tabManager.navigateActiveTab(to: destination) },
                 onAskVision: { query in askVisionRequest = AskVisionRequest(query: query) },
                 onOpenVisionReady: { showVisionReady = true }
@@ -595,6 +613,7 @@ private struct ActiveTabContent: View {
     let downloadStore: DownloadStore
     let wellbeingStore: WellbeingStore
     let rewardStore: RewardStore
+    let shortcutStore: ShortcutStore
     let onNavigate: (String) -> Void
     let onAskVision: (String) -> Void
     let onOpenVisionReady: () -> Void
@@ -603,6 +622,7 @@ private struct ActiveTabContent: View {
         if tab.isNewTab {
             NewTabView(
                 bookmarkStore: bookmarkStore, offlineStore: offlineStore, wellbeingStore: wellbeingStore, rewardStore: rewardStore,
+                shortcutStore: shortcutStore,
                 onNavigate: onNavigate, onAskVision: onAskVision, onOpenVisionReady: onOpenVisionReady
             )
         } else {
@@ -615,7 +635,11 @@ private struct ActiveTabContent: View {
                 if tab.isLoading {
                     ProgressView(value: tab.estimatedProgress, total: 1.0)
                         .progressViewStyle(.linear)
-                        .tint(DesignSystem.visionPurple)
+                        // activity_main.xml's progressBar has no explicit
+                        // tint of its own — it just inherits
+                        // Theme.Vision's colorAccent, which is
+                        // vision_blue, not vision_purple.
+                        .tint(DesignSystem.visionBlue)
                         .frame(height: 2)
                         .accessibilityIdentifier("pageLoadProgress")
                 }

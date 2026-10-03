@@ -354,6 +354,21 @@ enum AppDatabase {
             try db.create(index: "idx_studyReviewEvent_offlineItemId", on: "studyReviewEvent", columns: ["offlineItemId"])
         }
 
+        migrator.registerMigration("v12_shortcuts") { db in
+            // New Tab shortcuts — port of ShortcutDbHelper.kt's one table.
+            // Default-row seeding happens in ShortcutStore itself (gated
+            // on the table being empty), not here, since GRDB's migrator
+            // only ever runs a migration once — unlike Android's onUpgrade
+            // re-seed check, this can't re-seed a table a user has since
+            // emptied out by removing every shortcut.
+            try db.create(table: "shortcut") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("title", .text).notNull()
+                t.column("url", .text).notNull()
+                t.column("position", .integer).notNull()
+            }
+        }
+
         return migrator
     }
 }
