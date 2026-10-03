@@ -1398,7 +1398,7 @@ final class VisionIOSUITests: XCTestCase {
         XCTAssertTrue(clearButton.waitForExistence(timeout: 5))
         clearButton.tap()
 
-        let confirmButton = app.buttons["Clear Data"]
+        let confirmButton = app.buttons["confirmClearDataButton"]
         XCTAssertTrue(confirmButton.waitForExistence(timeout: 5), "expected a real confirmation dialog, not an immediate destructive action")
         confirmButton.tap()
 
@@ -1590,6 +1590,13 @@ final class VisionIOSUITests: XCTestCase {
 
         let addTile = app.buttons["newTabAddShortcut"]
         XCTAssertTrue(addTile.waitForExistence(timeout: 5), "expected a real default-seeded shortcut row plus a trailing Add tile")
+        // Six real default shortcuts plus this trailing Add tile overflow a
+        // real iPhone's width, so — exactly like a real user would — this
+        // scrolls the row to bring Add into view before tapping it. A
+        // first real CI run tried tapping it unscrolled and failed with
+        // "Activation point invalid": the element exists in the
+        // accessibility tree but isn't actually on screen yet.
+        shortcutsRow.swipeLeft()
         addTile.tap()
 
         let titleField = app.alerts.textFields.element(boundBy: 0)
@@ -1609,6 +1616,9 @@ final class VisionIOSUITests: XCTestCase {
         }
         XCTAssertTrue(newTile.exists, "expected the real newly-added shortcut to appear in the row")
 
+        // Same real overflow as the Add tile above: the new shortcut lands
+        // at the end of the row, past the six real defaults.
+        shortcutsRow.swipeLeft()
         newTile.tap()
         let addressField = app.textFields["addressBarField"]
         assertAddressBarEventuallyShows(addressField, "https://example.com/", in: self)
@@ -1616,8 +1626,11 @@ final class VisionIOSUITests: XCTestCase {
         // A fresh New Tab to get back to the shortcuts row, then remove
         // the real shortcut just added via its real long-press menu.
         openMenu(app, item: "menu_newTab")
+        let shortcutsRowAgain = app.scrollViews["newTabShortcutsRow"]
+        XCTAssertTrue(shortcutsRowAgain.waitForExistence(timeout: 5))
         let tileAgain = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'newTabShortcut_' AND label == %@", "UI Test Shortcut")).firstMatch
         XCTAssertTrue(tileAgain.waitForExistence(timeout: 5))
+        shortcutsRowAgain.swipeLeft()
         tileAgain.press(forDuration: 1.0)
 
         let removeButton = app.buttons["Remove"]

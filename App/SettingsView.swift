@@ -138,7 +138,19 @@ struct SettingsView: View {
                 // Android's AlertDialog positive/negative buttons are both
                 // plain theme-colored text, never red — matched here with
                 // default-role buttons instead of SwiftUI's red .destructive.
+                //
+                // Real CI bug found here: with no explicit identifier, this
+                // button's default (label-derived) identifier collided with
+                // the row button above it ("Clear Data" vs. "Clear Data") —
+                // app.buttons["Clear Data"] matched two elements. A plain
+                // .destructive-role button happened to avoid this (its
+                // accessibility node is styled/exposed differently), but
+                // this screen deliberately isn't using that role (see
+                // above) — so this needs its own explicit identifier
+                // instead of relying on the same label text both buttons
+                // share.
                 Button("Clear Data", action: clearBrowsingData)
+                    .accessibilityIdentifier("confirmClearDataButton")
                 Button("Cancel", role: .cancel) {}
             }
         }

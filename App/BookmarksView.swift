@@ -34,6 +34,15 @@ struct BookmarksView: View {
                     List {
                         ForEach(bookmarks) { bookmark in
                             HStack(spacing: 12) {
+                                // The real bug this fixes (hit several times before in this
+                                // codebase): applying .accessibilityIdentifier to a container
+                                // with more than one interactive child — here, this open
+                                // button AND the trailing delete button — doesn't tag one
+                                // merged element, it pushes the SAME identifier onto every
+                                // child independently. A real CI run confirmed this exactly:
+                                // app.buttons["bookmarksListRow_<url>"] matched BOTH buttons.
+                                // The identifier belongs on the specific button this screen's
+                                // own UI test actually queries, not the row container.
                                 Button(action: { onOpen(bookmark.url); dismiss() }) {
                                     VStack(alignment: .leading, spacing: 2) {
                                         // Android's bookmarkTitle is textStyle="bold" 15sp.
@@ -49,6 +58,7 @@ struct BookmarksView: View {
                                     }
                                 }
                                 .buttonStyle(.plain)
+                                .accessibilityIdentifier("bookmarksListRow_\(bookmark.url)")
                                 Spacer(minLength: 8)
                                 // Android has no swipe-to-delete here: btnDeleteBookmark is an
                                 // always-visible 40dp ImageButton (ic_menu_delete) at the row's
@@ -61,7 +71,6 @@ struct BookmarksView: View {
                                 .accessibilityLabel("Delete")
                             }
                             .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 8))
-                            .accessibilityIdentifier("bookmarksListRow_\(bookmark.url)")
                         }
                     }
                     .listStyle(.plain)
