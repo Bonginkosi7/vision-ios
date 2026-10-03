@@ -52,6 +52,7 @@ struct MainBrowserView: View {
     @State private var addressText: String = ""
     @State private var isBookmarked: Bool = false
     @State private var showHistory = false
+    @State private var showBookmarksList = false
     @State private var showDownloads = false
     @State private var showOfflineLibrary = false
     @State private var showSettings = false
@@ -114,6 +115,11 @@ struct MainBrowserView: View {
         .onChange(of: tabManager.activeTabIndex) { _ in syncAddressBar() }
         .sheet(isPresented: $showHistory) {
             HistoryView(historyStore: historyStore) { url in
+                tabManager.navigateActiveTab(to: url)
+            }
+        }
+        .sheet(isPresented: $showBookmarksList) {
+            BookmarksView(bookmarkStore: bookmarkStore) { url in
                 tabManager.navigateActiveTab(to: url)
             }
         }
@@ -295,8 +301,9 @@ struct MainBrowserView: View {
     /// custom PopupWindow accordion instead — SwiftUI's `Menu` supports
     /// real nesting natively, so this is a direct equivalent, not a
     /// workaround). Minus the entries for features not built on iOS yet
-    /// (Bookmarks shortcut, VisionReady, Redeem, the Study Material hub,
-    /// Autofill) — those appear here once their own phases land.
+    /// (Redeem, Autofill) — those appear here once their own phases land.
+    /// VisionReady, the Study Material hub, and the dedicated Bookmarks
+    /// screen named here before have all since landed.
     @ViewBuilder
     private var overflowMenu: some View {
         Menu {
@@ -319,6 +326,11 @@ struct MainBrowserView: View {
                 Label("History", systemImage: "clock")
             }
             .accessibilityIdentifier("menu_history")
+
+            Button(action: { showBookmarksList = true }) {
+                Label("Bookmarks", systemImage: "bookmark")
+            }
+            .accessibilityIdentifier("menu_bookmarks")
 
             Button(action: { showFocus = true }) {
                 Label("Focus Mode", systemImage: "timer")

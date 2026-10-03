@@ -1234,6 +1234,56 @@ final class VisionIOSUITests: XCTestCase {
         app.navigationBars.buttons["Done"].tap()
     }
 
+    /// Real dedicated Bookmarks screen proof — found as a genuine,
+    /// previously-undisclosed gap during a cross-source sweep against
+    /// Android's own `BookmarksActivity.kt` (New Tab's bookmarks row was
+    /// never a substitute for the real standalone manage screen Android's
+    /// overflow menu reaches separately). Uses `example.net`, specifically
+    /// because no other test in this suite ever bookmarks it (several
+    /// other tests bookmark example.com/.org and deliberately leave them
+    /// bookmarked for their own persistence checks), so this test's own
+    /// create → open → delete round trip is self-contained and leaves no
+    /// permanent state behind.
+    func test_bookmarksScreenShowsRealBookmarkAndRoundTripsOpenAndDelete() {
+        let app = XCUIApplication()
+        app.launch()
+
+        let addressField = app.textFields["addressBarField"]
+        XCTAssertTrue(addressField.waitForExistence(timeout: 5))
+        navigate(app: app, addressField: addressField, to: "example.net")
+        assertAddressBarEventuallyShows(addressField, "https://example.net/", in: self)
+
+        let bookmarkButton = app.buttons["bookmarkButton"]
+        XCTAssertTrue(bookmarkButton.waitForExistence(timeout: 5))
+        XCTAssertEqual(bookmarkButton.label, "Add bookmark", "no other test in this suite ever bookmarks example.net")
+        bookmarkButton.tap()
+        let bookmarkedExpectation = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "Remove bookmark"), object: bookmarkButton)
+        XCTAssertEqual(XCTWaiter().wait(for: [bookmarkedExpectation], timeout: 5), .completed)
+
+        openMenu(app, item: "menu_bookmarks")
+        let row = app.buttons["bookmarksListRow_https://example.net/"]
+        if !row.waitForExistence(timeout: 5) {
+            attachDiagnostics(app: app, name: "bookmarks-screen-row-missing")
+        }
+        XCTAssertTrue(row.exists, "the real bookmark just saved should show up in the real dedicated Bookmarks screen")
+        row.tap()
+
+        // Tapping the row should navigate the real active tab and dismiss,
+        // same real path History's own row tap already exercises.
+        assertAddressBarEventuallyShows(addressField, "https://example.net/", in: self)
+
+        openMenu(app, item: "menu_bookmarks")
+        let rowAgain = app.buttons["bookmarksListRow_https://example.net/"]
+        XCTAssertTrue(rowAgain.waitForExistence(timeout: 5))
+        rowAgain.swipeLeft()
+        let deleteButton = app.buttons["Delete"]
+        XCTAssertTrue(deleteButton.waitForExistence(timeout: 5))
+        deleteButton.tap()
+
+        XCTAssertFalse(app.buttons["bookmarksListRow_https://example.net/"].exists, "deleting the real bookmark should really remove it, not just hide it")
+        app.navigationBars.buttons["Done"].tap()
+    }
+
     // MARK: - Helpers
 
     /// Taps the real overflow ("⋮") menu button, then the named menu item
