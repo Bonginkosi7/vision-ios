@@ -92,6 +92,7 @@ jobs:
             -project VisionIOS.xcodeproj \
             -scheme VisionIOS \
             -destination "platform=iOS Simulator,id=${{ steps.sim.outputs.udid }}" \
+            -only-testing:VisionIOSUITests/VisionIOSUITests/test_captureAllScreensForDesignReview \
             -resultBundlePath TestResults.xcresult
       - name: Upload test result bundle
         if: always()
