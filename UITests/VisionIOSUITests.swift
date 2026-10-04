@@ -1277,8 +1277,12 @@ final class VisionIOSUITests: XCTestCase {
         XCTAssertTrue(rowAgain.waitForExistence(timeout: 5))
         // Android has no swipe-to-delete on this screen (see BookmarksView's
         // own doc comment) — the real delete affordance is this always-
-        // visible trailing button, no swipe needed to reveal it.
-        let deleteButton = app.buttons["Delete"]
+        // visible trailing button, no swipe needed to reveal it. Scoped to
+        // this specific bookmark's URL, not the generic "Delete" label —
+        // every row has one, and this suite's tests share one real database
+        // across the whole run, so more than one real bookmark can genuinely
+        // exist by the time this runs.
+        let deleteButton = app.buttons["btnDeleteBookmark_https://example.net/"]
         XCTAssertTrue(deleteButton.waitForExistence(timeout: 5))
         deleteButton.tap()
 

@@ -68,6 +68,17 @@ struct BookmarksView: View {
                                         .foregroundStyle(.secondary)
                                 }
                                 .buttonStyle(.plain)
+                                // A third real CI run found a third real issue once
+                                // the delete button was no longer swallowed: every
+                                // row's delete button shares the plain label
+                                // "Delete", and this suite's tests all share one
+                                // real database across the whole run — by this
+                                // point more than one real bookmark exists, so
+                                // app.buttons["Delete"] matched multiple rows at
+                                // once. A URL-scoped identifier, same pattern as
+                                // the open button above, disambiguates it for real
+                                // regardless of how many bookmarks exist.
+                                .accessibilityIdentifier("btnDeleteBookmark_\(bookmark.url)")
                                 .accessibilityLabel("Delete")
                             }
                             .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 8))
