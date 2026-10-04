@@ -1660,6 +1660,8 @@ final class VisionIOSUITests: XCTestCase {
     /// leading back-chevron, and "Chats" — see the other tests above) —
     /// simpler, and avoids coupling this test to those differences.
     func test_captureAllScreensForDesignReview() {
+        seedRealDataForDesignReview()
+
         captureScreen(name: "design-review-01-home") { app in
             XCTAssertTrue(app.textFields["addressBarField"].waitForExistence(timeout: 5))
         }
@@ -1689,7 +1691,76 @@ final class VisionIOSUITests: XCTestCase {
         }
         captureScreen(name: "design-review-08-chats") { app in
             self.openMenu(app, item: "menu_askVision")
-            XCTAssertTrue(app.staticTexts["askVisionEmptySessions"].waitForExistence(timeout: 5))
+            // Not askVisionEmptySessions specifically — seedRealDataForDesignReview
+            // above tries to leave a real session behind, so this just confirms
+            // the screen itself rendered, regardless of whether seeding succeeded.
+            XCTAssertTrue(app.buttons["askVisionNewChatButton"].waitForExistence(timeout: 5))
+        }
+    }
+
+    /// Best-effort real setup so the design-review screenshots show real
+    /// (if minimal) content instead of every screen's empty state — a
+    /// bookmark, a completed task, and one real Ask VISION exchange. Never
+    /// asserts: a hiccup here should still leave every screen reachable
+    /// for its own screenshot, not abort the whole capture run.
+    private func seedRealDataForDesignReview() {
+        let app = XCUIApplication()
+        app.launch()
+
+        let addressField = app.textFields["addressBarField"]
+        if addressField.waitForExistence(timeout: 5) {
+            navigate(app: app, addressField: addressField, to: "example.com")
+            let loaded = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "https://example.com/"), object: addressField)
+            _ = XCTWaiter().wait(for: [loaded], timeout: 10)
+
+            let bookmarkButton = app.buttons["bookmarkButton"]
+            if bookmarkButton.waitForExistence(timeout: 5), bookmarkButton.label == "Add bookmark" {
+                bookmarkButton.tap()
+            }
+        }
+
+        if app.buttons["moreMenuButton"].waitForExistence(timeout: 5) {
+            app.buttons["moreMenuButton"].tap()
+            if app.buttons["menu_tasks"].waitForExistence(timeout: 3) {
+                app.buttons["menu_tasks"].tap()
+                let field = app.textFields["newTaskField"]
+                if field.waitForExistence(timeout: 5) {
+                    field.tap()
+                    field.typeText("Review the new design")
+                    app.buttons["addTaskButton"].tap()
+                    let row = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Review the new design")).firstMatch
+                    if row.waitForExistence(timeout: 5) {
+                        row.tap()
+                    }
+                }
+                if app.navigationBars.buttons["Done"].waitForExistence(timeout: 3) {
+                    app.navigationBars.buttons["Done"].tap()
+                }
+            }
+        }
+
+        if app.buttons["moreMenuButton"].waitForExistence(timeout: 5) {
+            app.buttons["moreMenuButton"].tap()
+            if app.buttons["menu_askVision"].waitForExistence(timeout: 3) {
+                app.buttons["menu_askVision"].tap()
+                if app.buttons["askVisionNewChatButton"].waitForExistence(timeout: 5) {
+                    app.buttons["askVisionNewChatButton"].tap()
+                }
+                let messageInput = app.textFields["chatMessageInput"]
+                if messageInput.waitForExistence(timeout: 5) {
+                    messageInput.tap()
+                    messageInput.typeText("What's a good study tip?")
+                    app.buttons["btnChatSend"].tap()
+                    let reply = app.staticTexts.element(matching: NSPredicate(format: "identifier BEGINSWITH 'chatAssistantMessage_'"))
+                    _ = reply.waitForExistence(timeout: 10)
+                    if app.buttons["btnBackToChats"].waitForExistence(timeout: 3) {
+                        app.buttons["btnBackToChats"].tap()
+                    }
+                }
+                if app.navigationBars.buttons["Done"].waitForExistence(timeout: 3) {
+                    app.navigationBars.buttons["Done"].tap()
+                }
+            }
         }
     }
 
