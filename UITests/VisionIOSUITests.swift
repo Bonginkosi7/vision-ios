@@ -1716,6 +1716,14 @@ final class VisionIOSUITests: XCTestCase {
             let bookmarkButton = app.buttons["bookmarkButton"]
             if bookmarkButton.waitForExistence(timeout: 5), bookmarkButton.label == "Add bookmark" {
                 bookmarkButton.tap()
+                // A real CI failure found this needed: tapping moreMenuButton
+                // immediately after this toggle landed mid-transition (the
+                // toolbar re-laying out as the star fills in), and XCUITest's
+                // own AX scroll-to-visible action failed outright rather than
+                // just being slow. Waiting for the real label flip confirms
+                // the toggle actually finished before moving on.
+                let toggled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "Remove bookmark"), object: bookmarkButton)
+                _ = XCTWaiter().wait(for: [toggled], timeout: 5)
             }
         }
 
