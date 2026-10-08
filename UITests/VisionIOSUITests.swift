@@ -222,7 +222,13 @@ final class VisionIOSUITests: XCTestCase {
         XCTAssertEqual(diagnosticsToggle.value as? String, "1", "a fresh install should start with diagnostics on, matching Android/desktop's own real default")
 
         analyticsToggle.tap()
-        XCTAssertEqual(analyticsToggle.value as? String, "0")
+        // A plain synchronous read of `.value` right after `.tap()` races
+        // the AX snapshot update (the same reason this suite's other
+        // state-change assertions, e.g. the AI key save/clear flow, wait
+        // on a predicate rather than asserting immediately) — waiting here
+        // avoids that, not a real app bug.
+        let togglesOff = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == '0'"), object: analyticsToggle)
+        XCTAssertEqual(XCTWaiter().wait(for: [togglesOff], timeout: 5), .completed, "tapping the toggle should flip it off")
         app.navigationBars.buttons["settingsDoneButton"].tap()
 
         app.terminate()
