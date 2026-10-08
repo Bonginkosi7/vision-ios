@@ -48,10 +48,13 @@ targets:
         # Android's/desktop's own unconfigured state.
         VISION_FIREBASE_API_KEY: "$(VISION_FIREBASE_API_KEY)"
         VISION_FIREBASE_PROJECT_ID: "$(VISION_FIREBASE_PROJECT_ID)"
-    info:
-      properties:
-        VisionFirebaseAPIKey: "$(VISION_FIREBASE_API_KEY)"
-        VisionFirebaseProjectID: "$(VISION_FIREBASE_PROJECT_ID)"
+        # INFOPLIST_KEY_* (not a separate XcodeGen `info.properties` block —
+        # that requires its own on-disk Info.plist `path`, which conflicts
+        # with GENERATE_INFOPLIST_FILE's auto-generated one above) is how
+        # this same file already injects a key into that auto-generated
+        # plist, e.g. INFOPLIST_KEY_UILaunchScreen_Generation above.
+        INFOPLIST_KEY_VisionFirebaseAPIKey: "$(VISION_FIREBASE_API_KEY)"
+        INFOPLIST_KEY_VisionFirebaseProjectID: "$(VISION_FIREBASE_PROJECT_ID)"
 
   # Real behavioral verification — launches the actual built app in a
   # booted simulator and drives it (navigate, bookmark, relaunch, confirm
