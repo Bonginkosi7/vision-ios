@@ -1468,6 +1468,46 @@ final class VisionIOSUITests: XCTestCase {
         XCTAssertEqual(app.buttons["tabCountLabel"].label, "1", "closing the real second tab should bring the real count back down")
     }
 
+    /// Real end-to-end Redeem verification: opens the real screen (wired to
+    /// RedemptionStore/RewardStore, not seeded data), confirms the real
+    /// GRDB-backed balance and the honest-empty redemption history render
+    /// on a fresh install, and that `sync()`'s real anonymous Firebase
+    /// sign-in + Firestore catalog pull settles into a stable state. This
+    /// deliberately does NOT assert which catalog state (empty vs. one or
+    /// more real cards) — that depends on the live `vision-8cbff` project's
+    /// actual contents, real production data this test doesn't control and
+    /// shouldn't assume; what has to be true either way is that it settles
+    /// rather than hanging or crashing.
+    func test_redeemScreenShowsRealBalanceAndSettlesAfterRemoteSync() {
+        let app = XCUIApplication()
+        app.launch()
+
+        openMenu(app, item: "menu_redeem")
+
+        let balance = app.staticTexts["redeemBalance"]
+        XCTAssertTrue(balance.waitForExistence(timeout: 5), "the real GRDB-backed balance should render even with zero points")
+        XCTAssertTrue(balance.label.contains("points available to spend"))
+
+        let historyEmpty = app.staticTexts["redeemHistoryEmptyText"]
+        XCTAssertTrue(historyEmpty.waitForExistence(timeout: 5), "a fresh install has no real redemption history yet")
+
+        let catalogSettled = NSPredicate { _, _ in
+            app.staticTexts["redeemCatalogEmptyText"].exists ||
+                app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH 'redeemCatalogCard_'")).count > 0
+        }
+        let expectation = XCTNSPredicateExpectation(predicate: catalogSettled, object: nil)
+        if XCTWaiter().wait(for: [expectation], timeout: 15) != .completed {
+            attachDiagnostics(app: app, name: "redeem-catalog-did-not-settle")
+        }
+        XCTAssertTrue(
+            app.staticTexts["redeemCatalogEmptyText"].exists ||
+                app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH 'redeemCatalogCard_'")).count > 0,
+            "the real catalog section should settle into either the honest empty state or at least one real card, not hang"
+        )
+
+        app.navigationBars.buttons["Done"].tap()
+    }
+
     // MARK: - Helpers
 
     /// Taps the real overflow ("⋮") menu button, then the named menu item
