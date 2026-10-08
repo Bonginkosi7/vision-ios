@@ -221,12 +221,12 @@ final class VisionIOSUITests: XCTestCase {
         XCTAssertEqual(analyticsToggle.value as? String, "1", "a fresh install should start with analytics on, matching Android/desktop's own real default")
         XCTAssertEqual(diagnosticsToggle.value as? String, "1", "a fresh install should start with diagnostics on, matching Android/desktop's own real default")
 
-        analyticsToggle.tap()
-        // A plain synchronous read of `.value` right after `.tap()` races
-        // the AX snapshot update (the same reason this suite's other
-        // state-change assertions, e.g. the AI key save/clear flow, wait
-        // on a predicate rather than asserting immediately) — waiting here
-        // avoids that, not a real app bug.
+        // Plain `.tap()` on this Switch failed to register across two
+        // separate real CI runs (the value never flipped, even after
+        // waiting) — the same real tap-reliability issue `openMenu`
+        // already works around below by tapping an explicit normalized
+        // coordinate instead of relying on the default hit point.
+        analyticsToggle.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         let togglesOff = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == '0'"), object: analyticsToggle)
         XCTAssertEqual(XCTWaiter().wait(for: [togglesOff], timeout: 5), .completed, "tapping the toggle should flip it off")
         app.navigationBars.buttons["settingsDoneButton"].tap()
