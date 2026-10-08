@@ -233,7 +233,7 @@ final class RedemptionStore: ObservableObject {
             network: network, status: .pending, voucherCode: nil, providerReference: nil, failureReason: nil,
             redeemedAt: Date(), fulfilledAt: nil, syncStatus: .pendingUpload
         )
-        try dbQueue.write { db in try redemption.insert(db) }
+        try await dbQueue.write { db in try redemption.insert(db) }
 
         // Best-effort now; the next real sync() retries regardless of the
         // outcome here — same "local-insert-first" model as Android's own
@@ -262,7 +262,7 @@ final class RedemptionStore: ObservableObject {
         // upload that actually succeeded last time but didn't get to hear
         // back. That's a real success, not a failure to retry again.
         if result.ok || result.status == 409 {
-            try? dbQueue.write { db in
+            try? await dbQueue.write { db in
                 try db.execute(sql: "UPDATE redemption SET syncStatus = ? WHERE id = ?", arguments: [Redemption.SyncStatus.synced.rawValue, redemption.id])
             }
         }
@@ -271,7 +271,7 @@ final class RedemptionStore: ObservableObject {
     private func refreshStatuses() async {
         guard FirebaseConfig.isConfigured(), let idToken = await FirebaseAnonAuth.getValidIDToken(),
               let deviceID = FirebaseAnonAuth.deviceID(),
-              let awaitingUpdate = try? dbQueue.read({ db in
+              let awaitingUpdate = try? await dbQueue.read({ db in
                   try Redemption.filter(Column("syncStatus") == Redemption.SyncStatus.synced.rawValue && Column("status") == Redemption.Status.pending.rawValue).fetchAll(db)
               })
         else { return }
@@ -283,7 +283,7 @@ final class RedemptionStore: ObservableObject {
             else { continue }
 
             let fulfilledAtMs = fields["fulfilledAt"] as? Int64
-            try? dbQueue.write { db in
+            try? await dbQueue.write { db in
                 try db.execute(
                     sql: "UPDATE redemption SET status = ?, voucherCode = ?, providerReference = ?, failureReason = ?, fulfilledAt = ? WHERE id = ?",
                     arguments: [
@@ -303,7 +303,7 @@ final class RedemptionStore: ObservableObject {
         if documents.isEmpty { return } // A real, empty catalog is a valid state — not a failure, and not a reason to wipe a non-empty local cache.
 
         let entries = documents.compactMap { $0.toCacheEntry() }
-        try? dbQueue.write { db in
+        try? await dbQueue.write { db in
             try RewardCatalogCacheEntry.deleteAll(db)
             for entry in entries { try entry.insert(db) }
         }
@@ -316,7 +316,7 @@ final class RedemptionStore: ObservableObject {
     /// Android's own worker.
     func sync() async {
         guard FirebaseConfig.isConfigured() else { return }
-        let pending = (try? dbQueue.read { db in
+        let pending = (try? await dbQueue.read { db in
             try Redemption.filter(Column("syncStatus") == Redemption.SyncStatus.pendingUpload.rawValue).fetchAll(db)
         }) ?? []
         for redemption in pending.prefix(10) { await upload(redemption) }

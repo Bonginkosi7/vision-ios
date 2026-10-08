@@ -1,4 +1,5 @@
 import SwiftUI
+import VisionCore
 
 /// Bridges the real data layer (RedemptionStore, RewardStore) to
 /// RedeemView's existing plain-data interface — RedeemView was built
