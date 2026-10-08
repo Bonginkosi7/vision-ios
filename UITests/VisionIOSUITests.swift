@@ -1002,11 +1002,14 @@ final class VisionIOSUITests: XCTestCase {
     /// Real Ask VISION chat proof — same honest "not configured" path
     /// already established for every other AI feature, confirming:
     /// a fresh launch shows the real empty session list; starting a new
-    /// chat, sending a real message, and getting the real honest reply
-    /// with the real local category classification ("Learn", since the
-    /// message matches that pattern); and that the real session this
-    /// created now appears back in the session list with its real
-    /// derived title. The input bar is a plain HStack (no scrolling
+    /// chat, sending a real message, and getting the real honest "not
+    /// configured" reply; and that the real session this created now
+    /// appears back in the session list with its real derived title.
+    /// No category-label assertion here: `bubbleView`'s own doc comment
+    /// confirms real Android behavior never renders `TaskCategory` as
+    /// visible text in a chat bubble either — it's used internally only,
+    /// so there's no `chatCategory_` element to find, by design, not by
+    /// omission. The input bar is a plain HStack (no scrolling
     /// container), matching the fix applied to the Tutor test's own
     /// manual-input path rather than any button living inside one.
     func test_askingVisionWithNoCloudKeyConfigured() {
@@ -1030,10 +1033,6 @@ final class VisionIOSUITests: XCTestCase {
             attachDiagnostics(app: app, name: "askvision-assistant-reply-missing")
         }
         XCTAssertTrue(assistantMessage.label.contains("no cloud AI is configured"), "expected the real honest 'not configured' reply, got: \(assistantMessage.label)")
-
-        let categoryLabel = app.staticTexts.element(matching: NSPredicate(format: "identifier BEGINSWITH 'chatCategory_'"))
-        XCTAssertTrue(categoryLabel.waitForExistence(timeout: 5))
-        XCTAssertEqual(categoryLabel.label, "Learn", "this message should classify as Learn")
 
         app.buttons["btnBackToChats"].tap()
 
