@@ -32,6 +32,16 @@ jobs:
   ios-app-uitests:
     name: Build + real UI tests in a booted Simulator
     runs-on: macos-14
+    # Real Firebase values, baked into the build the same way
+    # vision-android's CI passes them to Gradle and desktop's CI passes
+    # them to esbuild — set here so xcodebuild's own `$(VAR)` build-setting
+    # substitution (project.yml) picks them up when it processes Info.plist
+    # during the build step below. Unset in any fork/PR run without repo
+    # secrets, which still builds, just unconfigured — same as a local dev
+    # build (see project.yml's own comment on this).
+    env:
+      VISION_FIREBASE_API_KEY: ${{ secrets.VISION_FIREBASE_API_KEY }}
+      VISION_FIREBASE_PROJECT_ID: ${{ secrets.VISION_FIREBASE_PROJECT_ID }}
     steps:
       - uses: actions/checkout@v4
       - name: Select the newest available Xcode

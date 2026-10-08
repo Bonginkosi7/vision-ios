@@ -369,6 +369,12 @@ enum AppDatabase {
             }
         }
 
+        // Redeem (rewardCatalogCache + redemption tables) — see
+        // RedemptionStore.swift, which owns both the migration content and
+        // every real read/write against them, matching this file's own
+        // "each feature owns its migration step" convention.
+        RedemptionMigrations.register(&migrator)
+
         return migrator
     }
 }

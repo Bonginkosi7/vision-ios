@@ -17,13 +17,15 @@ public struct RewardEvent: Codable, Identifiable, FetchableRecord, PersistableRe
 /// Real local points ledger — GRDB port of RewardDbHelper.kt. Every row is
 /// one real, honestly-earned event.
 ///
-/// `availableBalance()` currently always equals `total()`: Android's real
-/// formula is `total() - RedemptionDbHelper.activeSpend()`, but Redeem
-/// (the Firestore-backed redemption feature) isn't ported to iOS yet — see
-/// README — so there is genuinely never any spend to subtract. This
-/// returns the real, correct value for the real current state, not a
-/// placeholder; once Redeem ports, this will subtract real redemption
-/// spend the same way Android does.
+/// `availableBalance()` now subtracts real redemption spend (`total() -
+/// activeSpend()`), matching Android's own real formula exactly, now that
+/// Redeem (RedemptionStore.swift) is ported. A direct SQL query against
+/// the `redemption` table here, rather than a `RedemptionStore` instance
+/// dependency, since `RedemptionStore.redeem()` itself already calls back
+/// into this store's own `availableBalance()` to check eligibility — a
+/// real circular dependency either side would otherwise introduce for no
+/// benefit, when both stores already share the same `AppDatabase.shared`
+/// queue.
 final class RewardStore: ObservableObject {
     private let dbQueue: DatabaseQueue
 
@@ -63,7 +65,10 @@ final class RewardStore: ObservableObject {
     }
 
     func availableBalance() throws -> Int {
-        try total()
+        let activeSpend = try dbQueue.read { db in
+            try Int.fetchOne(db, sql: "SELECT COALESCE(SUM(pointsCost), 0) FROM redemption WHERE status != 'FAILED'") ?? 0
+        }
+        return try total() - activeSpend
     }
 
     func totalThisWeek() throws -> Int {

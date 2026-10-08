@@ -37,6 +37,21 @@ targets:
         # "AppIcon" set to exist in it by default — this explicitly opts
         # out of that requirement rather than ship an invented icon.
         ASSETCATALOG_COMPILER_APPICON_NAME: ""
+        # Firebase config, baked into the build at build time — the same
+        # real "injected once per build" model vision-android uses via
+        # Gradle's buildConfigField and desktop now uses via esbuild's
+        # `define` (see FirebaseConfig.swift's own doc comment). Xcode's
+        # `$(VAR)` build-setting substitution reads these straight from the
+        # real CI/shell environment; empty string if unset, so a local dev
+        # build without them set still builds, just unconfigured
+        # (FirebaseConfig.isConfigured() reads false), exactly like
+        # Android's/desktop's own unconfigured state.
+        VISION_FIREBASE_API_KEY: "$(VISION_FIREBASE_API_KEY)"
+        VISION_FIREBASE_PROJECT_ID: "$(VISION_FIREBASE_PROJECT_ID)"
+    info:
+      properties:
+        VisionFirebaseAPIKey: "$(VISION_FIREBASE_API_KEY)"
+        VisionFirebaseProjectID: "$(VISION_FIREBASE_PROJECT_ID)"
 
   # Real behavioral verification — launches the actual built app in a
   # booted simulator and drives it (navigate, bookmark, relaunch, confirm

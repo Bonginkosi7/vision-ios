@@ -45,6 +45,7 @@ struct MainBrowserView: View {
     @StateObject private var wellbeingStore = WellbeingStore()
     @StateObject private var focusStore = FocusStore()
     @StateObject private var rewardStore = RewardStore()
+    @StateObject private var redemptionStore = RedemptionStore()
     @StateObject private var studyDocumentStore = StudyDocumentStore()
     @StateObject private var studyReviewStore = StudyReviewStore()
     @StateObject private var topicStore = TopicStore()
@@ -76,6 +77,7 @@ struct MainBrowserView: View {
     @State private var showTasks = false
     @State private var showAdvisor = false
     @State private var showRewards = false
+    @State private var showRedeem = false
     @State private var showMaterials = false
     @State private var showStudyMaterial = false
     @State private var showFlashcards = false
@@ -185,6 +187,9 @@ struct MainBrowserView: View {
         }
         .sheet(isPresented: $showRewards) {
             RewardsView(rewardStore: rewardStore)
+        }
+        .sheet(isPresented: $showRedeem) {
+            RedeemContainerView(redemptionStore: redemptionStore, rewardStore: rewardStore)
         }
         .sheet(isPresented: $showMaterials) {
             MaterialsView(studyDocumentStore: studyDocumentStore, topicStore: topicStore)
@@ -398,6 +403,11 @@ struct MainBrowserView: View {
                 Label("Rewards", systemImage: "star.circle")
             }
             .accessibilityIdentifier("menu_rewards")
+
+            Button(action: { showRedeem = true }) {
+                Label("Redeem", systemImage: "gift")
+            }
+            .accessibilityIdentifier("menu_redeem")
 
             Button(action: { showVisionReady = true }) {
                 Label("VISION Ready", systemImage: "checkmark.shield")
