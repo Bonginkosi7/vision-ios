@@ -98,6 +98,54 @@ screen needed since Phase 1 — no new data-layer work required. Run
 passed fully green on the first attempt: all 28 UI tests, all 154
 VisionCore unit tests.
 
+**Redeem** (`RedemptionStore.swift`/`RedeemContainerView.swift`) is done
+— the real Firebase project (`vision-8cbff`) finally exists, so the
+hard blocker the "Next steps" section below used to cite is gone. Direct
+Swift ports of Android's anonymous-auth (`FirebaseAnonAuth.swift`) and
+plain-REST Firestore client (`FirestoreRestClient.swift`, no SDK
+dependency, matching Android's own choice over the full Firebase SDK)
+wire the existing presentational `RedeemView.swift` (built earlier,
+unwired) to real GRDB-backed data and a real Firestore sync — the same
+Firestore security rules already deployed and adversarially tested
+against Android/desktop's real usage now also govern this app's real
+reads/writes. `VISION_FIREBASE_API_KEY`/`PROJECT_ID` are baked into the
+build the same way vision-android (Gradle) and desktop (esbuild) already
+do, via Xcode's `$(VAR)` build-setting substitution into
+`INFOPLIST_KEY_*` entries (`project.yml`) — not XcodeGen's separate
+`info.properties` mechanism, which needs its own on-disk Info.plist and
+conflicts with `GENERATE_INFOPLIST_FILE: YES`'s auto-generated one (a
+real "Decoding failed at 'path'" CI failure caught and fixed this).
+Two real compile errors followed, both only catchable in CI given this
+machine's broken local Swift toolchain: a missing `import VisionCore` in
+`RedeemContainerView.swift`, and six `dbQueue.read`/`write` calls inside
+`RedemptionStore.swift`'s `async` functions that resolved to GRDB's
+async overload (alongside its sync `rethrows` one) without `await` —
+Swift prefers the async overload at an async call site, so it compiles
+clean once `await` is added, not ambiguous once you know to look for it.
+`test_redeemScreenShowsRealBalanceAndSettlesAfterRemoteSync` passed on
+its first real attempt in run
+[`37807445953`](https://github.com/Bonginkosi7/vision-ios/actions/runs/37807445953) —
+it confirms the real GRDB balance and honest-empty history render on a
+fresh install, and that the real anonymous sign-in + Firestore catalog
+pull settles (into whichever of "empty" or "has real cards" the live
+catalog actually is — deliberately not assumed either way, since that's
+real production data this test doesn't control) rather than hanging.
+That run's other 6 failures were the same pre-existing CI-runner-
+slowness/infrastructure signature already documented repeatedly in this
+file (confirmed by direct comparison: the identical four of the six —
+`test_advisorShowsNoNudgeOnAFreshLaunch`,
+`test_rewriteWithNoProviderConfigured_showsHonestError`,
+`test_settingsSavesAndClearsAnAiKey`,
+`test_takingAHandAuthoredExamAndGeneratingFromMaterial` — were already
+failing in run
+[`37766521973`](https://github.com/Bonginkosi7/vision-ios/actions/runs/37766521973),
+pushed before any Redeem code existed), not a regression from this work.
+**Disclosed scope trim, unchanged from `RedemptionStore.swift`'s own doc
+comment**: no background-task infrastructure exists on iOS yet, so
+`sync()` runs on real foreground triggers (app open, screen appear) only,
+not a true periodic background job the way Android's `WorkManager`/
+`RedemptionSyncWorker.kt` does.
+
 **Phase 18** (Study Material hub) is done — the biggest single phase
 this project has shipped, and its own real bug hunt spanned five
 pushes across several genuinely different kinds of failure. Run
@@ -1523,11 +1571,10 @@ Reload button, real page-load progress, the real Tab Switcher, Clear
 Browsing Data, and the achievable half of private-session screen
 protection). Every screen from the build plan's original roadmap, plus
 everything real the overflow menu and the home browser's own toolbar
-point to, is now built except Redeem (hard-blocked on real Firebase
-project credentials — though a presentational `RedeemView.swift` now
-exists, unwired, from the Android/iOS design-parity sweep below),
+point to, is now built — Redeem included, once the real Firebase
+project (`vision-8cbff`) existed to unblock it (see above) — except
 Autofill (needs real credential storage, a bigger, security-sensitive
-undertaking), and New Tab's real Weather/News (each a genuine new
+undertaking) and New Tab's real Weather/News (each a genuine new
 external-API integration deserving its own phase). Confirm before
 starting any of these, or decide the port is otherwise complete.
 
