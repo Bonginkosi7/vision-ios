@@ -1,4 +1,5 @@
 import Foundation
+import VisionCore
 
 /// Real anonymous product-usage analytics — the iOS counterpart of
 /// desktop's AnalyticsClient.ts / Android's AnalyticsClient.kt, talking to
