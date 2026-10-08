@@ -1,4 +1,5 @@
 import SwiftUI
+import VisionCore
 import WebKit
 
 /// Real settings — port of the slice of SettingsActivity.kt this phase's
@@ -15,6 +16,8 @@ struct SettingsView: View {
     @AppStorage(AppSettings.themeKey) private var themeRaw: String = AppSettings.Theme.system.rawValue
     @AppStorage(AppSettings.searchEngineKey) private var searchEngineRaw: String = AppSettings.SearchEngine.google.rawValue
     @AppStorage(AppSettings.offlineStorageLimitMbKey) private var offlineStorageLimitMb: Int = 500
+    @AppStorage(AppSettings.analyticsEnabledKey) private var analyticsEnabled: Bool = true
+    @AppStorage(AppSettings.diagnosticsEnabledKey) private var diagnosticsEnabled: Bool = true
 
     @State private var anthropicInput: String = ""
     @State private var openAiInput: String = ""
@@ -76,6 +79,20 @@ struct SettingsView: View {
                         showClearConfirm = true
                     }
                     .accessibilityIdentifier("btnClearBrowsingData")
+
+                    // Android's setUpPrivacy() puts these same two checkboxes
+                    // in this same Privacy card, right below Clear Browsing
+                    // Data — matched here rather than inventing a separate
+                    // "Analytics" section Android itself doesn't have.
+                    Toggle("Anonymous usage analytics", isOn: $analyticsEnabled)
+                        .accessibilityIdentifier("analyticsEnabledToggle")
+                    Text("Help improve VISION by sharing anonymous product usage statistics — which features get used, not what you browse. We never collect your browsing history, page contents, passwords, or search queries with this.")
+                        .font(.caption).foregroundStyle(.secondary)
+
+                    Toggle("Technical diagnostics", isOn: $diagnosticsEnabled)
+                        .accessibilityIdentifier("diagnosticsEnabledToggle")
+                    Text("Share anonymous crash and performance reports to help fix bugs. Never includes page content.")
+                        .font(.caption).foregroundStyle(.secondary)
                 } header: {
                     Text("Privacy")
                 } footer: {
@@ -154,7 +171,16 @@ struct SettingsView: View {
                 Button("Cancel", role: .cancel) {}
             }
         }
-        .onAppear(perform: refreshKeyStatus)
+        .onAppear {
+            refreshKeyStatus()
+            // Real call site, matching SettingsActivity.kt's own
+            // AnalyticsClient.track(this, AnalyticsEvent.SETTINGS_OPENED) —
+            // proves the queue/flush plumbing end to end, not just the
+            // app-launch lifecycle events AnalyticsClient.start() already
+            // fires on its own. Every other screen's own track() call is
+            // separate follow-up scope (see AnalyticsEvent.swift).
+            AnalyticsClient.shared.track(AnalyticsEvent.settingsOpened)
+        }
     }
 
     @ViewBuilder

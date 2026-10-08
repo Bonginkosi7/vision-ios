@@ -64,6 +64,9 @@ enum AppSettings {
     static let searchEngineKey = "search_engine"
     static let themeKey = "theme"
     static let offlineStorageLimitMbKey = "offline_storage_limit_mb"
+    static let analyticsEnabledKey = "analytics_enabled"
+    static let diagnosticsEnabledKey = "diagnostics_enabled"
+    private static let analyticsInstallationIDKey = "analytics_installation_id"
 
     /// Real options, direct port of VisionSettings.kt's own spinner list.
     static let offlineStorageLimitOptionsMb = [200, 500, 1000, 2000, 5000]
@@ -93,6 +96,47 @@ enum AppSettings {
         }
         set {
             UserDefaults.standard.set(newValue, forKey: offlineStorageLimitMbKey)
+        }
+    }
+
+    /// Anonymous product-usage analytics (AnalyticsClient) — on by default,
+    /// matching Android/desktop's own real default and their exact Settings
+    /// disclosure copy. Never collects browsing history, page contents, or
+    /// search queries; see AnalyticsEvent.swift for the full allowlist.
+    /// `object(forKey:)` (not plain `bool(forKey:)`, which reads a missing
+    /// key as `false`) is what makes "on by default" real for a fresh
+    /// install rather than just for whichever launch first writes it.
+    static var isAnalyticsEnabled: Bool {
+        get {
+            (UserDefaults.standard.object(forKey: analyticsEnabledKey) as? Bool) ?? true
+        }
+        set {
+            UserDefaults.standard.set(newValue, forKey: analyticsEnabledKey)
+        }
+    }
+
+    /// Anonymous crash/performance reporting (AnalyticsClient.reportCrash)
+    /// — a separate toggle from the above, same as Android/desktop. On by
+    /// default, matching their own real default.
+    static var isDiagnosticsEnabled: Bool {
+        get {
+            (UserDefaults.standard.object(forKey: diagnosticsEnabledKey) as? Bool) ?? true
+        }
+        set {
+            UserDefaults.standard.set(newValue, forKey: diagnosticsEnabledKey)
+        }
+    }
+
+    /// A real, random per-install UUID (never a device identifier) —
+    /// generated once on first real use and persisted, same real shape as
+    /// Android/desktop's own analyticsInstallationId. Nil until
+    /// AnalyticsClient.start() has run at least once.
+    static var analyticsInstallationID: String? {
+        get {
+            UserDefaults.standard.string(forKey: analyticsInstallationIDKey)
+        }
+        set {
+            UserDefaults.standard.set(newValue, forKey: analyticsInstallationIDKey)
         }
     }
 }

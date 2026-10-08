@@ -48,6 +48,13 @@ targets:
         # Android's/desktop's own unconfigured state.
         VISION_FIREBASE_API_KEY: "$(VISION_FIREBASE_API_KEY)"
         VISION_FIREBASE_PROJECT_ID: "$(VISION_FIREBASE_PROJECT_ID)"
+        # Same real mechanism for the analytics backend's own two values —
+        # no vision-analytics-backend has been deployed yet (see README),
+        # so these are empty right now and AnalyticsConfig.isConfigured()
+        # reads false, same honest unconfigured state Android/desktop are
+        # already in; the wiring is real and ready for when it exists.
+        VISION_ANALYTICS_URL: "$(VISION_ANALYTICS_URL)"
+        VISION_ANALYTICS_WRITE_KEY: "$(VISION_ANALYTICS_WRITE_KEY)"
         # INFOPLIST_KEY_* (not a separate XcodeGen `info.properties` block —
         # that requires its own on-disk Info.plist `path`, which conflicts
         # with GENERATE_INFOPLIST_FILE's auto-generated one above) is how
@@ -55,6 +62,8 @@ targets:
         # plist, e.g. INFOPLIST_KEY_UILaunchScreen_Generation above.
         INFOPLIST_KEY_VisionFirebaseAPIKey: "$(VISION_FIREBASE_API_KEY)"
         INFOPLIST_KEY_VisionFirebaseProjectID: "$(VISION_FIREBASE_PROJECT_ID)"
+        INFOPLIST_KEY_VisionAnalyticsURL: "$(VISION_ANALYTICS_URL)"
+        INFOPLIST_KEY_VisionAnalyticsWriteKey: "$(VISION_ANALYTICS_WRITE_KEY)"
 
   # Real behavioral verification — launches the actual built app in a
   # booted simulator and drives it (navigate, bookmark, relaunch, confirm

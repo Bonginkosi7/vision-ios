@@ -42,6 +42,11 @@ jobs:
     env:
       VISION_FIREBASE_API_KEY: ${{ secrets.VISION_FIREBASE_API_KEY }}
       VISION_FIREBASE_PROJECT_ID: ${{ secrets.VISION_FIREBASE_PROJECT_ID }}
+      # No vision-analytics-backend is deployed yet, so these two secrets
+      # don't exist on this repo either — resolves to empty, same honest
+      # unconfigured build as everywhere else, ready for when it does.
+      VISION_ANALYTICS_URL: ${{ secrets.VISION_ANALYTICS_URL }}
+      VISION_ANALYTICS_WRITE_KEY: ${{ secrets.VISION_ANALYTICS_WRITE_KEY }}
     steps:
       - uses: actions/checkout@v4
       - name: Select the newest available Xcode

@@ -199,6 +199,42 @@ final class VisionIOSUITests: XCTestCase {
         XCTAssertEqual(XCTWaiter().wait(for: [clearedExpectation], timeout: 5), .completed, "clearing the key should flip status back to Not configured")
     }
 
+    /// Real proof the analytics/diagnostics toggles (AnalyticsClient's own
+    /// two settings) default to on for a fresh install — matching
+    /// Android/desktop's own real default — and that switching one off
+    /// really persists, surviving a real process termination the same way
+    /// `test_bookmarkingAPage_survivesAppTermination` proves for bookmarks.
+    /// Doesn't assert anything about the real network flush path: no
+    /// vision-analytics-backend is deployed yet (see README), so there's
+    /// nothing live to observe there beyond AnalyticsConfig.isConfigured()
+    /// reading false, which isn't something this screen surfaces.
+    func test_analyticsAndDiagnosticsTogglesDefaultOnAndPersist() {
+        let app = XCUIApplication()
+        app.launch()
+
+        openMenu(app, item: "menu_settings")
+
+        let analyticsToggle = app.switches["analyticsEnabledToggle"]
+        let diagnosticsToggle = app.switches["diagnosticsEnabledToggle"]
+        XCTAssertTrue(analyticsToggle.waitForExistence(timeout: 5))
+        XCTAssertTrue(diagnosticsToggle.exists)
+        XCTAssertEqual(analyticsToggle.value as? String, "1", "a fresh install should start with analytics on, matching Android/desktop's own real default")
+        XCTAssertEqual(diagnosticsToggle.value as? String, "1", "a fresh install should start with diagnostics on, matching Android/desktop's own real default")
+
+        analyticsToggle.tap()
+        XCTAssertEqual(analyticsToggle.value as? String, "0")
+        app.navigationBars.buttons["settingsDoneButton"].tap()
+
+        app.terminate()
+        app.launch()
+        openMenu(app, item: "menu_settings")
+
+        let analyticsToggleAfterRelaunch = app.switches["analyticsEnabledToggle"]
+        XCTAssertTrue(analyticsToggleAfterRelaunch.waitForExistence(timeout: 5))
+        XCTAssertEqual(analyticsToggleAfterRelaunch.value as? String, "0", "turning analytics off should really persist, not just change the in-memory toggle")
+        XCTAssertEqual(app.switches["diagnosticsEnabledToggle"].value as? String, "1", "diagnostics should be unaffected by the separate analytics toggle")
+    }
+
     /// Real behavioral proof the search-engine setting actually affects
     /// navigation, not just a UI toggle with nothing behind it: switch to
     /// DuckDuckGo, submit a plain search phrase (not a URL) from the

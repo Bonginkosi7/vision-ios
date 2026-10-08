@@ -375,6 +375,10 @@ enum AppDatabase {
         // "each feature owns its migration step" convention.
         RedemptionMigrations.register(&migrator)
 
+        // Analytics queue (analyticsQueue + crashQueue tables) — see
+        // AnalyticsQueueStore.swift, same per-feature migration convention.
+        AnalyticsMigrations.register(&migrator)
+
         return migrator
     }
 }

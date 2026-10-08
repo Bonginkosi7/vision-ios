@@ -4,6 +4,16 @@ import SwiftUI
 struct VisionIOSApp: App {
     @AppStorage(AppSettings.themeKey) private var themeRaw: String = AppSettings.Theme.system.rawValue
 
+    init() {
+        // App.init() isn't guaranteed MainActor-isolated by the SwiftUI
+        // protocol itself (only `body` is) — hopping via Task here is what
+        // makes calling the MainActor-isolated AnalyticsClient safe from
+        // either case, rather than assuming isolation that may not hold.
+        Task { @MainActor in
+            AnalyticsClient.shared.start()
+        }
+    }
+
     var body: some Scene {
         WindowGroup {
             // nil here is a real, deliberate value for .system — it tells
