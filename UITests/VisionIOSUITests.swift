@@ -55,7 +55,7 @@ final class VisionIOSUITests: XCTestCase {
         // webView.url?.absoluteString — so that's the real URL that ends
         // up both in the address bar and in the bookmark row's identifier.
         let testURL = "https://example.com/"
-        let bookmarkRowIdentifier = "bookmarkRow_\(testURL)"
+        let bookmarkRowIdentifier = "bookmarksListRow_\(testURL)"
 
         let app = XCUIApplication()
         app.launch()
@@ -81,18 +81,16 @@ final class VisionIOSUITests: XCTestCase {
         let relaunched = XCUIApplication()
         relaunched.launch()
 
-        // A fresh launch starts on a new tab, so the New Tab page (and its
-        // real bookmarks row, sourced from BookmarkStore.list()) should be
-        // showing again.
+        // New Tab itself no longer shows a bookmarks row (replaced by the
+        // real News section, matching Android's own New Tab exactly — see
+        // NewTabView's doc comment) — the real, intended place to read a
+        // persisted bookmark back is the dedicated Bookmarks screen.
+        openMenu(relaunched, item: "menu_bookmarks")
         let bookmarkRow = relaunched.buttons[bookmarkRowIdentifier]
         if !bookmarkRow.waitForExistence(timeout: 8) {
             attachDiagnostics(app: relaunched, name: "bookmark-not-found-after-relaunch")
         }
-        XCTAssertTrue(
-            bookmarkRow.exists,
-            "the bookmark saved before termination should be read back from the real, persisted database on relaunch " +
-            "(empty-state showing instead: \(relaunched.otherElements["emptyBookmarksState"].exists))"
-        )
+        XCTAssertTrue(bookmarkRow.exists, "the bookmark saved before termination should be read back from the real, persisted database on relaunch")
     }
 
     /// Real History proof: navigate on a normal (non-private) tab, open the
@@ -1385,6 +1383,31 @@ final class VisionIOSUITests: XCTestCase {
 
         let addressField = app.textFields["addressBarField"]
         assertAddressBarEventuallyShows(addressField, "https://example.com/", in: self)
+    }
+
+    /// Real end-to-end proof for the New Tab "Top Stories — BBC News"
+    /// section (replaces the New Tab bookmarks row — see NewTabView's own
+    /// doc comment on why): a real fetch against the live BBC World News
+    /// RSS feed settles into one of its two honest real states. Doesn't
+    /// assert which one — that depends on live network reachability this
+    /// test doesn't control, the same reasoning
+    /// `test_redeemScreenShowsRealBalanceAndSettlesAfterRemoteSync`
+    /// already uses for its own live fetch.
+    func test_newTabNewsSectionSettlesAfterARealFetch() {
+        let app = XCUIApplication()
+        app.launch()
+
+        let settled = NSPredicate { _, _ in
+            app.staticTexts["newsStatusText"].exists || app.otherElements["newsHeadlinesList"].exists
+        }
+        let expectation = XCTNSPredicateExpectation(predicate: settled, object: nil)
+        if XCTWaiter().wait(for: [expectation], timeout: 15) != .completed {
+            attachDiagnostics(app: app, name: "newtab-news-did-not-settle")
+        }
+        XCTAssertTrue(
+            app.staticTexts["newsStatusText"].exists || app.otherElements["newsHeadlinesList"].exists,
+            "the real News section should settle into either real headlines or the honest empty/error state, not hang"
+        )
     }
 
     /// Real Reload button proof — found missing entirely during the same

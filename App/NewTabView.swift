@@ -5,12 +5,13 @@ import VisionCore
 /// `newtab.ts`: a real time-of-day greeting, an "Ask VISION" box (real
 /// URLs navigate, everything else routes to a real Ask VISION chat —
 /// never a search-engine fallback, this box is not the address bar),
-/// and the same real widget cards New Tab shares with their own full
+/// the same real widget cards New Tab shares with their own full
 /// screens elsewhere in this app — VISION Advisor (`AdvisorLogic`),
 /// Offline Readiness (`VisionCore.ReadinessLogic`, same numbers as
 /// VisionReadyView), Today's Overview (`WellbeingStore`/
 /// `WellbeingManager`), and VISION Points (`RewardStore`/`RewardRules`,
-/// same numbers as RewardsView) — plus the real bookmarks row.
+/// same numbers as RewardsView) — and the real "Top Stories — BBC News"
+/// section (`NewsLogic`/`NewsClient`, a real feed fetch, no API key).
 ///
 /// Found via a cross-source design sweep as a major, previously-
 /// undisclosed gap: this screen had stayed at its original Phase 1 cut
@@ -19,16 +20,23 @@ import VisionCore
 /// plus `WellbeingActions.swift`'s) already said these widgets belonged
 /// here "in a later phase" that never actually arrived.
 ///
+/// **No bookmarks row here, on purpose, matching Android exactly**:
+/// Android's own `view_new_tab.xml` has never shown a bookmarks list on
+/// New Tab — `bookmarkDb` there is only read for the Readiness widget's
+/// count, never rendered as rows (confirmed by grepping it). This
+/// screen's own bookmarks row was this port's own, Android-divergent
+/// invention from Phase 1 (before a real New Tab reference existed to
+/// check against) — replaced here with the real News section Android
+/// actually has in that spot; the dedicated `BookmarksView` screen
+/// remains the real place to browse/manage bookmarks, same split
+/// Android itself has (`BookmarksActivity.kt`, separate from New Tab).
+///
 /// **Disclosed scope trim, not an oversight**: Android's real Weather
-/// pill (`WeatherLogic`, a real location-based API call) and BBC World
-/// News headline list (`NewsLogic`, a real feed fetch) are deliberately
-/// NOT ported here — each is a genuine new external-API integration
-/// (plus, for weather, a new location-permission flow) that deserves
-/// its own real-source-verified phase rather than being rushed in
-/// alongside everything else this sweep could close using only
-/// infrastructure this app already has, tested, elsewhere. Full
-/// onboarding is trimmed too — every destination it would point to is
-/// already one tap away from the toolbar/menu.
+/// pill (`WeatherLogic`, a real location-based API call) is deliberately
+/// NOT ported here — a genuine new external-API integration plus a new
+/// location-permission flow that deserves its own real-source-verified
+/// phase. Full onboarding is trimmed too — every destination it would
+/// point to is already one tap away from the toolbar/menu.
 ///
 /// The photo background (`bg_new_tab.jpg`, the exact same real asset
 /// Android bundles at res/drawable-nodpi/bg_new_tab.jpg — not a
@@ -37,6 +45,10 @@ import VisionCore
 /// icons sourced from the same real favicon service `FaviconLoader`
 /// already uses elsewhere) were added in a later pass, closing what had
 /// been this screen's two remaining disclosed trims.
+private enum NewsStatus {
+    case loading, empty, loaded
+}
+
 struct NewTabView: View {
     @ObservedObject var bookmarkStore: BookmarkStore
     @ObservedObject var offlineStore: OfflineStore
@@ -49,6 +61,8 @@ struct NewTabView: View {
 
     @State private var bookmarks: [Bookmark] = []
     @State private var shortcuts: [Shortcut] = []
+    @State private var headlines: [NewsHeadline] = []
+    @State private var newsStatus: NewsStatus = .loading
     @State private var askText = ""
     @State private var showAddShortcut = false
     @State private var newShortcutTitle = ""
@@ -146,13 +160,16 @@ struct NewTabView: View {
                             pointsCard.frame(maxWidth: .infinity)
                         }
 
-                        bookmarksSection
+                        newsSection
                     }
                     .padding(20)
                 }
             }
         }
-        .onAppear(perform: refresh)
+        .onAppear {
+            refresh()
+            Task { await refreshNews() }
+        }
         .alert("Add shortcut", isPresented: $showAddShortcut) {
             TextField("Title", text: $newShortcutTitle)
             TextField("URL", text: $newShortcutUrl)
@@ -411,47 +428,66 @@ struct NewTabView: View {
         }
     }
 
+    /// Real "Top Stories — BBC News" section — port of
+    /// `NewTabController.kt`'s `refreshNews()`/`buildNewsCard()` (itself
+    /// matching desktop's `loadNews()`). A plain vertical block (not a
+    /// `DesignSystem.card`), matching Android's own `view_new_tab.xml`
+    /// layout there exactly — header, a status line while loading/on
+    /// failure, then up to 5 real headline rows. Tapping one navigates the
+    /// current tab in place to the real article URL, same as a bookmark
+    /// row or shortcut tap elsewhere on this screen — not "open in a new
+    /// tab".
     @ViewBuilder
-    private var bookmarksSection: some View {
-        DesignSystem.sectionLabel("Bookmarks")
+    private var newsSection: some View {
+        DesignSystem.sectionLabel("Top Stories — BBC News")
 
-        if bookmarks.isEmpty {
-            DesignSystem.emptyState(
-                emoji: "🔖",
-                title: "No bookmarks yet",
-                subtitle: "Tap the star in the address bar to save a page.",
-                ctaText: "Got it",
-                onCta: {}
-            )
-            .accessibilityIdentifier("emptyBookmarksState")
-        } else {
-            DesignSystem.card {
-                VStack(alignment: .leading, spacing: 0) {
-                    ForEach(bookmarks) { bookmark in
-                        Button(action: { onNavigate(bookmark.url) }) {
-                            DesignSystem.statRow(emoji: "🔖", label: bookmark.title, value: "")
+        switch newsStatus {
+        case .loading:
+            Text("Loading headlines…")
+                .font(.system(size: 13)).foregroundStyle(DesignSystem.textMuted2)
+                .accessibilityIdentifier("newsStatusText")
+        case .empty:
+            // Verbatim port of Android's new_tab_news_empty copy — a real
+            // fetch was attempted and failed (or returned nothing usable),
+            // never silently replaced with fabricated headlines.
+            Text("Couldn't reach BBC News right now — check your connection and reopen a new tab.")
+                .font(.system(size: 13)).foregroundStyle(DesignSystem.textMuted2)
+                .accessibilityIdentifier("newsStatusText")
+        case .loaded:
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(Array(headlines.enumerated()), id: \.element.id) { index, headline in
+                    Button(action: { onNavigate(headline.url) }) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(headline.title)
+                                .font(.system(size: 15)).foregroundStyle(.white)
+                                .multilineTextAlignment(.leading)
+                            Text(headline.source)
+                                .font(.system(size: 12)).foregroundStyle(DesignSystem.textMuted2.opacity(0.65))
                         }
-                        .accessibilityIdentifier("bookmarkRow_\(bookmark.url)")
+                        .padding(.vertical, 12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .accessibilityIdentifier("newsHeadline_\(headline.id)")
+
+                    if index < headlines.count - 1 {
+                        Divider().background(DesignSystem.borderCard)
                     }
                 }
-                // Real bug found via a CI UI test failure, not
-                // review: SwiftUI's default accessibility-element
-                // merging collapsed each row's own Button (and its
-                // "bookmarkRow_<url>" identifier) into this single
-                // outer container — a captured accessibility-tree
-                // dump on relaunch showed exactly one merged
-                // Button, identifier 'bookmarksList', label
-                // '🔖, Example Domain', with the real per-row
-                // identifier gone. `.contain` tells SwiftUI to keep
-                // each child independently accessible instead of
-                // flattening them into one element.
-                .accessibilityElement(children: .contain)
             }
-            .accessibilityIdentifier("bookmarksList")
+            // Pre-emptively applied: the bookmarks row this section
+            // replaced hit a real CI-caught bug from SwiftUI's default
+            // accessibility-element merging collapsing each row's own
+            // Button into one outer element — `.contain` keeps each
+            // headline Button independently tappable/identifiable instead.
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("newsHeadlinesList")
         }
     }
 
     private func refresh() {
+        // Only ever used below for the Readiness widget's real count — not
+        // rendered as a list on this screen, matching Android's own
+        // bookmarkDb usage in NewTabController.kt exactly.
         bookmarks = (try? bookmarkStore.list()) ?? []
         shortcuts = (try? shortcutStore.list()) ?? []
 
@@ -480,6 +516,16 @@ struct NewTabView: View {
         pointsLevel = total / RewardRules.levelSize + 1
         pointsIntoLevel = total % RewardRules.levelSize
         latestReward = (try? rewardStore.recent(limit: 1))?.first
+    }
+
+    /// Real fetch, no caching — matches Android/desktop exactly: every
+    /// time New Tab is shown, this refetches rather than reading a stale
+    /// cache (see `NewsClient`'s own doc comment).
+    private func refreshNews() async {
+        newsStatus = .loading
+        let fetched = await NewsClient.fetchTopHeadlines()
+        headlines = fetched
+        newsStatus = fetched.isEmpty ? .empty : .loaded
     }
 
     /// Real URL/domain -> navigate, exactly like the address bar.
