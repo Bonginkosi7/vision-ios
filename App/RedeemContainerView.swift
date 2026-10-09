@@ -46,8 +46,12 @@ struct RedeemContainerView: View {
     }
 
     private func reload() async {
-        catalog = (try? redemptionStore.catalog()) ?? []
-        history = (try? redemptionStore.history()) ?? []
+        // RedemptionStore is @MainActor-isolated, and a View's own methods
+        // aren't implicitly MainActor just because `body` is required to
+        // be — so crossing into it needs `await` here even though
+        // catalog()/history() are themselves plain synchronous functions.
+        catalog = (try? await redemptionStore.catalog()) ?? []
+        history = (try? await redemptionStore.history()) ?? []
         balance = (try? rewardStore.availableBalance()) ?? 0
     }
 

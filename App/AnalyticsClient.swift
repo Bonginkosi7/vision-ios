@@ -60,8 +60,14 @@ final class AnalyticsClient {
         }
 
         flushTimer?.invalidate()
-        flushTimer = Timer.scheduledTimer(withTimeInterval: AnalyticsConfig.flushIntervalSeconds, repeats: true) { [weak self] _ in
-            Task { @MainActor in await self?.flush() }
+        // Referencing the singleton fresh (not capturing `self`) sidesteps a
+        // real concurrency-safety complaint the local Swift 5.8 toolchain
+        // catches but CI's newer one only warns on: a weakly-captured `self`
+        // referenced from a Task nested inside Timer's own non-isolated,
+        // concurrently-executing callback. Safe here since there's only ever
+        // one AnalyticsClient, held for the app's entire lifetime anyway.
+        flushTimer = Timer.scheduledTimer(withTimeInterval: AnalyticsConfig.flushIntervalSeconds, repeats: true) { _ in
+            Task { @MainActor in await AnalyticsClient.shared.flush() }
         }
         Task { await flush() } // don't wait a full interval after a fresh launch to try sending
     }

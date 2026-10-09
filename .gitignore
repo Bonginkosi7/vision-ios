@@ -1,6 +1,8 @@
 .DS_Store
 .build/
-*.xcodeproj/xcuserdata/
+# XcodeGen generates this fresh from project.yml every time (locally and in
+# CI, ios.yml's own "Generate Xcode project" step) — never committed.
+*.xcodeproj/
 *.xcworkspace/xcuserdata/
 DerivedData/
 .swiftpm/

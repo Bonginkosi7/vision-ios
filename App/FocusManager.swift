@@ -37,8 +37,12 @@ final class FocusManager: ObservableObject {
         let endsAt = startedAt.addingTimeInterval(TimeInterval(plannedMinutes * 60))
         activeSession = ActiveFocusSession(id: id, startedAt: startedAt, endsAt: endsAt, plannedMinutes: plannedMinutes)
         let interval = max(0, endsAt.timeIntervalSinceNow)
-        timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: false) { [weak self] _ in
-            Task { @MainActor in self?.endActiveSession(completedNaturally: true) }
+        // Referencing the singleton fresh (not capturing `self`) sidesteps a
+        // real concurrency-safety complaint the local Swift 5.8 toolchain
+        // catches but CI's newer one only warns on — see AnalyticsClient's
+        // own identical fix for the same reasoning.
+        timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: false) { _ in
+            Task { @MainActor in FocusManager.shared.endActiveSession(completedNaturally: true) }
         }
     }
 
