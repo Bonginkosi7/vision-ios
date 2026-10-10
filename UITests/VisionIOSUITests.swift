@@ -17,7 +17,7 @@ final class VisionIOSUITests: XCTestCase {
     /// not a crash).
     func test_appLaunches_showsAddressBarAndNewTab() {
         let app = XCUIApplication()
-        app.launch()
+        launchApp(app)
 
         XCTAssertTrue(app.textFields["addressBarField"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["tabCountLabel"].waitForExistence(timeout: 5), "the tab count is a real, tappable button into the tab switcher, not a plain label")
@@ -30,7 +30,7 @@ final class VisionIOSUITests: XCTestCase {
     /// WebViewRepresentable's coordinator together, not in isolation.
     func test_typingARealAddress_navigatesAndUpdatesTheAddressBar() {
         let app = XCUIApplication()
-        app.launch()
+        launchApp(app)
 
         let addressField = app.textFields["addressBarField"]
         XCTAssertTrue(addressField.waitForExistence(timeout: 5))
@@ -58,7 +58,7 @@ final class VisionIOSUITests: XCTestCase {
         let bookmarkRowIdentifier = "bookmarksListRow_\(testURL)"
 
         let app = XCUIApplication()
-        app.launch()
+        launchApp(app)
 
         let addressField = app.textFields["addressBarField"]
         XCTAssertTrue(addressField.waitForExistence(timeout: 5))
@@ -79,7 +79,7 @@ final class VisionIOSUITests: XCTestCase {
         app.terminate()
 
         let relaunched = XCUIApplication()
-        relaunched.launch()
+        launchApp(relaunched)
 
         // New Tab itself no longer shows a bookmarks row (replaced by the
         // real News section, matching Android's own New Tab exactly — see
@@ -99,7 +99,7 @@ final class VisionIOSUITests: XCTestCase {
     /// real didFinish callback, not a fabricated log entry.
     func test_historyRecordsRealNavigation() {
         let app = XCUIApplication()
-        app.launch()
+        launchApp(app)
 
         let addressField = app.textFields["addressBarField"]
         XCTAssertTrue(addressField.waitForExistence(timeout: 5))
@@ -119,7 +119,7 @@ final class VisionIOSUITests: XCTestCase {
     /// disk and back, not just a database row with nothing behind it.
     func test_offlineSaveAndReopen() {
         let app = XCUIApplication()
-        app.launch()
+        launchApp(app)
 
         let addressField = app.textFields["addressBarField"]
         XCTAssertTrue(addressField.waitForExistence(timeout: 5))
@@ -151,7 +151,7 @@ final class VisionIOSUITests: XCTestCase {
     /// WebViewRepresentable's coordinator, not just a cosmetic label.
     func test_privateTabDoesNotRecordHistory() {
         let app = XCUIApplication()
-        app.launch()
+        launchApp(app)
 
         openMenu(app, item: "menu_newPrivateTab")
         XCTAssertTrue(app.staticTexts["privateIndicator"].waitForExistence(timeout: 5), "a new private tab should show the real Private indicator")
@@ -171,7 +171,7 @@ final class VisionIOSUITests: XCTestCase {
     /// store.
     func test_settingsSavesAndClearsAnAiKey() {
         let app = XCUIApplication()
-        app.launch()
+        launchApp(app)
 
         openMenu(app, item: "menu_settings")
 
@@ -200,6 +200,59 @@ final class VisionIOSUITests: XCTestCase {
         XCTAssertEqual(XCTWaiter().wait(for: [clearedExpectation], timeout: 5), .completed, "clearing the key should flip status back to Not configured")
     }
 
+    /// Settings → About links to the Ann-Connect website, opening it in a new tab.
+    func test_settingsPoweredByAnnConnectOpensTheWebsiteInANewTab() {
+        let app = XCUIApplication()
+        launchApp(app)
+
+        openMenu(app, item: "menu_settings")
+        let link = app.buttons["poweredByAnnConnect"]
+        for _ in 0..<6 where !(link.exists && link.isHittable) { app.swipeUp() }
+        XCTAssertTrue(link.exists, "Settings should show Powered by Ann-Connect")
+        link.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+
+        let address = app.textFields["addressBarField"]
+        XCTAssertTrue(address.waitForExistence(timeout: 10))
+        let opened = NSPredicate(format: "value CONTAINS[c] 'ann-connect'")
+        XCTAssertEqual(XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: opened, object: address)], timeout: 15), .completed, "the website should open in a tab")
+    }
+
+    /// The name set in Settings → Profile appears in the homepage greeting, and Reset profile clears it again.
+    func test_profileNameAppearsInTheHomepageGreetingAndResetClearsIt() {
+        let app = XCUIApplication()
+        launchApp(app)
+
+        openMenu(app, item: "menu_settings")
+        let nameField = app.textFields["profileNameField"]
+        XCTAssertTrue(nameField.waitForExistence(timeout: 8))
+        XCTAssertTrue(app.buttons["profilePhotoButton"].exists, "Settings should offer adding a profile photo")
+        XCTAssertTrue(app.buttons["profileCountryPicker"].exists || app.otherElements["profileCountryPicker"].exists || app.staticTexts["Country"].exists, "Settings should offer choosing a country")
+        nameField.tap()
+        if let existing = nameField.value as? String, !existing.isEmpty, existing != "Your name" {
+            nameField.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: existing.count))
+        }
+        nameField.typeText("Tester")
+        closeSettings(app)
+
+        let greeting = app.staticTexts["newTabGreeting"]
+        XCTAssertTrue(greeting.waitForExistence(timeout: 8))
+        XCTAssertTrue(greeting.label.hasSuffix(", Tester"), "the greeting should include the profile name, got: \(greeting.label)")
+
+        // Leave the device as it was: reset the profile. Let the Settings sheet finish dismissing first.
+        let settingsCard = app.buttons["homeCard_settings"]
+        XCTAssertTrue(settingsCard.waitForExistence(timeout: 5))
+        settingsCard.tap()
+        let reset = app.buttons["profileResetButton"]
+        XCTAssertTrue(reset.waitForExistence(timeout: 8))
+        reset.tap()
+        let confirm = app.buttons["profileConfirmReset"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        confirm.tap()
+        closeSettings(app)
+        XCTAssertTrue(greeting.waitForExistence(timeout: 8))
+        XCTAssertFalse(greeting.label.contains("Tester"), "Reset profile should clear the name from the greeting")
+    }
+
     /// Real proof the analytics/diagnostics toggles (AnalyticsClient's own
     /// two settings) default to on for a fresh install — matching
     /// Android/desktop's own real default — and that a real tap actually
@@ -217,7 +270,7 @@ final class VisionIOSUITests: XCTestCase {
     /// this screen surfaces.
     func test_analyticsAndDiagnosticsTogglesDefaultOnAndRespondToATap() {
         let app = XCUIApplication()
-        app.launch()
+        launchApp(app)
 
         openMenu(app, item: "menu_settings")
 
@@ -249,7 +302,7 @@ final class VisionIOSUITests: XCTestCase {
     /// DuckDuckGo URL.
     func test_changingSearchEngineAffectsRealNavigation() {
         let app = XCUIApplication()
-        app.launch()
+        launchApp(app)
 
         openMenu(app, item: "menu_settings")
 
@@ -285,7 +338,7 @@ final class VisionIOSUITests: XCTestCase {
     /// one. No network call happens on this path at all.
     func test_rewriteWithNoProviderConfigured_showsHonestError() {
         let app = XCUIApplication()
-        app.launch()
+        launchApp(app)
 
         openEducationMenu(app, item: "menu_rewrite")
 
@@ -313,7 +366,7 @@ final class VisionIOSUITests: XCTestCase {
     /// fresh, unconfigured install.
     func test_rewriteWithInvalidKey_reachesRealAnthropicAPIAndShowsError() {
         let app = XCUIApplication()
-        app.launch()
+        launchApp(app)
 
         openMenu(app, item: "menu_settings")
         let keyInput = app.secureTextFields["anthropicKeyInput"]
@@ -363,7 +416,7 @@ final class VisionIOSUITests: XCTestCase {
     /// WebViewRepresentable.swift, the one path no other test touches.
     func test_focusModeBlocksConfiguredDomainAndEndsViaTheRealBridge() {
         let app = XCUIApplication()
-        app.launch()
+        launchApp(app)
 
         openMenu(app, item: "menu_focus")
 
@@ -430,7 +483,7 @@ final class VisionIOSUITests: XCTestCase {
     /// trip, not a seeded or in-memory-only list.
     func test_tasksAddCompleteAndFilter() {
         let app = XCUIApplication()
-        app.launch()
+        launchApp(app)
 
         openMenu(app, item: "menu_tasks")
 
@@ -481,7 +534,7 @@ final class VisionIOSUITests: XCTestCase {
     /// not `otherElements`.
     func test_advisorShowsNoNudgeOnAFreshLaunch() {
         let app = XCUIApplication()
-        app.launch()
+        launchApp(app)
 
         openMenu(app, item: "menu_advisor")
 
@@ -501,7 +554,7 @@ final class VisionIOSUITests: XCTestCase {
     /// by other tests or earlier runs against the same persisted database.
     func test_savingOfflineAwardsARealRewardEvent() {
         let app = XCUIApplication()
-        app.launch()
+        launchApp(app)
 
         let addressField = app.textFields["addressBarField"]
         navigate(app: app, addressField: addressField, to: "example.com")
@@ -527,7 +580,7 @@ final class VisionIOSUITests: XCTestCase {
     /// real TASK_COMPLETED point and show up as a real recent-activity row.
     func test_completingATaskAwardsARealRewardEvent() {
         let app = XCUIApplication()
-        app.launch()
+        launchApp(app)
 
         openMenu(app, item: "menu_tasks")
         let field = app.textFields["newTaskField"]
@@ -570,7 +623,7 @@ final class VisionIOSUITests: XCTestCase {
     func test_processingAndExtractingTopicsForASeededMaterial() {
         let app = XCUIApplication()
         app.launchArguments = ["-UITestSeedMaterial"]
-        app.launch()
+        launchApp(app)
 
         openEducationMenu(app, item: "menu_materials")
 
@@ -637,7 +690,7 @@ final class VisionIOSUITests: XCTestCase {
     func test_generatingFlashcardsFromASeededMaterial() {
         let app = XCUIApplication()
         app.launchArguments = ["-UITestSeedMaterial"]
-        app.launch()
+        launchApp(app)
 
         openEducationMenu(app, item: "menu_materials")
         let materialRow = app.staticTexts["materialTitle_ui-test-fixture"]
@@ -706,7 +759,7 @@ final class VisionIOSUITests: XCTestCase {
     func test_takingAHandAuthoredExamAndGeneratingFromMaterial() {
         let app = XCUIApplication()
         app.launchArguments = ["-UITestSeedMaterial"]
-        app.launch()
+        launchApp(app)
 
         openEducationMenu(app, item: "menu_materials")
         let materialRow = app.staticTexts["materialTitle_ui-test-fixture"]
@@ -820,7 +873,7 @@ final class VisionIOSUITests: XCTestCase {
     /// grounded or general-AI).
     func test_askingTheAITutorWithNoCloudKeyConfigured() {
         let app = XCUIApplication()
-        app.launch()
+        launchApp(app)
 
         openEducationMenu(app, item: "menu_tutor")
 
@@ -868,7 +921,7 @@ final class VisionIOSUITests: XCTestCase {
     func test_performanceShowsHonestEmptyStatesWithNoRealTopicData() {
         let app = XCUIApplication()
         app.launchArguments = ["-UITestSeedMaterial"]
-        app.launch()
+        launchApp(app)
 
         openEducationMenu(app, item: "menu_materials")
         let materialRow = app.staticTexts["materialTitle_ui-test-fixture"]
@@ -922,7 +975,7 @@ final class VisionIOSUITests: XCTestCase {
     func test_studyPlanShowsHonestEmptyPlanAndExamDateRoundTrips() {
         let app = XCUIApplication()
         app.launchArguments = ["-UITestSeedMaterial"]
-        app.launch()
+        launchApp(app)
 
         openEducationMenu(app, item: "menu_materials")
         let materialRow = app.staticTexts["materialTitle_ui-test-fixture"]
@@ -984,7 +1037,7 @@ final class VisionIOSUITests: XCTestCase {
     func test_paperReviewWithNoCloudKeyConfigured() {
         let app = XCUIApplication()
         app.launchArguments = ["-UITestSeedMaterial"]
-        app.launch()
+        launchApp(app)
 
         openEducationMenu(app, item: "menu_materials")
         let materialRow = app.staticTexts["materialTitle_ui-test-fixture"]
@@ -1035,7 +1088,7 @@ final class VisionIOSUITests: XCTestCase {
     /// accessibility tree).
     func test_helpShowsRealDocumentationSections() {
         let app = XCUIApplication()
-        app.launch()
+        launchApp(app)
 
         openMenu(app, item: "menu_help")
 
@@ -1065,7 +1118,7 @@ final class VisionIOSUITests: XCTestCase {
     /// manual-input path rather than any button living inside one.
     func test_askingVisionWithNoCloudKeyConfigured() {
         let app = XCUIApplication()
-        app.launch()
+        launchApp(app)
 
         openMenu(app, item: "menu_askVision")
 
@@ -1118,7 +1171,7 @@ final class VisionIOSUITests: XCTestCase {
     /// regardless of run order.
     func test_visionReadyShowsRealNumbersAfterBookmarkingAndSavingOffline() {
         let app = XCUIApplication()
-        app.launch()
+        launchApp(app)
 
         let addressField = app.textFields["addressBarField"]
         XCTAssertTrue(addressField.waitForExistence(timeout: 5))
@@ -1169,7 +1222,7 @@ final class VisionIOSUITests: XCTestCase {
     func test_studyMaterialTagsAUntaggedDocumentAndTheRealTaxonomyRoundTrips() {
         let app = XCUIApplication()
         app.launchArguments = ["-UITestSeedMaterial"]
-        app.launch()
+        launchApp(app)
 
         openEducationMenu(app, item: "menu_studyMaterial")
         XCTAssertTrue(app.buttons["studySection_BASIC_EDUCATION"].waitForExistence(timeout: 5))
@@ -1239,7 +1292,7 @@ final class VisionIOSUITests: XCTestCase {
     /// `StudyReviewLogic`'s real tier math, never a fabricated schedule.
     func test_studyMaterialReviewTabTracksARealOfflineSavedEducationPage() {
         let app = XCUIApplication()
-        app.launch()
+        launchApp(app)
 
         let addressField = app.textFields["addressBarField"]
         XCTAssertTrue(addressField.waitForExistence(timeout: 5))
@@ -1296,7 +1349,7 @@ final class VisionIOSUITests: XCTestCase {
     /// permanent state behind.
     func test_bookmarksScreenShowsRealBookmarkAndRoundTripsOpenAndDelete() {
         let app = XCUIApplication()
-        app.launch()
+        launchApp(app)
 
         let addressField = app.textFields["addressBarField"]
         XCTAssertTrue(addressField.waitForExistence(timeout: 5))
@@ -1354,7 +1407,7 @@ final class VisionIOSUITests: XCTestCase {
     /// URL navigates the active tab directly, same as the address bar.
     func test_newTabPageShowsRealWidgetsAndSplitsUrlsFromAskVisionQueries() {
         let app = XCUIApplication()
-        app.launch()
+        launchApp(app)
 
         // This whole UI test suite shares one real app install/database
         // for the entire run (confirmed the hard way earlier — see
@@ -1413,7 +1466,7 @@ final class VisionIOSUITests: XCTestCase {
         // Pin the saved Offline Mode choice off for this launch so a value
         // left by another test in this shared install can't hide the section.
         app.launchArguments = ["-offline_mode_enabled", "NO"]
-        app.launch()
+        launchApp(app)
 
         let settled = NSPredicate { _, _ in
             app.staticTexts["newsStatusText"].exists || app.otherElements["newsHeadlinesList"].exists
@@ -1432,7 +1485,7 @@ final class VisionIOSUITests: XCTestCase {
     func test_homeFourCardsOpenTheirRealScreens() {
         let app = XCUIApplication()
         app.launchArguments = ["-offline_mode_enabled", "NO"]
-        app.launch()
+        launchApp(app)
 
         func open(_ id: String, expect: () -> XCUIElement, done: () -> Void) {
             let card = app.buttons["homeCard_\(id)"]
@@ -1456,7 +1509,7 @@ final class VisionIOSUITests: XCTestCase {
     /// device genuinely has no connection (the toggle correctly can't go online).
     func test_homeOfflineModeToggleSwapsTheHomepageContent() throws {
         let app = XCUIApplication()
-        app.launch()
+        launchApp(app)
 
         let status = app.staticTexts["homeModeStatus"]
         XCTAssertTrue(status.waitForExistence(timeout: 8))
@@ -1465,14 +1518,22 @@ final class VisionIOSUITests: XCTestCase {
         let offline = app.buttons["homeModeOffline"]
         let online = app.buttons["homeModeOnline"]
         XCTAssertTrue(offline.waitForExistence(timeout: 5))
-        offline.tap()
+        // Right after launch the header can still be settling; tap once it is hittable, and again if the mode didn't flip.
+        for _ in 0..<3 {
+            let settled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isHittable == true"), object: offline)
+            _ = XCTWaiter().wait(for: [settled], timeout: 5)
+            Thread.sleep(forTimeInterval: 0.6)
+            offline.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+            Thread.sleep(forTimeInterval: 1.0)
+            if status.label.contains("Offline Mode") { break }
+        }
 
         // The section is a container of buttons, which XCUITest doesn't expose as one
         // element — its own "Open Offline Library" button is the real signal it's showing.
         let openLibrary = app.buttons["homeOpenOfflineLibrary"]
         scrollIntoView(openLibrary, in: app)
         if !openLibrary.waitForExistence(timeout: 8) { attachDiagnostics(app: app, name: "home-offline-section-missing") }
-        XCTAssertTrue(openLibrary.exists, "Offline Mode should show the saved-content section")
+        XCTAssertTrue(openLibrary.exists, "Offline Mode should show the saved-content section; status=\(status.label)")
         XCTAssertTrue(status.label.contains("Offline Mode"), "status should name the mode, got: \(status.label)")
         XCTAssertTrue(status.label.contains("still use your connection"), "status should be honest that browsing isn't cut off")
         XCTAssertFalse(app.staticTexts["newsStatusText"].exists || app.otherElements["newsHeadlinesList"].exists, "live headlines should not be fetched or shown in Offline Mode")
@@ -1490,7 +1551,7 @@ final class VisionIOSUITests: XCTestCase {
     func test_toolbarAndHeaderLayoutIsRoomyAndWithinTheScreen() {
         let app = XCUIApplication()
         app.launchArguments = ["-offline_mode_enabled", "NO"]
-        app.launch()
+        launchApp(app)
 
         let ids = ["backButton", "forwardButton", "reloadButton", "bookmarkButton", "tabCountLabel", "moreMenuButton"]
         XCTAssertTrue(app.buttons["moreMenuButton"].waitForExistence(timeout: 8))
@@ -1540,7 +1601,7 @@ final class VisionIOSUITests: XCTestCase {
     /// cosmetic no-op.
     func test_reloadButtonTriggersARealSecondPageLoad() {
         let app = XCUIApplication()
-        app.launch()
+        launchApp(app)
 
         let addressField = app.textFields["addressBarField"]
         XCTAssertTrue(addressField.waitForExistence(timeout: 5))
@@ -1573,7 +1634,7 @@ final class VisionIOSUITests: XCTestCase {
     /// test's own permanently-bookmarked pages.
     func test_clearBrowsingDataRemovesRealHistory() {
         let app = XCUIApplication()
-        app.launch()
+        launchApp(app)
 
         let addressField = app.textFields["addressBarField"]
         XCTAssertTrue(addressField.waitForExistence(timeout: 5))
@@ -1607,7 +1668,7 @@ final class VisionIOSUITests: XCTestCase {
     /// and closing a tab actually removes it (not just hides a row).
     func test_tabSwitcherSwitchesAndClosesRealTabs() {
         let app = XCUIApplication()
-        app.launch()
+        launchApp(app)
 
         XCTAssertTrue(app.buttons["tabCountLabel"].waitForExistence(timeout: 5))
         XCTAssertEqual(app.buttons["tabCountLabel"].label, "1")
@@ -1662,7 +1723,7 @@ final class VisionIOSUITests: XCTestCase {
     /// rather than hanging or crashing.
     func test_redeemScreenShowsRealBalanceAndSettlesAfterRemoteSync() {
         let app = XCUIApplication()
-        app.launch()
+        launchApp(app)
 
         openMenu(app, item: "menu_redeem")
 
@@ -1745,6 +1806,18 @@ final class VisionIOSUITests: XCTestCase {
         app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'historyRow_' AND label CONTAINS %@", host))
     }
 
+    /// Taps Settings' Done button until the sheet is really gone — a tap made while a text field still has
+    /// keyboard focus can be swallowed by dismissing the keyboard instead.
+    private func closeSettings(_ app: XCUIApplication) {
+        let done = app.buttons["settingsDoneButton"]
+        for _ in 0..<3 {
+            guard done.exists else { return }
+            done.tap()
+            let gone = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: done)
+            if XCTWaiter().wait(for: [gone], timeout: 3) == .completed { return }
+        }
+    }
+
     /// Taps the More button once it is actually hittable. A plain `.tap()` right after a
     /// sheet closes or the toolbar changes fails outright in XCUITest's own scroll-to-visible
     /// step, so wait for the transition to finish and tap an explicit coordinate instead.
@@ -1781,13 +1854,21 @@ final class VisionIOSUITests: XCTestCase {
         }
     }
 
+    /// Launches the app with the offline-AI auto-download switched off (and its homepage card dismissed), so a
+    /// test never starts a 650 MB download or sees a progress card it didn't expect. Keeps whatever arguments
+    /// the test already set.
+    private func launchApp(_ app: XCUIApplication) {
+        app.launchArguments += ["-offline_model_opt_out", "YES", "-offline_model_prompt_dismissed", "YES"]
+        app.launch()
+    }
+
     private func openMenu(_ app: XCUIApplication, item identifier: String) {
-        let menuButton = app.buttons["moreMenuButton"]
-        XCTAssertTrue(menuButton.waitForExistence(timeout: 5))
-        menuButton.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        XCTAssertTrue(app.buttons["moreMenuButton"].waitForExistence(timeout: 5))
+        tapMoreButton(app)
 
         let menuItem = app.buttons[identifier]
-        XCTAssertTrue(menuItem.waitForExistence(timeout: 5), "expected menu item '\(identifier)' to exist in the overflow menu")
+        if !menuItem.waitForExistence(timeout: 3) { tapMoreButton(app) }
+        XCTAssertTrue(menuItem.waitForExistence(timeout: 5), "expected menu item '\(identifier)' to exist in the overflow menu; buttons: \(app.buttons.allElementsBoundByIndex.prefix(30).map { $0.identifier }), sheets/alerts: \(app.sheets.count)/\(app.alerts.count)")
         menuItem.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
     }
 
@@ -1798,9 +1879,8 @@ final class VisionIOSUITests: XCTestCase {
     /// popup grew too large to stay flat (see `MainBrowserView`'s own
     /// doc comment on `overflowMenu`).
     private func openEducationMenu(_ app: XCUIApplication, item identifier: String) {
-        let menuButton = app.buttons["moreMenuButton"]
-        XCTAssertTrue(menuButton.waitForExistence(timeout: 5))
-        menuButton.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        XCTAssertTrue(app.buttons["moreMenuButton"].waitForExistence(timeout: 5))
+        tapMoreButton(app)
 
         let educationItem = app.buttons["menu_education"]
         XCTAssertTrue(educationItem.waitForExistence(timeout: 5), "expected the real Education submenu to exist in the overflow menu")
@@ -1864,7 +1944,7 @@ final class VisionIOSUITests: XCTestCase {
     /// buildShortcutTile()/showAddShortcutDialog().
     func test_newTabShortcutsAddNavigateAndRemove() {
         let app = XCUIApplication()
-        app.launch()
+        launchApp(app)
 
         let shortcutsRow = app.scrollViews["newTabShortcutsRow"]
         XCTAssertTrue(shortcutsRow.waitForExistence(timeout: 5), "expected the real shortcuts row to render on a fresh launch")
@@ -1980,7 +2060,7 @@ final class VisionIOSUITests: XCTestCase {
     /// for its own screenshot, not abort the whole capture run.
     private func seedRealDataForDesignReview() {
         let app = XCUIApplication()
-        app.launch()
+        launchApp(app)
 
         let addressField = app.textFields["addressBarField"]
         if addressField.waitForExistence(timeout: 5) {
@@ -2051,7 +2131,7 @@ final class VisionIOSUITests: XCTestCase {
     /// capture, then attaches a real screenshot named for later retrieval.
     private func captureScreen(name: String, setup: (XCUIApplication) -> Void) {
         let app = XCUIApplication()
-        app.launch()
+        launchApp(app)
         setup(app)
         attachDiagnostics(app: app, name: name)
     }

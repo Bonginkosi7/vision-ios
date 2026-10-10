@@ -120,6 +120,12 @@ struct MainBrowserView: View {
                     .accessibilityIdentifier("privateSessionCover")
             }
         }
+        .task {
+            // Offline Ask VISION downloads by itself shortly after launch (the homepage card
+            // shows its progress, with Cancel) unless it is already there or the user said no.
+            try? await Task.sleep(nanoseconds: 20_000_000_000)
+            LocalModelManager.shared.autoStartIfNeeded()
+        }
         .onAppear {
             if tabManager.tabs.isEmpty {
                 tabManager.createTab(url: nil)
@@ -174,7 +180,9 @@ struct MainBrowserView: View {
             }
         }
         .sheet(isPresented: $showSettings) {
-            SettingsView(historyStore: historyStore)
+            SettingsView(historyStore: historyStore) { url in
+                _ = tabManager.createTab(url: url)
+            }
         }
         .sheet(isPresented: $showRewrite) {
             RewriteView()

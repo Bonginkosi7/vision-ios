@@ -7,10 +7,11 @@ import WebKit
 /// the two cloud AI key rows (save/clear/status, same real UX pattern as
 /// SettingsActivity.kt's setUpAiKeyRow), and real Clear Browsing Data
 /// (found missing during a cross-source sweep — port of setUpPrivacy()).
-/// Profile, credentials, offline AI model, and memory are later-phase
-/// scope — see README.
+/// The profile (photo, name, country) is in ProfileSection.swift.
 struct SettingsView: View {
     @ObservedObject var historyStore: HistoryStore
+    /// Opens a link in a new browser tab (Settings → Powered by Ann-Connect).
+    var onOpenURL: ((String) -> Void)? = nil
     @Environment(\.dismiss) private var dismiss
 
     @AppStorage(AppSettings.themeKey) private var themeRaw: String = AppSettings.Theme.system.rawValue
@@ -70,6 +71,22 @@ struct SettingsView: View {
     }
 
     @ViewBuilder
+    private var aboutSection: some View {
+        Section("About") {
+            Button {
+                onOpenURL?("https://www.ann-connect.com")
+                dismiss()
+            } label: {
+                HStack {
+                    Text("Powered by Ann-Connect")
+                    Spacer()
+                    Image(systemName: "arrow.up.right").font(.system(size: 12, weight: .semibold)).foregroundStyle(.secondary)
+                }
+            }
+            .accessibilityIdentifier("poweredByAnnConnect")
+        }
+    }
+
     private var offlineModelSection: some View {
         Section {
             OfflineModelRow()
@@ -174,12 +191,14 @@ struct SettingsView: View {
                 // storage", settings_ai_providers = "Cloud AI providers") —
                 // Android has no generic "Appearance"/"Search" supersection, so
                 // inventing those names here would be a real grouping mismatch.
+                ProfileSection()
                 themeSection
                 searchEngineSection
                 offlineStorageSection
                 privacySection
                 cloudAISection
                 offlineModelSection
+                aboutSection
             }
             .navigationTitle("Settings")
             .toolbar {

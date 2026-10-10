@@ -38,6 +38,7 @@ final class LocalModelManager: NSObject, ObservableObject, URLSessionDownloadDel
     enum State: Equatable {
         case notDownloaded
         case downloading(progress: Double)
+        case paused(progress: Double)
         case ready
         case failed(String)
     }
@@ -50,10 +51,41 @@ final class LocalModelManager: NSObject, ObservableObject, URLSessionDownloadDel
 
     private override init() { super.init() }
 
+    private static let optOutKey = "offline_model_opt_out"
+    private static let pausedKey = "offline_model_paused"
+
+    /// True while the user has paused — the automatic download leaves it alone.
+    private var isPausedByUser: Bool { UserDefaults.standard.bool(forKey: Self.pausedKey) }
+
+    /// True once the user has said no (cancelled, removed, or "Not now") — the
+    /// automatic download never restarts against that.
+    var isOptedOut: Bool { UserDefaults.standard.bool(forKey: Self.optOutKey) }
+
+    func setOptedOut(_ value: Bool) { UserDefaults.standard.set(value, forKey: Self.optOutKey) }
+
+    /// Starts the download by itself after launch — visible on the homepage with
+    /// Cancel — unless the model is there, it's running, or the user said no.
+    func autoStartIfNeeded() {
+        guard !isBusy, !isOptedOut, !isPausedByUser, !LocalModelFile.isDownloaded else { return }
+        // Someone who already tapped "Not now" on the card has declined it, even before the opt-out flag existed.
+        guard !UserDefaults.standard.bool(forKey: "offline_model_prompt_dismissed") else { return }
+        guard ConnectivityMonitor.shared.isOnline else { return }
+        start()
+    }
+
+    var isDownloadingOrPaused: Bool {
+        switch state {
+        case .downloading, .paused: return true
+        default: return false
+        }
+    }
+
     var isBusy: Bool { if case .downloading = state { return true } else { return false } }
 
     func start() {
         guard !isBusy, !LocalModelFile.isDownloaded else { return }
+        setOptedOut(false)
+        UserDefaults.standard.set(false, forKey: Self.pausedKey)
         let free = (try? URL(fileURLWithPath: NSHomeDirectory()).resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]))?
             .volumeAvailableCapacityForImportantUsage ?? Int64.max
         guard free > LocalModelFile.expectedBytes + 300_000_000 else {
@@ -72,10 +104,25 @@ final class LocalModelManager: NSObject, ObservableObject, URLSessionDownloadDel
         task.resume()
     }
 
-    func cancel() {
+    /// Stops the transfer but keeps what was downloaded; Resume carries on from there.
+    func pause() {
+        guard case .downloading(let progress) = state else { return }
+        UserDefaults.standard.set(true, forKey: Self.pausedKey)
         task?.cancel(byProducingResumeData: { data in
             Task { @MainActor in LocalModelManager.shared.resumeData = data }
         })
+        task = nil
+        session?.finishTasksAndInvalidate()
+        session = nil
+        state = .paused(progress: progress)
+    }
+
+    func cancel() {
+        // Stopping a download is a "no": it must not quietly start again, and nothing is kept.
+        setOptedOut(true)
+        UserDefaults.standard.set(false, forKey: Self.pausedKey)
+        task?.cancel()
+        resumeData = nil
         task = nil
         session?.finishTasksAndInvalidate()
         session = nil

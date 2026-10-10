@@ -22,8 +22,23 @@ struct OfflineModelRow: View {
                 Text("Downloading… \(Int(progress * 100))%")
                     .font(.footnote).foregroundStyle(.secondary)
                     .accessibilityIdentifier("offlineModelProgress")
-                Button("Cancel") { manager.cancel() }
-                    .accessibilityIdentifier("offlineModelCancel")
+                HStack(spacing: 20) {
+                    Button("Pause") { manager.pause() }
+                        .accessibilityIdentifier("offlineModelPause")
+                    Button("Cancel") { manager.cancel() }
+                        .accessibilityIdentifier("offlineModelCancel")
+                }
+            case .paused(let progress):
+                ProgressView(value: progress)
+                Text("Paused at \(Int(progress * 100))%")
+                    .font(.footnote).foregroundStyle(.secondary)
+                    .accessibilityIdentifier("offlineModelPausedLabel")
+                HStack(spacing: 20) {
+                    Button("Resume") { manager.start() }
+                        .accessibilityIdentifier("offlineModelResume")
+                    Button("Cancel") { manager.cancel() }
+                        .accessibilityIdentifier("offlineModelCancel")
+                }
             case .ready:
                 Text("Ready — Ask VISION can answer offline.")
                     .font(.footnote).foregroundStyle(.secondary)
@@ -59,16 +74,39 @@ struct OfflineModelPromptCard: View {
     var body: some View {
         if shouldShow {
             VStack(alignment: .leading, spacing: 10) {
-                Text("Get offline Ask VISION")
+                Text(manager.isDownloadingOrPaused ? "Offline Ask VISION" : "Get offline Ask VISION")
                     .font(.system(size: 17, weight: .semibold)).foregroundStyle(.white)
                 switch manager.state {
                 case .downloading(let progress):
                     ProgressView(value: progress).tint(.white)
                     Text("Downloading… \(Int(progress * 100))%")
                         .font(.system(size: 13)).foregroundStyle(HomeTheme.textSecondary)
-                    Button("Cancel") { manager.cancel() }
-                        .font(.system(size: 14, weight: .semibold)).foregroundStyle(.white)
-                        .frame(minHeight: 44)
+                    HStack(spacing: 20) {
+                        Button("Pause") { manager.pause() }
+                            .font(.system(size: 14, weight: .semibold)).foregroundStyle(.white)
+                            .frame(minHeight: 44)
+                            .accessibilityIdentifier("offlineModelPromptPause")
+                        Button("Cancel") { manager.cancel() }
+                            .font(.system(size: 14, weight: .semibold)).foregroundStyle(.white)
+                            .frame(minHeight: 44)
+                    }
+                case .paused(let progress):
+                    ProgressView(value: progress).tint(.white)
+                    Text("Paused at \(Int(progress * 100))% — resume any time, it carries on from where it stopped.")
+                        .font(.system(size: 13)).foregroundStyle(HomeTheme.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    HStack(spacing: 12) {
+                        Button(action: { manager.start() }) {
+                            Text("Resume")
+                                .font(.system(size: 14, weight: .semibold)).foregroundStyle(.black)
+                                .padding(.horizontal, 18).frame(minHeight: 44)
+                                .background(Capsule().fill(Color.white))
+                        }
+                        .accessibilityIdentifier("offlineModelPromptResume")
+                        Button("Cancel") { manager.cancel() }
+                            .font(.system(size: 14, weight: .semibold)).foregroundStyle(.white)
+                            .frame(minHeight: 44)
+                    }
                 case .failed(let message):
                     Text(message).font(.system(size: 13)).foregroundStyle(HomeTheme.textSecondary)
                     buttons
@@ -96,7 +134,7 @@ struct OfflineModelPromptCard: View {
                     .background(Capsule().fill(Color.white))
             }
             .accessibilityIdentifier("offlineModelPromptDownload")
-            Button("Not now") { dismissed = true }
+            Button("Not now") { dismissed = true; manager.setOptedOut(true) }
                 .font(.system(size: 14, weight: .semibold)).foregroundStyle(.white)
                 .frame(minHeight: 44)
                 .accessibilityIdentifier("offlineModelPromptDismiss")

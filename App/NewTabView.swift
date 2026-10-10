@@ -49,6 +49,7 @@ struct NewTabView: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
     @ObservedObject private var connectivity = ConnectivityMonitor.shared
     @AppStorage(AppSettings.offlineModeKey) private var offlineModeEnabled = false
+    @AppStorage(ProfileStore.nameKey) private var profileName = ""
 
     @State private var bookmarks: [Bookmark] = []
     @State private var shortcuts: [Shortcut] = []
@@ -81,19 +82,18 @@ struct NewTabView: View {
                     .resizable()
                     .aspectRatio(contentMode: .fill)
                     .frame(width: proxy.size.width, height: proxy.size.height)
-                    .saturation(0.15)
                     .clipped()
             }
             .ignoresSafeArea()
             LinearGradient(
-                colors: [Color.black.opacity(0.50), Color.black.opacity(0.74), Color.black.opacity(0.94)],
+                colors: [HomeTheme.scrim.opacity(0.20), HomeTheme.scrim.opacity(0.50), HomeTheme.scrim.opacity(0.86)],
                 startPoint: .top, endPoint: .bottom
             )
             .ignoresSafeArea()
 
             VStack(spacing: 0) {
                 header
-                    .padding(.horizontal, 20).padding(.top, 14)
+                    .padding(.horizontal, 20).padding(.top, 28)
 
                 Text(greeting)
                     .font(.system(size: 34, weight: .bold)).foregroundStyle(.white)
@@ -202,12 +202,16 @@ struct NewTabView: View {
 
     private var greeting: String {
         let hour = Calendar.current.component(.hour, from: Date())
+        let base: String
         switch hour {
-        case 5..<12: return "Good morning"
-        case 12..<17: return "Good afternoon"
-        case 17..<21: return "Good evening"
-        default: return "Good night"
+        case 5..<12: base = "Good morning"
+        case 12..<17: base = "Good afternoon"
+        case 17..<21: base = "Good evening"
+        default: base = "Good night"
         }
+        // The name set in Settings → Profile, when there is one.
+        let name = profileName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return name.isEmpty ? base : "\(base), \(name)"
     }
 
     // MARK: - Ask box

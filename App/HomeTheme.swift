@@ -12,6 +12,8 @@ enum HomeDestination {
 /// homepage rather than changing `DesignSystem`, whose colours the rest of the
 /// app (every other screen) still uses.
 enum HomeTheme {
+    /// The cool near-black the homepage photo is darkened with (same as the desktop homepage).
+    static let scrim = Color(red: 0, green: 6.0 / 255, blue: 16.0 / 255)
     static let textPrimary = Color.white
     static let textSecondary = Color.white.opacity(0.68)
     static let textTertiary = Color.white.opacity(0.46)
