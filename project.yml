@@ -64,6 +64,8 @@ targets:
         # with GENERATE_INFOPLIST_FILE's auto-generated one above) is how
         # this same file already injects a key into that auto-generated
         # plist, e.g. INFOPLIST_KEY_UILaunchScreen_Generation above.
+        INFOPLIST_KEY_NSMicrophoneUsageDescription: "VISION uses the microphone so you can dictate your questions to Ask VISION."
+        INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: "VISION turns your speech into text so you can dictate questions to Ask VISION."
         INFOPLIST_KEY_VisionFirebaseAPIKey: "$(VISION_FIREBASE_API_KEY)"
         INFOPLIST_KEY_VisionFirebaseProjectID: "$(VISION_FIREBASE_PROJECT_ID)"
         INFOPLIST_KEY_VisionAnalyticsURL: "$(VISION_ANALYTICS_URL)"

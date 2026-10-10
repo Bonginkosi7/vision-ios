@@ -95,7 +95,7 @@ actor LocalLLM {
         let chain = llama_sampler_chain_init(llama_sampler_chain_default_params())
         llama_sampler_chain_add(chain, llama_sampler_init_penalties(llama_vocab_n_tokens(vocab), 64, 1.1, 0, 0))
         llama_sampler_chain_add(chain, llama_sampler_init_top_p(0.9, 1))
-        llama_sampler_chain_add(chain, llama_sampler_init_temp(0.6))
+        llama_sampler_chain_add(chain, llama_sampler_init_temp(0.4))
         llama_sampler_chain_add(chain, llama_sampler_init_dist(UInt32.random(in: 0...UInt32.max)))
         defer { llama_sampler_free(chain) }
 
@@ -176,8 +176,13 @@ struct LocalModelProvider: CloudAIProvider {
 
     func generate(systemInstruction: String, userMessage: String, history: [ChatMessage]) async -> AiCallResult {
         do {
+            // A 0.5B model takes "never claim to have browsed the web" too
+            // literally and refuses plain factual questions as "no live
+            // data". This steers it to just answer from what it knows.
+            let localInstruction = systemInstruction
+                + " Answer the question directly and briefly from your own knowledge. Questions about established facts (geography, history, science, definitions) do not need live data — never refuse them or mention internet access. Only say you may be out of date when the question is clearly about recent or changing events. If you are not sure of an answer, say so plainly instead of guessing."
             let text = try await LocalLLM.shared.generate(
-                modelPath: LocalModelFile.url.path, systemInstruction: systemInstruction, history: history, userMessage: userMessage
+                modelPath: LocalModelFile.url.path, systemInstruction: localInstruction, history: history, userMessage: userMessage
             )
             return AiCallResult(ok: true, text: text, providerName: name, error: nil)
         } catch {

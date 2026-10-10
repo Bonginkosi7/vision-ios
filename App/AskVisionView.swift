@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 import VisionCore
 
 private enum ChatMode: Equatable {
@@ -44,6 +45,12 @@ struct AskVisionView: View {
     @State private var sessionSearchText = ""
     @State private var bubbles: [ChatBubble] = []
     @State private var messageText = ""
+    @StateObject private var dictation = SpeechDictation()
+    @State private var attachedFile: ChatAttachment?
+    @State private var attachmentError: String?
+    @State private var showFileImporter = false
+    /// Text typed before dictation started, so speech appends to it.
+    @State private var textBeforeDictation = ""
     @State private var sending = false
 
     /// Port of ChatSessionListActivity.groupLabel's Today/Yesterday/Previous
@@ -310,22 +317,111 @@ struct AskVisionView: View {
 
     @ViewBuilder
     private var askBar: some View {
-        HStack(spacing: DesignSystem.Space.s) {
-            TextField("", text: $messageText, prompt: Text("Ask VISION anything…").foregroundColor(DesignSystem.textMuted2))
-                .textFieldStyle(.plain)
-                .disabled(sending)
-                .padding(.horizontal, DesignSystem.Space.m).frame(minHeight: 44)
-                .background(RoundedRectangle(cornerRadius: DesignSystem.Radius.control, style: .continuous).fill(DesignSystem.bgRaised))
+        VStack(alignment: .leading, spacing: DesignSystem.Space.s) {
+            if dictation.isListening {
+                Text(dictation.isOnDevice ? "Listening… (on this phone)" : "Listening… (Apple processes the audio)")
+                    .font(.system(size: 13)).foregroundStyle(DesignSystem.textMuted2)
+                    .accessibilityIdentifier("chatListeningLabel")
+            }
+            if let error = dictation.errorMessage {
+                Text(error).font(.system(size: 13)).foregroundStyle(DesignSystem.textMuted2)
+                    .accessibilityIdentifier("chatDictationError")
+            }
+            if let attachment = attachedFile {
+                HStack(spacing: DesignSystem.Space.s) {
+                    Image(systemName: "doc.text").accessibilityHidden(true)
+                    Text(attachment.name).font(.system(size: 14)).lineLimit(1)
+                    Spacer(minLength: 0)
+                    Button(action: { attachedFile = nil }) {
+                        Image(systemName: "xmark.circle.fill").frame(width: 44, height: 44)
+                    }
+                    .accessibilityLabel("Remove attachment")
+                    .accessibilityIdentifier("chatRemoveAttachment")
+                }
                 .foregroundStyle(.white)
-                .accessibilityLabel("Ask VISION")
-                .accessibilityIdentifier("chatMessageInput")
-            DesignSystem.primaryButton("Send", onClick: send)
-                .opacity(sending ? 0.5 : 1)
+                .padding(.leading, DesignSystem.Space.m)
+                .background(RoundedRectangle(cornerRadius: DesignSystem.Radius.control, style: .continuous).fill(DesignSystem.bgRaised))
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("chatAttachmentChip")
+            }
+            if let attachError = attachmentError {
+                Text(attachError).font(.system(size: 13)).foregroundStyle(DesignSystem.textMuted2)
+                    .accessibilityIdentifier("chatAttachmentError")
+            }
+            HStack(spacing: DesignSystem.Space.xs) {
+                Button(action: { showFileImporter = true }) {
+                    Image(systemName: "paperclip").font(.system(size: 18)).foregroundStyle(.white)
+                        .frame(width: 44, height: 44).contentShape(Rectangle())
+                }
                 .disabled(sending)
-                .accessibilityIdentifier("btnChatSend")
+                .accessibilityLabel("Attach a file")
+                .accessibilityIdentifier("chatAttachButton")
+
+                TextField("", text: $messageText, prompt: Text(attachedFile == nil ? "Ask VISION anything…" : "Ask about this file…").foregroundColor(DesignSystem.textMuted2))
+                    .textFieldStyle(.plain)
+                    .disabled(sending)
+                    .padding(.horizontal, DesignSystem.Space.m).frame(minHeight: 44)
+                    .background(RoundedRectangle(cornerRadius: DesignSystem.Radius.control, style: .continuous).fill(DesignSystem.bgRaised))
+                    .foregroundStyle(.white)
+                    .accessibilityLabel("Ask VISION")
+                    .accessibilityIdentifier("chatMessageInput")
+
+                Button(action: toggleDictation) {
+                    Image(systemName: dictation.isListening ? "stop.circle.fill" : "mic").font(.system(size: 20)).foregroundStyle(.white)
+                        .frame(width: 44, height: 44).contentShape(Rectangle())
+                }
+                .disabled(sending)
+                .accessibilityLabel(dictation.isListening ? "Stop dictation" : "Dictate")
+                .accessibilityIdentifier("chatMicButton")
+
+                DesignSystem.primaryButton("Send", onClick: send)
+                    .opacity(sending ? 0.5 : 1)
+                    .disabled(sending)
+                    .accessibilityIdentifier("btnChatSend")
+            }
         }
         .padding(DesignSystem.Space.l)
         .background(DesignSystem.bgCanvas)
+        .onChange(of: dictation.transcript) { transcript in
+            guard dictation.isListening || !transcript.isEmpty else { return }
+            let prefix = textBeforeDictation.isEmpty ? "" : textBeforeDictation + " "
+            messageText = prefix + transcript
+        }
+        .fileImporter(
+            isPresented: $showFileImporter,
+            allowedContentTypes: Self.attachableTypes,
+            allowsMultipleSelection: false
+        ) { result in
+            handleFilePick(result)
+        }
+    }
+
+    private static let attachableTypes: [UTType] = {
+        var types: [UTType] = [.pdf, .plainText]
+        if let docx = UTType(filenameExtension: "docx") { types.append(docx) }
+        return types
+    }()
+
+    private func toggleDictation() {
+        if !dictation.isListening { textBeforeDictation = messageText }
+        dictation.toggle()
+    }
+
+    private func handleFilePick(_ result: Result<[URL], Error>) {
+        attachmentError = nil
+        guard case .success(let urls) = result, let url = urls.first else { return }
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        do {
+            let text = try AttachmentReader.text(from: url)
+            guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                attachmentError = "That file has no readable text (a scanned PDF or an image can't be read)."
+                return
+            }
+            attachedFile = ChatAttachment(name: url.lastPathComponent, text: text)
+        } catch {
+            attachmentError = error.localizedDescription
+        }
     }
 
     private func loadSessions() {
@@ -344,12 +440,20 @@ struct AskVisionView: View {
     }
 
     private func send() {
-        let message = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !message.isEmpty else { return }
+        if dictation.isListening { dictation.stop() }
+        let typed = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let attachment = attachedFile
+        guard !typed.isEmpty || attachment != nil else { return }
+        let message = typed.isEmpty ? "Summarize this file." : typed
+        // What the conversation shows and saves: the question, tagged with
+        // the file's name. The file's text is only sent for this one answer.
+        let shownMessage = attachment.map { "📎 \($0.name)\n\(message)" } ?? message
         messageText = ""
+        attachedFile = nil
+        attachmentError = nil
 
         let userBubbleId = UUID().uuidString
-        bubbles.append(ChatBubble(id: userBubbleId, role: "user", content: message, category: nil))
+        bubbles.append(ChatBubble(id: userBubbleId, role: "user", content: shownMessage, category: nil))
         // Real interim placeholder — port of appendExchange's `chat_asking`
         // ("Asking VISION…") text, shown in the assistant slot until the
         // real response replaces it, exactly like Android's `aiText`.
@@ -365,7 +469,7 @@ struct AskVisionView: View {
         Task {
             let priorMessages = existingSessionId.flatMap { try? chatSessionStore.messagesForSession($0) } ?? []
             let history = priorMessages.map { ChatMessage(role: $0.role, content: $0.content) }
-            let answer = await ChatAI.ask(message: message, history: history)
+            let answer = await ChatAI.ask(message: message, history: history, attachment: attachment)
 
             let sessionId: String
             if let existingSessionId {
@@ -377,7 +481,7 @@ struct AskVisionView: View {
                 mode = .session(sessionId)
             }
 
-            try? chatSessionStore.addMessage(sessionId: sessionId, role: "user", content: message, category: answer.category.rawValue, providerName: nil)
+            try? chatSessionStore.addMessage(sessionId: sessionId, role: "user", content: shownMessage, category: answer.category.rawValue, providerName: nil)
             try? chatSessionStore.addMessage(sessionId: sessionId, role: "assistant", content: answer.text, category: answer.category.rawValue, providerName: answer.providerName)
             try? chatSessionStore.touchSession(sessionId)
 

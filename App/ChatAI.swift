@@ -20,15 +20,29 @@ struct ChatAnswer {
 enum ChatAI {
     private static let providers: [CloudAIProvider] = [AnthropicProvider(), OpenAIProvider(), LocalModelProvider()]
 
-    static func ask(message: String, history: [ChatMessage]) async -> ChatAnswer {
+    /// Largest slice of an attached file's text each kind of provider gets.
+    /// The on-device model reads about 2,000 tokens at once, shared with the
+    /// question and its answer, so it gets far less than a cloud model.
+    private static let cloudAttachmentLimit = 24_000
+    private static let localAttachmentLimit = 3_500
+
+    static func ask(message: String, history: [ChatMessage], attachment: ChatAttachment? = nil) async -> ChatAnswer {
         let category = ChatCategoryLogic.classify(message)
         let instruction = ChatCategoryLogic.buildSystemInstruction(category: category)
         let trimmedHistory = ChatCategoryLogic.trimmedHistory(history)
 
         for provider in providers {
             guard provider.isAvailable() else { continue }
-            let result = await provider.generate(systemInstruction: instruction, userMessage: message, history: trimmedHistory)
-            if result.ok, let text = result.text {
+            let isLocal = provider is LocalModelProvider
+            let limit = isLocal ? localAttachmentLimit : cloudAttachmentLimit
+            let composed = attachment.map { $0.compose(question: message, limit: limit) }
+            let result = await provider.generate(systemInstruction: instruction, userMessage: composed?.prompt ?? message, history: trimmedHistory)
+            if result.ok, var text = result.text {
+                if composed?.truncated == true {
+                    text += isLocal
+                        ? "\n\n(Only the first part of the file fit in the on-device model. For a long document, add a cloud AI key in Settings.)"
+                        : "\n\n(The file was very long, so only the first part was read.)"
+                }
                 return ChatAnswer(text: text, category: category, providerName: provider.name)
             }
         }
@@ -38,5 +52,31 @@ enum ChatAI {
             category: category,
             providerName: nil
         )
+    }
+}
+
+/// A file the user attached to a question: its extracted plain text only.
+struct ChatAttachment: Equatable {
+    let name: String
+    let text: String
+
+    /// The prompt sent to the model: the file's text (cut to `limit`
+    /// characters) followed by the question.
+    func compose(question: String, limit: Int) -> (prompt: String, truncated: Bool) {
+        let body = String(text.prefix(limit))
+        let prompt = "Here is the content of the file \"\(name)\":\n\n\(body)\n\n---\nUsing only that file, answer: \(question)"
+        return (prompt, text.count > limit)
+    }
+}
+
+/// Reads the text out of a PDF, Word, or plain-text file the user picked.
+enum AttachmentReader {
+    static func text(from url: URL) throws -> String {
+        switch url.pathExtension.lowercased() {
+        case "pdf": return try PdfExtractor().extract(fileURL: url)
+        case "docx": return try DocxExtractor().extract(fileURL: url)
+        case "txt", "text", "md": return try TxtExtractor().extract(fileURL: url)
+        default: throw DocumentExtractionError.unreadable("VISION can read PDF, Word (.docx) and text files.")
+        }
     }
 }
