@@ -107,8 +107,8 @@ final class VisionIOSUITests: XCTestCase {
         assertAddressBarEventuallyShows(addressField, "https://example.com/", in: self)
 
         openMenu(app, item: "menu_history")
-        let historyURLText = app.staticTexts.matching(NSPredicate(format: "label == %@", "https://example.com/")).firstMatch
-        XCTAssertTrue(historyURLText.waitForExistence(timeout: 5), "the real visited URL should show up in History")
+        let historyRow = historyRows(app, host: "example.com").firstMatch
+        XCTAssertTrue(historyRow.waitForExistence(timeout: 5), "the real visited URL should show up in History")
     }
 
     /// Real Offline Library proof: navigate, tap Save Offline (a real
@@ -161,8 +161,7 @@ final class VisionIOSUITests: XCTestCase {
         assertAddressBarEventuallyShows(addressField, "https://example.org/", in: self)
 
         openMenu(app, item: "menu_history")
-        let privateURLText = app.staticTexts.matching(NSPredicate(format: "label == %@", "https://example.org/")).firstMatch
-        XCTAssertFalse(privateURLText.exists, "a private tab's real navigation must never be written to History")
+        XCTAssertFalse(historyRows(app, host: "example.org").firstMatch.exists, "a private tab's real navigation must never be written to History")
     }
 
     /// Real Keychain round-trip proof: save a real (fake-value) API key,
@@ -177,13 +176,16 @@ final class VisionIOSUITests: XCTestCase {
         openMenu(app, item: "menu_settings")
 
         let status = app.staticTexts["anthropicStatus"]
+        scrollIntoView(status, in: app)
         XCTAssertTrue(status.waitForExistence(timeout: 5))
         XCTAssertTrue(status.label.contains("Not configured"), "expected a fresh install to start unconfigured, got: \(status.label)")
 
         let input = app.secureTextFields["anthropicKeyInput"]
+        scrollIntoView(input, in: app)
         XCTAssertTrue(input.exists)
         input.tap()
         input.typeText("sk-ant-test-fake-key-for-ui-testing")
+        scrollIntoView(app.buttons["anthropicSaveButton"], in: app)
         app.buttons["anthropicSaveButton"].tap()
 
         let configuredPredicate = NSPredicate(format: "label CONTAINS %@", "Configured")
@@ -191,6 +193,7 @@ final class VisionIOSUITests: XCTestCase {
         XCTAssertEqual(XCTWaiter().wait(for: [configuredExpectation], timeout: 5), .completed, "saving a real key should flip status to Configured")
         XCTAssertFalse(status.label.contains("Not configured"))
 
+        scrollIntoView(app.buttons["anthropicClearButton"], in: app)
         app.buttons["anthropicClearButton"].tap()
         let clearedPredicate = NSPredicate(format: "label CONTAINS %@", "Not configured")
         let clearedExpectation = XCTNSPredicateExpectation(predicate: clearedPredicate, object: status)
@@ -230,7 +233,10 @@ final class VisionIOSUITests: XCTestCase {
         // same real tap-reliability issue `openMenu` already works around
         // below by tapping an explicit normalized coordinate instead of
         // relying on the default hit point.
-        analyticsToggle.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        // The element spans the whole row (label + switch); the switch is at the
+        // trailing edge, so tap there rather than on the label in the middle.
+        scrollIntoView(analyticsToggle, in: app)
+        analyticsToggle.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
         let togglesOff = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == '0'"), object: analyticsToggle)
         XCTAssertEqual(XCTWaiter().wait(for: [togglesOff], timeout: 5), .completed, "tapping the toggle should flip it off")
         XCTAssertEqual(diagnosticsToggle.value as? String, "1", "diagnostics should be unaffected by the separate analytics toggle")
@@ -311,12 +317,15 @@ final class VisionIOSUITests: XCTestCase {
 
         openMenu(app, item: "menu_settings")
         let keyInput = app.secureTextFields["anthropicKeyInput"]
+        scrollIntoView(keyInput, in: app)
         XCTAssertTrue(keyInput.waitForExistence(timeout: 5))
         keyInput.tap()
         keyInput.typeText("sk-ant-invalid-fake-key-for-ui-testing")
+        scrollIntoView(app.buttons["anthropicSaveButton"], in: app)
         app.buttons["anthropicSaveButton"].tap()
 
         let configuredStatus = app.staticTexts["anthropicStatus"]
+        scrollIntoView(configuredStatus, in: app)
         let configuredExpectation = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "Configured"), object: configuredStatus)
         XCTAssertEqual(XCTWaiter().wait(for: [configuredExpectation], timeout: 5), .completed)
         app.buttons["settingsDoneButton"].tap()
@@ -340,6 +349,7 @@ final class VisionIOSUITests: XCTestCase {
         // Clean up so a later test (or re-run) doesn't see a key "already configured".
         app.buttons["rewriteDoneButton"].tap()
         openMenu(app, item: "menu_settings")
+        scrollIntoView(app.buttons["anthropicClearButton"], in: app)
         app.buttons["anthropicClearButton"].tap()
         app.buttons["settingsDoneButton"].tap()
     }
@@ -700,8 +710,10 @@ final class VisionIOSUITests: XCTestCase {
 
         openEducationMenu(app, item: "menu_materials")
         let materialRow = app.staticTexts["materialTitle_ui-test-fixture"]
+        scrollIntoView(materialRow, in: app)
         XCTAssertTrue(materialRow.waitForExistence(timeout: 5))
         let processButton = app.buttons["btnProcessDocument_ui-test-fixture"]
+        scrollIntoView(processButton, in: app)
         XCTAssertTrue(processButton.waitForExistence(timeout: 5))
         processButton.tap()
         let materialStatus = app.staticTexts["materialStatus_ui-test-fixture"]
@@ -731,7 +743,9 @@ final class VisionIOSUITests: XCTestCase {
         let optionTexts = ["3", "4", "5", "6"]
         for (index, text) in optionTexts.enumerated() {
             let field = app.textFields["mcqOption_0_\(index)"]
-            field.tap()
+            // With the keyboard up, a lower option field can sit under it; scroll it clear first.
+            scrollClearOfKeyboard(field, in: app)
+            focus(field)
             field.typeText(text)
         }
         app.buttons["mcqCorrect_0_1"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
@@ -1453,9 +1467,12 @@ final class VisionIOSUITests: XCTestCase {
         XCTAssertTrue(offline.waitForExistence(timeout: 5))
         offline.tap()
 
-        let offlineSection = app.otherElements["homeOfflineSection"]
-        if !offlineSection.waitForExistence(timeout: 8) { attachDiagnostics(app: app, name: "home-offline-section-missing") }
-        XCTAssertTrue(offlineSection.exists, "Offline Mode should show the saved-content section")
+        // The section is a container of buttons, which XCUITest doesn't expose as one
+        // element — its own "Open Offline Library" button is the real signal it's showing.
+        let openLibrary = app.buttons["homeOpenOfflineLibrary"]
+        scrollIntoView(openLibrary, in: app)
+        if !openLibrary.waitForExistence(timeout: 8) { attachDiagnostics(app: app, name: "home-offline-section-missing") }
+        XCTAssertTrue(openLibrary.exists, "Offline Mode should show the saved-content section")
         XCTAssertTrue(status.label.contains("Offline Mode"), "status should name the mode, got: \(status.label)")
         XCTAssertTrue(status.label.contains("still use your connection"), "status should be honest that browsing isn't cut off")
         XCTAssertFalse(app.staticTexts["newsStatusText"].exists || app.otherElements["newsHeadlinesList"].exists, "live headlines should not be fetched or shown in Offline Mode")
@@ -1464,7 +1481,7 @@ final class VisionIOSUITests: XCTestCase {
         online.tap()
         let backOnline = NSPredicate { _, _ in app.staticTexts["homeModeStatus"].label.hasPrefix("Online") }
         XCTAssertEqual(XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: backOnline, object: nil)], timeout: 8), .completed, "switching back should restore Online")
-        XCTAssertFalse(app.otherElements["homeOfflineSection"].exists)
+        XCTAssertFalse(app.buttons["homeOpenOfflineLibrary"].exists)
     }
 
     /// Toolbar and header layout: every toolbar button has its own ~44pt
@@ -1539,7 +1556,7 @@ final class VisionIOSUITests: XCTestCase {
         // started, so it can't signal when the reload's own real didFinish
         // lands — poll History's own row count instead, which can only
         // reach 2 once a real second page load has actually completed.
-        let entries = app.staticTexts.matching(NSPredicate(format: "label == %@", "https://example.org/"))
+        let entries = historyRows(app, host: "example.org")
         let sawSecondEntry = XCTNSPredicateExpectation(predicate: NSPredicate(format: "count >= 2"), object: entries)
         if XCTWaiter().wait(for: [sawSecondEntry], timeout: 15) != .completed {
             attachDiagnostics(app: app, name: "reload-second-history-entry-missing")
@@ -1710,6 +1727,60 @@ final class VisionIOSUITests: XCTestCase {
     /// has hit many times on completely unrelated tests, always
     /// resolved by a plain re-run with no code change — not something
     /// this helper should try to paper over with more logic.
+    /// Swipes the screen up until `element` is on screen. SwiftUI lists only
+    /// realize the rows near the viewport, so a control further down a long
+    /// screen (Settings' Cloud AI keys) simply isn't in the accessibility tree
+    /// until it has been scrolled to.
+    private func scrollIntoView(_ element: XCUIElement, in app: XCUIApplication, maxSwipes: Int = 8) {
+        var swipes = 0
+        while !(element.exists && element.isHittable) && swipes < maxSwipes {
+            app.swipeUp()
+            swipes += 1
+        }
+    }
+
+    /// History rows are buttons whose id starts with `historyRow_`; this matches the
+    /// ones for a given site, by its host (a row shows the title and host, not the full URL).
+    private func historyRows(_ app: XCUIApplication, host: String) -> XCUIElementQuery {
+        app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'historyRow_' AND label CONTAINS %@", host))
+    }
+
+    /// Taps the More button once it is actually hittable. A plain `.tap()` right after a
+    /// sheet closes or the toolbar changes fails outright in XCUITest's own scroll-to-visible
+    /// step, so wait for the transition to finish and tap an explicit coordinate instead.
+    private func tapMoreButton(_ app: XCUIApplication) {
+        let more = app.buttons["moreMenuButton"]
+        let settled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isHittable == true"), object: more)
+        _ = XCTWaiter().wait(for: [settled], timeout: 5)
+        Thread.sleep(forTimeInterval: 0.6)
+        more.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+    }
+
+    /// Taps a text field and waits until it really has keyboard focus, tapping again if the
+    /// first tap was swallowed (a tap right after another field's keyboard is up can be).
+    private func focus(_ field: XCUIElement) {
+        for _ in 0..<3 {
+            field.tap()
+            let focused = XCTNSPredicateExpectation(predicate: NSPredicate(format: "hasKeyboardFocus == true"), object: field)
+            if XCTWaiter().wait(for: [focused], timeout: 2) == .completed { return }
+        }
+    }
+
+    /// With the keyboard up, a field low on the screen can sit underneath it and a tap on it
+    /// lands on a key instead. Scroll until the field is above the keyboard.
+    private func scrollClearOfKeyboard(_ field: XCUIElement, in app: XCUIApplication, maxSwipes: Int = 4) {
+        for _ in 0..<maxSwipes {
+            let keyboard = app.keyboards.firstMatch
+            // The keyboard's own frame excludes its ~45pt predictive-text bar above it, so keep clear of that too.
+            if field.exists, !keyboard.exists || field.frame.maxY < keyboard.frame.minY - 60 { return }
+            // A plain swipeUp() starts low on the screen — on the keyboard, which can't scroll.
+            // Drag within the visible part of the form instead.
+            let from = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.50))
+            let to = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.22))
+            from.press(forDuration: 0.1, thenDragTo: to)
+        }
+    }
+
     private func openMenu(_ app: XCUIApplication, item identifier: String) {
         let menuButton = app.buttons["moreMenuButton"]
         XCTAssertTrue(menuButton.waitForExistence(timeout: 5))
@@ -1932,7 +2003,7 @@ final class VisionIOSUITests: XCTestCase {
         }
 
         if app.buttons["moreMenuButton"].waitForExistence(timeout: 5) {
-            app.buttons["moreMenuButton"].tap()
+            tapMoreButton(app)
             if app.buttons["menu_tasks"].waitForExistence(timeout: 3) {
                 app.buttons["menu_tasks"].tap()
                 let field = app.textFields["newTaskField"]
@@ -1952,7 +2023,7 @@ final class VisionIOSUITests: XCTestCase {
         }
 
         if app.buttons["moreMenuButton"].waitForExistence(timeout: 5) {
-            app.buttons["moreMenuButton"].tap()
+            tapMoreButton(app)
             if app.buttons["menu_askVision"].waitForExistence(timeout: 3) {
                 app.buttons["menu_askVision"].tap()
                 if app.buttons["askVisionNewChatButton"].waitForExistence(timeout: 5) {

@@ -252,7 +252,9 @@ struct MainBrowserView: View {
     /// had the picker actually been driven.
     private func seedMaterialsFixtureIfRequested() {
         guard ProcessInfo.processInfo.arguments.contains("-UITestSeedMaterial") else { return }
-        guard (try? studyDocumentStore.list())?.isEmpty ?? true else { return }
+        // Always a fresh fixture, and never "only when empty": a device (or an earlier test run)
+        // may already hold other materials, or a processed copy of this one.
+        try? studyDocumentStore.remove(id: "ui-test-fixture")
         do {
             let folder = try FileManager.default.url(
                 for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true

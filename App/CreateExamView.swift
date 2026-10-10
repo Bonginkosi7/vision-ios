@@ -54,6 +54,8 @@ struct CreateExamView: View {
                 .padding(DesignSystem.Space.l)
             }
             .visionScreen()
+            // Dragging the form down hides the keyboard, so lower fields are never stuck under it.
+            .scrollDismissesKeyboard(.interactively)
             .navigationTitle("Create Exam")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {

@@ -577,6 +577,9 @@ struct NewTabView: View {
                 toolChip("Flashcards", icon: "rectangle.on.rectangle", destination: .flashcards, id: "homeTool_flashcards")
             }
         }
+        // `.contain` keeps every button inside addressable by its own id — a bare
+        // identifier on this container replaced all of theirs with "homeOfflineSection".
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("homeOfflineSection")
     }
 
