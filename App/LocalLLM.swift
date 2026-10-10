@@ -93,7 +93,7 @@ actor LocalLLM {
         defer { llama_free(ctx) }
 
         let chain = llama_sampler_chain_init(llama_sampler_chain_default_params())
-        llama_sampler_chain_add(chain, llama_sampler_init_penalties(llama_vocab_n_tokens(vocab), 64, 1.1, 0, 0))
+        llama_sampler_chain_add(chain, llama_sampler_init_penalties(64, 1.1, 0, 0))
         llama_sampler_chain_add(chain, llama_sampler_init_top_p(0.9, 1))
         llama_sampler_chain_add(chain, llama_sampler_init_temp(0.4))
         llama_sampler_chain_add(chain, llama_sampler_init_dist(UInt32.random(in: 0...UInt32.max)))
