@@ -6,7 +6,7 @@ import VisionCore
 /// parsing is pure VisionCore logic; this is only the real network call
 /// glue, same real/pure split as every other AI feature here).
 enum PaperReviewer {
-    private static let providers: [CloudAIProvider] = [OpenAIProvider(), AnthropicProvider()]
+    private static let providers: [CloudAIProvider] = [OpenAIProvider(), AnthropicProvider(), VisionCloudProvider()]
 
     static func review(documentText: String) async -> StructuredResult<PaperReview> {
         let bounded = PaperReviewLogic.boundedText(documentText)

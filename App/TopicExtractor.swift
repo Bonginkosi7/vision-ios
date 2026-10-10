@@ -7,7 +7,7 @@ import VisionCore
 /// this is only the real network call glue, same split as
 /// RewriteWriter.swift/RewriteInstructions.swift).
 enum TopicExtractor {
-    private static let providers: [CloudAIProvider] = [OpenAIProvider(), AnthropicProvider()]
+    private static let providers: [CloudAIProvider] = [OpenAIProvider(), AnthropicProvider(), VisionCloudProvider()]
 
     static func extract(documentText: String) async -> StructuredResult<[RawTopic]> {
         let bounded = TopicExtractionLogic.boundedText(documentText)

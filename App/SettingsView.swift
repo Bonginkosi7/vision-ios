@@ -26,6 +26,145 @@ struct SettingsView: View {
     @State private var clearedBrowsingData = false
     @State private var showClearConfirm = false
 
+    @ViewBuilder
+    private var cloudAISection: some View {
+        Section {
+            aiKeyRow(
+                label: "OpenAI (ChatGPT)",
+                configured: openAiConfigured,
+                input: $openAiInput,
+                idPrefix: "openai",
+                onSave: {
+                    AiSettings.setOpenAiKey(openAiInput)
+                    openAiInput = ""
+                    refreshKeyStatus()
+                },
+                onClear: {
+                    AiSettings.clearOpenAiKey()
+                    openAiInput = ""
+                    refreshKeyStatus()
+                }
+            )
+            aiKeyRow(
+                label: "Anthropic (Claude)",
+                configured: anthropicConfigured,
+                input: $anthropicInput,
+                idPrefix: "anthropic",
+                onSave: {
+                    AiSettings.setAnthropicKey(anthropicInput)
+                    anthropicInput = ""
+                    refreshKeyStatus()
+                },
+                onClear: {
+                    AiSettings.clearAnthropicKey()
+                    anthropicInput = ""
+                    refreshKeyStatus()
+                }
+            )
+        } header: {
+            Text("Cloud AI providers")
+        } footer: {
+            Text("Your own API key, used only to call that provider directly from this device. Stored securely in the iOS Keychain, never sent anywhere except the provider itself.")
+        }
+
+    }
+
+    @ViewBuilder
+    private var offlineModelSection: some View {
+        Section {
+            OfflineModelRow()
+        } header: {
+            Text("Offline Ask VISION")
+        } footer: {
+            Text("Runs entirely on this phone, so Ask VISION can answer without internet and nothing you type leaves the device. Cloud AI, if configured, is tried first.")
+        }
+    }
+
+    @ViewBuilder
+    private var themeSection: some View {
+        Section("Theme") {
+            Picker("Theme", selection: $themeRaw) {
+                ForEach(AppSettings.Theme.allCases) { theme in
+                    Text(theme.label).tag(theme.rawValue)
+                }
+            }
+            .pickerStyle(.menu)
+            .accessibilityIdentifier("themePicker")
+        }
+    }
+
+    @ViewBuilder
+    private var searchEngineSection: some View {
+        Section("Default search engine") {
+            Picker("Search Engine", selection: $searchEngineRaw) {
+                ForEach(AppSettings.SearchEngine.allCases) { engine in
+                    Text(engine.label).tag(engine.rawValue)
+                }
+            }
+            .pickerStyle(.menu)
+            .accessibilityIdentifier("searchEnginePicker")
+        }
+    }
+
+    @ViewBuilder
+    private var offlineStorageSection: some View {
+        Section {
+            Picker("Storage limit", selection: $offlineStorageLimitMb) {
+                ForEach(AppSettings.offlineStorageLimitOptionsMb, id: \.self) { mb in
+                    Text(Self.byteCountFormatter.string(fromByteCount: Int64(mb) * 1024 * 1024)).tag(mb)
+                }
+            }
+            .pickerStyle(.menu)
+            .accessibilityIdentifier("offlineStorageLimitPicker")
+        } header: {
+            Text("Offline storage")
+        } footer: {
+            // Verbatim port of settings_storage_limit_desc.
+            Text("A cap for your own reference. Nothing here pre-caches or auto-saves pages, so there's no lower-priority content to remove automatically when you're over — every saved page is an explicit save.")
+        }
+    }
+
+    @ViewBuilder
+    private var privacySection: some View {
+        Section {
+            // Android's own Clear browsing data button is a plain
+            // OutlinedButton (brand-purple, never red) — no
+            // statusDangerText anywhere on this screen — so this is a
+            // plain default-role button, not SwiftUI's red .destructive.
+            Button(clearedBrowsingData ? "Cleared" : "Clear Data") {
+                showClearConfirm = true
+            }
+            .accessibilityIdentifier("btnClearBrowsingData")
+
+            // Android's setUpPrivacy() puts these same two checkboxes
+            // in this same Privacy card, right below Clear Browsing
+            // Data — matched here rather than inventing a separate
+            // "Analytics" section Android itself doesn't have.
+            Toggle("Anonymous usage analytics", isOn: $analyticsEnabled)
+                .tint(HomeModeToggle.onlineColor)
+                .accessibilityIdentifier("analyticsEnabledToggle")
+            Text("Help improve VISION by sharing anonymous product usage statistics — which features get used, not what you browse. We never collect your browsing history, page contents, passwords, or search queries with this.")
+                .font(.caption).foregroundStyle(.secondary)
+
+            Toggle("Technical diagnostics", isOn: $diagnosticsEnabled)
+                .tint(HomeModeToggle.onlineColor)
+                .accessibilityIdentifier("diagnosticsEnabledToggle")
+            Text("Share anonymous crash and performance reports to help fix bugs. Never includes page content.")
+                .font(.caption).foregroundStyle(.secondary)
+        } header: {
+            Text("Privacy")
+        } footer: {
+            // Verbatim port of settings_clear_browsing_data_desc.
+            Text("Deletes local history and site storage (cookies, cache) for this app.")
+        }
+
+        // Android groups both key rows under ONE "Cloud AI providers"
+        // header/description, OpenAI first then Anthropic (see
+        // SettingsActivity.onCreate and activity_settings.xml row
+        // order) — previously these were two separate sections, with
+        // Anthropic first and OpenAI carrying no header at all.
+    }
+
     var body: some View {
         NavigationStack {
             Form {
@@ -35,122 +174,12 @@ struct SettingsView: View {
                 // storage", settings_ai_providers = "Cloud AI providers") —
                 // Android has no generic "Appearance"/"Search" supersection, so
                 // inventing those names here would be a real grouping mismatch.
-                Section("Theme") {
-                    Picker("Theme", selection: $themeRaw) {
-                        ForEach(AppSettings.Theme.allCases) { theme in
-                            Text(theme.label).tag(theme.rawValue)
-                        }
-                    }
-                    .pickerStyle(.menu)
-                    .accessibilityIdentifier("themePicker")
-                }
-
-                Section("Default search engine") {
-                    Picker("Search Engine", selection: $searchEngineRaw) {
-                        ForEach(AppSettings.SearchEngine.allCases) { engine in
-                            Text(engine.label).tag(engine.rawValue)
-                        }
-                    }
-                    .pickerStyle(.menu)
-                    .accessibilityIdentifier("searchEnginePicker")
-                }
-
-                Section {
-                    Picker("Storage limit", selection: $offlineStorageLimitMb) {
-                        ForEach(AppSettings.offlineStorageLimitOptionsMb, id: \.self) { mb in
-                            Text(Self.byteCountFormatter.string(fromByteCount: Int64(mb) * 1024 * 1024)).tag(mb)
-                        }
-                    }
-                    .pickerStyle(.menu)
-                    .accessibilityIdentifier("offlineStorageLimitPicker")
-                } header: {
-                    Text("Offline storage")
-                } footer: {
-                    // Verbatim port of settings_storage_limit_desc.
-                    Text("A cap for your own reference. Nothing here pre-caches or auto-saves pages, so there's no lower-priority content to remove automatically when you're over — every saved page is an explicit save.")
-                }
-
-                Section {
-                    // Android's own Clear browsing data button is a plain
-                    // OutlinedButton (brand-purple, never red) — no
-                    // statusDangerText anywhere on this screen — so this is a
-                    // plain default-role button, not SwiftUI's red .destructive.
-                    Button(clearedBrowsingData ? "Cleared" : "Clear Data") {
-                        showClearConfirm = true
-                    }
-                    .accessibilityIdentifier("btnClearBrowsingData")
-
-                    // Android's setUpPrivacy() puts these same two checkboxes
-                    // in this same Privacy card, right below Clear Browsing
-                    // Data — matched here rather than inventing a separate
-                    // "Analytics" section Android itself doesn't have.
-                    Toggle("Anonymous usage analytics", isOn: $analyticsEnabled)
-                        .accessibilityIdentifier("analyticsEnabledToggle")
-                    Text("Help improve VISION by sharing anonymous product usage statistics — which features get used, not what you browse. We never collect your browsing history, page contents, passwords, or search queries with this.")
-                        .font(.caption).foregroundStyle(.secondary)
-
-                    Toggle("Technical diagnostics", isOn: $diagnosticsEnabled)
-                        .accessibilityIdentifier("diagnosticsEnabledToggle")
-                    Text("Share anonymous crash and performance reports to help fix bugs. Never includes page content.")
-                        .font(.caption).foregroundStyle(.secondary)
-                } header: {
-                    Text("Privacy")
-                } footer: {
-                    // Verbatim port of settings_clear_browsing_data_desc.
-                    Text("Deletes local history and site storage (cookies, cache) for this app.")
-                }
-
-                // Android groups both key rows under ONE "Cloud AI providers"
-                // header/description, OpenAI first then Anthropic (see
-                // SettingsActivity.onCreate and activity_settings.xml row
-                // order) — previously these were two separate sections, with
-                // Anthropic first and OpenAI carrying no header at all.
-                Section {
-                    aiKeyRow(
-                        label: "OpenAI (ChatGPT)",
-                        configured: openAiConfigured,
-                        input: $openAiInput,
-                        idPrefix: "openai",
-                        onSave: {
-                            AiSettings.setOpenAiKey(openAiInput)
-                            openAiInput = ""
-                            refreshKeyStatus()
-                        },
-                        onClear: {
-                            AiSettings.clearOpenAiKey()
-                            openAiInput = ""
-                            refreshKeyStatus()
-                        }
-                    )
-                    aiKeyRow(
-                        label: "Anthropic (Claude)",
-                        configured: anthropicConfigured,
-                        input: $anthropicInput,
-                        idPrefix: "anthropic",
-                        onSave: {
-                            AiSettings.setAnthropicKey(anthropicInput)
-                            anthropicInput = ""
-                            refreshKeyStatus()
-                        },
-                        onClear: {
-                            AiSettings.clearAnthropicKey()
-                            anthropicInput = ""
-                            refreshKeyStatus()
-                        }
-                    )
-                } header: {
-                    Text("Cloud AI providers")
-                } footer: {
-                    Text("Your own API key, used only to call that provider directly from this device. Stored securely in the iOS Keychain, never sent anywhere except the provider itself.")
-                }
-
-                Section {
-                    OfflineModelRow()
-                } header: {
-                    Text("Offline Ask VISION")
-                } footer: {
-                    Text("Runs entirely on this phone, so Ask VISION can answer without internet and nothing you type leaves the device. Cloud AI, if configured, is tried first.")
-                }
+                themeSection
+                searchEngineSection
+                offlineStorageSection
+                privacySection
+                cloudAISection
+                offlineModelSection
             }
             .navigationTitle("Settings")
             .toolbar {

@@ -144,7 +144,7 @@ struct HistoryView: View {
                 delete(entry)
             } label: {
                 Label("Delete", systemImage: "trash")
-            }
+            }.tint(Color(hex: 0xE53935))
         }
     }
 

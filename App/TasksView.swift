@@ -86,7 +86,7 @@ struct TasksView: View {
                             .swipeActions {
                                 Button(role: .destructive) { removeTask(task) } label: {
                                     Label("Delete", systemImage: "trash")
-                                }
+                                }.tint(Color(hex: 0xE53935))
                             }
                         }
                     }

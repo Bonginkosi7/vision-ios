@@ -33,7 +33,7 @@ struct TabSwitcherView: View {
                             tabManager.closeTab(tab)
                         } label: {
                             Label("Close", systemImage: "xmark")
-                        }
+                        }.tint(Color(hex: 0xE53935))
                         .accessibilityIdentifier("btnCloseTab_\(tab.id)")
                     }
                 }

@@ -7,7 +7,7 @@ import VisionCore
 /// this is only the real network call glue, same split as
 /// FlashcardGenerator.swift).
 enum ExamGenerator {
-    private static let providers: [CloudAIProvider] = [OpenAIProvider(), AnthropicProvider()]
+    private static let providers: [CloudAIProvider] = [OpenAIProvider(), AnthropicProvider(), VisionCloudProvider()]
 
     static func generate(documentText: String, counts: ExamGenerationCounts, topics: [TopicRef]) async -> StructuredResult<[RawExamQuestion]> {
         let bounded = ExamGenerationLogic.boundedText(documentText)

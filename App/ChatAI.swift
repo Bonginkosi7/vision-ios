@@ -18,7 +18,7 @@ struct ChatAnswer {
 /// is set or the network is down. If it hasn't been downloaded, the
 /// honest "not configured" reply below explains how to get an answer.
 enum ChatAI {
-    private static let providers: [CloudAIProvider] = [AnthropicProvider(), OpenAIProvider(), LocalModelProvider()]
+    private static let providers: [CloudAIProvider] = [AnthropicProvider(), OpenAIProvider(), VisionCloudProvider(), LocalModelProvider()]
 
     /// Largest slice of an attached file's text each kind of provider gets.
     /// The on-device model reads about 2,000 tokens at once, shared with the

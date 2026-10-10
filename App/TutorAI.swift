@@ -8,7 +8,7 @@ import VisionCore
 /// free-text reply — there's no structured JSON to parse or retry here,
 /// so this is a simpler loop than StructuredAI.generate, not a reuse of it.
 enum TutorAI {
-    private static let providers: [CloudAIProvider] = [OpenAIProvider(), AnthropicProvider()]
+    private static let providers: [CloudAIProvider] = [OpenAIProvider(), AnthropicProvider(), VisionCloudProvider()]
 
     static func ask(question: String, history: [ChatMessage], documentText: String?) async -> TutorAnswer {
         let (instruction, grounded) = TutorLogic.systemInstruction(documentText: documentText)

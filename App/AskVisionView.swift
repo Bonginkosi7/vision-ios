@@ -247,7 +247,7 @@ struct AskVisionView: View {
                 deleteSession(session.id)
             } label: {
                 Label("Delete", systemImage: "trash")
-            }
+            }.tint(Color(hex: 0xE53935))
             .accessibilityIdentifier("btnDeleteSession_\(session.id)")
         }
     }

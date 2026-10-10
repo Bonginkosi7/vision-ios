@@ -47,7 +47,7 @@ struct OfflineLibraryView: View {
                                     .swipeActions {
                                         Button(role: .destructive) { delete(item) } label: {
                                             Label("Delete", systemImage: "trash")
-                                        }
+                                        }.tint(Color(hex: 0xE53935))
                                     }
                             }
                         }

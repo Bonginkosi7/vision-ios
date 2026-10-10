@@ -18,7 +18,7 @@ struct RewriteResult {
 /// false` with a real explanation, never a fabricated "rewritten" result
 /// standing in for one.
 enum RewriteWriter {
-    private static let providers: [CloudAIProvider] = [OpenAIProvider(), AnthropicProvider()]
+    private static let providers: [CloudAIProvider] = [OpenAIProvider(), AnthropicProvider(), VisionCloudProvider()]
 
     static func generate(text: String, action: RewriteAction) async -> RewriteResult {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)

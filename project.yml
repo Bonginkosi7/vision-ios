@@ -57,6 +57,8 @@ targets:
         # so these are empty right now and AnalyticsConfig.isConfigured()
         # reads false, same honest unconfigured state Android/desktop are
         # already in; the wiring is real and ready for when it exists.
+        VISION_AI_PROXY_URL: "$(VISION_AI_PROXY_URL)"
+        VISION_AI_PROXY_KEY: "$(VISION_AI_PROXY_KEY)"
         VISION_ANALYTICS_URL: "$(VISION_ANALYTICS_URL)"
         VISION_ANALYTICS_WRITE_KEY: "$(VISION_ANALYTICS_WRITE_KEY)"
         # INFOPLIST_KEY_* (not a separate XcodeGen `info.properties` block —
@@ -68,6 +70,8 @@ targets:
         INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: "VISION turns your speech into text so you can dictate questions to Ask VISION."
         INFOPLIST_KEY_VisionFirebaseAPIKey: "$(VISION_FIREBASE_API_KEY)"
         INFOPLIST_KEY_VisionFirebaseProjectID: "$(VISION_FIREBASE_PROJECT_ID)"
+        INFOPLIST_KEY_VisionAIProxyURL: "$(VISION_AI_PROXY_URL)"
+        INFOPLIST_KEY_VisionAIProxyKey: "$(VISION_AI_PROXY_KEY)"
         INFOPLIST_KEY_VisionAnalyticsURL: "$(VISION_ANALYTICS_URL)"
         INFOPLIST_KEY_VisionAnalyticsWriteKey: "$(VISION_ANALYTICS_WRITE_KEY)"
 

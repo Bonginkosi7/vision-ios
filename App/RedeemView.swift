@@ -94,25 +94,26 @@ struct RedeemView: View {
                     catalogSection
                     historySection
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(DesignSystem.Space.l)
             }
+            .visionScreen()
             .navigationTitle("Redeem")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Done") { dismiss() }
                 }
             }
-            .sheet(item: $pendingItem) { item in
-                RedeemConfirmSheet(
-                    item: item,
-                    mobileNumber: $mobileNumberInput,
-                    selectedNetwork: $selectedNetwork,
-                    isSubmitting: isSubmitting,
-                    onCancel: { pendingItem = nil },
-                    onConfirm: { confirmRedeem(item) }
-                )
-            }
-            .visionScreen()
+        }
+        .sheet(item: $pendingItem) { item in
+            RedeemConfirmSheet(
+                item: item,
+                mobileNumber: $mobileNumberInput,
+                selectedNetwork: $selectedNetwork,
+                isSubmitting: isSubmitting,
+                onCancel: { pendingItem = nil },
+                onConfirm: { confirmRedeem(item) }
+            )
         }
     }
 

@@ -108,7 +108,7 @@ struct ExamsView: View {
                 refresh()
             } label: {
                 Label("Delete", systemImage: "trash")
-            }
+            }.tint(Color(hex: 0xE53935))
             .accessibilityIdentifier("btnDeleteExam_\(summary.id)")
         }
     }

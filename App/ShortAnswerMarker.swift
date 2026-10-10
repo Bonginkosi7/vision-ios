@@ -7,7 +7,7 @@ import VisionCore
 /// FlashcardGenerator.swift. Returns nil (leave everything pending, never
 /// a fabricated mark) if unavailable or every attempt fails to parse.
 enum ShortAnswerMarker {
-    private static let providers: [CloudAIProvider] = [OpenAIProvider(), AnthropicProvider()]
+    private static let providers: [CloudAIProvider] = [OpenAIProvider(), AnthropicProvider(), VisionCloudProvider()]
 
     static func mark(_ pending: [PendingShortAnswer]) async -> [ShortAnswerMarking]? {
         guard !pending.isEmpty else { return [] }

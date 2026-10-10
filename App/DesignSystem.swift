@@ -50,7 +50,9 @@ enum DesignSystem {
             Text(label).font(.system(size: 12)).foregroundStyle(textMuted2)
                 .lineLimit(2).minimumScaleFactor(0.85)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        // Same size for every card in a row whether the label wraps to one
+        // line or two, with the numbers lined up along the top.
+        .frame(maxWidth: .infinity, minHeight: 64, alignment: .topLeading)
         .padding(Space.m)
         .background(RoundedRectangle(cornerRadius: Radius.card).fill(bgCard))
         .overlay(RoundedRectangle(cornerRadius: Radius.card).stroke(borderCard, lineWidth: 1))

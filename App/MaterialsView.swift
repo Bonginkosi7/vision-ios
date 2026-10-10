@@ -132,7 +132,7 @@ struct MaterialsView: View {
                 delete(doc)
             } label: {
                 Label("Delete", systemImage: "trash")
-            }
+            }.tint(Color(hex: 0xE53935))
             .accessibilityIdentifier("btnDeleteDocument_\(doc.id)")
         }
         // Deliberately NO .accessibilityIdentifier on this whole VStack:

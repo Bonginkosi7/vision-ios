@@ -37,7 +37,7 @@ struct AdvisorView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: DesignSystem.Space.xl) {
                     DesignSystem.sectionLabel("Today")
-                    HStack(spacing: DesignSystem.Space.s) {
+                    HStack(alignment: .top, spacing: DesignSystem.Space.s) {
                         DesignSystem.statMiniCard(value: formatMinutes(continuousSessionMs), label: "Focus time")
                         DesignSystem.statMiniCard(value: "\(breaksToday)", label: "Breaks")
                         DesignSystem.statMiniCard(value: "\(distinctSitesToday)", label: "Sites visited")

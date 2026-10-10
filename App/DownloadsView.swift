@@ -38,7 +38,7 @@ struct DownloadsView: View {
                                 .swipeActions {
                                     Button(role: .destructive) { remove(record) } label: {
                                         Label("Remove", systemImage: "trash")
-                                    }
+                                    }.tint(Color(hex: 0xE53935))
                                 }
                         }
                     }

@@ -7,7 +7,7 @@ import VisionCore
 /// logic; this is only the real network call glue, same split as
 /// TopicExtractor.swift).
 enum FlashcardGenerator {
-    private static let providers: [CloudAIProvider] = [OpenAIProvider(), AnthropicProvider()]
+    private static let providers: [CloudAIProvider] = [OpenAIProvider(), AnthropicProvider(), VisionCloudProvider()]
 
     static func generate(documentText: String, count: Int, topics: [TopicRef]) async -> StructuredResult<[RawFlashcard]> {
         let bounded = FlashcardGenerationLogic.boundedText(documentText)
