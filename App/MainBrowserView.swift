@@ -310,8 +310,8 @@ struct MainBrowserView: View {
                     // Direct port of bg_address_bar.xml: a true pill (radius ==
                     // half the 40dp height) plus its own subtle 1dp stroke
                     // (?attr/colorSurface fill + #33808080 stroke).
-                    .background(RoundedRectangle(cornerRadius: 20).fill(DesignSystem.bgCard))
-                    .overlay(RoundedRectangle(cornerRadius: 20).stroke(Color(white: 0.5).opacity(0.2), lineWidth: 1))
+                    .background(RoundedRectangle(cornerRadius: 20).fill(DesignSystem.addressField))
+                    .overlay(RoundedRectangle(cornerRadius: 20).stroke(DesignSystem.addressFieldBorder, lineWidth: 1))
                     .accessibilityIdentifier("addressBarField")
 
                 if focusManager.activeSession != nil {

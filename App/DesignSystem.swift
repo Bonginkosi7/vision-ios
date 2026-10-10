@@ -19,6 +19,9 @@ enum DesignSystem {
     /// Inputs, selected chips and other surfaces one step above a card.
     static let bgRaised = Color(hex: 0x1F1F1F)
     static let borderCard = Color(hex: 0x2A2A2A)
+    /// The browser's address field: a clearly lighter grey than the bar behind it, so it reads as the thing to tap.
+    static let addressField = Color(hex: 0x2E2E30)
+    static let addressFieldBorder = Color(hex: 0x3D3D40)
     /// Secondary text. 9A9A9A on 0A0A0A is ~7:1, on 141414 ~6:1.
     static let textMuted2 = Color(hex: 0x9A9A9A)
     static let statusSuccess = Color(hex: 0x5BD08F)
