@@ -39,7 +39,6 @@ struct FlashcardsView: View {
             Group {
                 if processedDocs.isEmpty {
                     DesignSystem.emptyState(
-                        emoji: "🃏",
                         title: "No processed material yet",
                         subtitle: "Process a document in My Materials first.",
                         ctaText: "Got it",
@@ -47,10 +46,9 @@ struct FlashcardsView: View {
                     )
                     .accessibilityIdentifier("emptyFlashcardsState")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(DesignSystem.bgCanvas)
                 } else {
                     ScrollView {
-                        VStack(alignment: .leading, spacing: 20) {
+                        VStack(alignment: .leading, spacing: DesignSystem.Space.xl) {
                             documentPicker
                             generateSection
                             DesignSystem.sectionLabel("Due for review")
@@ -58,12 +56,11 @@ struct FlashcardsView: View {
                             DesignSystem.sectionLabel("All flashcards")
                             allCardsList
                         }
-                        .padding(16)
+                        .padding(DesignSystem.Space.l)
                     }
-                    .background(DesignSystem.bgCanvas.ignoresSafeArea())
                 }
             }
-            .background(DesignSystem.bgCanvas.ignoresSafeArea())
+            .visionScreen()
             .navigationTitle("Flashcards")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -94,20 +91,18 @@ struct FlashcardsView: View {
     @ViewBuilder
     private var generateSection: some View {
         DesignSystem.card {
-            VStack(alignment: .leading, spacing: 12) {
-                TextField("Count", text: $countText)
+            VStack(alignment: .leading, spacing: DesignSystem.Space.m) {
+                TextField("", text: $countText, prompt: Text("Number of cards").foregroundColor(DesignSystem.textMuted2))
                     .keyboardType(.numberPad)
-                    .textFieldStyle(.plain)
-                    .padding(.horizontal, 12).padding(.vertical, 8)
-                    .background(RoundedRectangle(cornerRadius: 10).fill(DesignSystem.bgCanvas))
-                    .foregroundStyle(.white)
+                    .visionField()
+                    .accessibilityLabel("Number of cards")
                     .accessibilityIdentifier("flashcardsCountInput")
-                DesignSystem.primaryButton(generating ? "Generating…" : "Generate flashcards") { generate() }
+                DesignSystem.primaryButton(generating ? "Generating…" : "Generate flashcards", fullWidth: true) { generate() }
                     .disabled(generating)
                     .accessibilityIdentifier("btnGenerateFlashcards")
                 if let generateStatus {
                     Text(generateStatus)
-                        .font(.system(size: 12)).foregroundStyle(DesignSystem.textMuted2)
+                        .font(.system(size: 13)).foregroundStyle(DesignSystem.textMuted2)
                         .accessibilityIdentifier("flashcardsGenerateStatus")
                 }
             }
@@ -141,19 +136,19 @@ struct FlashcardsView: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .padding(16)
-                .background(RoundedRectangle(cornerRadius: 16).fill(DesignSystem.bgCard))
-                .overlay(RoundedRectangle(cornerRadius: 16).stroke(DesignSystem.borderCard, lineWidth: 1))
+                .padding(DesignSystem.Space.l)
+                .background(RoundedRectangle(cornerRadius: DesignSystem.Radius.card, style: .continuous).fill(DesignSystem.bgCard))
+                .overlay(RoundedRectangle(cornerRadius: DesignSystem.Radius.card, style: .continuous).stroke(DesignSystem.borderCard, lineWidth: 1))
                 .accessibilityIdentifier("flashcardFlipCard")
 
                 Text("Card \(dueIndex + 1) of \(dueQueue.count)")
                     .font(.system(size: 12)).foregroundStyle(DesignSystem.textMuted2)
                     .frame(maxWidth: .infinity, alignment: .center)
 
-                HStack(spacing: 8) {
-                    DesignSystem.primaryButton("Still learning") { review(card.id, confident: false) }
+                HStack(spacing: DesignSystem.Space.s) {
+                    DesignSystem.secondaryButton("Still learning", fullWidth: true) { review(card.id, confident: false) }
                         .accessibilityIdentifier("btnStillLearning")
-                    DesignSystem.primaryButton("I know it") { review(card.id, confident: true) }
+                    DesignSystem.primaryButton("I know it", fullWidth: true) { review(card.id, confident: true) }
                         .accessibilityIdentifier("btnKnowIt")
                 }
             }
@@ -167,14 +162,17 @@ struct FlashcardsView: View {
                 .font(.system(size: 13)).foregroundStyle(DesignSystem.textMuted2)
                 .accessibilityIdentifier("flashcardsNoneYet")
         } else {
-            VStack(alignment: .leading, spacing: 10) {
-                ForEach(allCards) { card in
+            DesignSystem.card {
+                ForEach(Array(allCards.enumerated()), id: \.element.id) { index, card in
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(card.front).font(.system(size: 14)).foregroundStyle(.white)
+                        Text(card.front).font(.system(size: 15)).foregroundStyle(.white)
                             .accessibilityIdentifier("flashcardFront_\(card.id)")
                         Text("\(card.reviewCount) review\(card.reviewCount == 1 ? "" : "s") · every \(max(card.intervalDays, 1))d")
                             .font(.system(size: 12)).foregroundStyle(DesignSystem.textMuted2)
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, DesignSystem.Space.m)
+                    if index < allCards.count - 1 { DesignSystem.divider() }
                 }
             }
         }

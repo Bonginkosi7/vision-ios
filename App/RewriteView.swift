@@ -22,23 +22,26 @@ struct RewriteView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: DesignSystem.Space.l) {
                     TextEditor(text: $inputText)
-                        .frame(minHeight: 140)
-                        .padding(8)
-                        .background(DesignSystem.bgCard)
-                        .cornerRadius(10)
+                        .scrollContentBackground(.hidden)
+                        .font(.system(size: 16))
+                        .foregroundStyle(.white)
+                        .frame(minHeight: 160)
+                        .padding(DesignSystem.Space.s)
+                        .background(RoundedRectangle(cornerRadius: DesignSystem.Radius.control, style: .continuous).fill(DesignSystem.bgRaised))
                         .accessibilityIdentifier("rewriteInput")
 
                     ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
+                        HStack(spacing: DesignSystem.Space.s) {
                             ForEach(RewriteAction.allCases) { action in
                                 Button(action.label) { run(action) }
                                     .disabled(isGenerating)
-                                    .padding(.horizontal, 14).padding(.vertical, 8)
-                                    .background(DesignSystem.brandGradient)
-                                    .foregroundStyle(.white)
-                                    .clipShape(Capsule())
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .padding(.horizontal, DesignSystem.Space.l)
+                                    .frame(minHeight: 40)
+                                    .foregroundStyle(isGenerating ? DesignSystem.textMuted2 : .white)
+                                    .overlay(Capsule().stroke(Color.white.opacity(0.35), lineWidth: 1))
                                     .accessibilityIdentifier("rewriteAction_\(action.rawValue)")
                             }
                         }
@@ -46,23 +49,25 @@ struct RewriteView: View {
 
                     if !status.isEmpty {
                         Text(status)
+                            .font(.system(size: 14))
                             .foregroundStyle(DesignSystem.textMuted2)
                             .accessibilityIdentifier("rewriteStatus")
                     }
 
                     if let resultText {
                         DesignSystem.card {
-                            VStack(alignment: .leading, spacing: 10) {
+                            VStack(alignment: .leading, spacing: DesignSystem.Space.m) {
                                 Text(resultText)
+                                    .font(.system(size: 16)).lineSpacing(3)
                                     .foregroundStyle(.white)
                                     .accessibilityIdentifier("rewriteResultText")
                                 if let resultSource {
                                     Text("via \(resultSource)")
-                                        .font(.caption)
+                                        .font(.system(size: 12))
                                         .foregroundStyle(DesignSystem.textMuted2)
                                         .accessibilityIdentifier("rewriteResultSource")
                                 }
-                                HStack {
+                                HStack(spacing: DesignSystem.Space.xl) {
                                     Button(copyButtonLabel) {
                                         UIPasteboard.general.string = resultText
                                         copyButtonLabel = "Copied"
@@ -81,9 +86,9 @@ struct RewriteView: View {
                         }
                     }
                 }
-                .padding(20)
+                .padding(DesignSystem.Space.l)
             }
-            .background(DesignSystem.bgCanvas.ignoresSafeArea())
+            .visionScreen()
             .navigationTitle("Rewrite Writer")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {

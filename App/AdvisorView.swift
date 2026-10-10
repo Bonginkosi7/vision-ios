@@ -35,32 +35,31 @@ struct AdvisorView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .leading, spacing: DesignSystem.Space.xl) {
                     DesignSystem.sectionLabel("Today")
-                    HStack(spacing: 12) {
-                        DesignSystem.statMiniCard(emoji: "🎯", value: formatMinutes(continuousSessionMs), label: "Focus time")
-                        DesignSystem.statMiniCard(emoji: "⚡", value: "\(breaksToday)", label: "Breaks")
-                        DesignSystem.statMiniCard(emoji: "📍", value: "\(distinctSitesToday)", label: "Sites visited")
-                        DesignSystem.statMiniCard(emoji: "🗂", value: "\(tabsOpenedToday)", label: "Tabs opened")
+                    HStack(spacing: DesignSystem.Space.s) {
+                        DesignSystem.statMiniCard(value: formatMinutes(continuousSessionMs), label: "Focus time")
+                        DesignSystem.statMiniCard(value: "\(breaksToday)", label: "Breaks")
+                        DesignSystem.statMiniCard(value: "\(distinctSitesToday)", label: "Sites visited")
+                        DesignSystem.statMiniCard(value: "\(tabsOpenedToday)", label: "Tabs opened")
                     }
                     .accessibilityIdentifier("advisorQuickStatsRow")
 
                     if let suggestion {
                         DesignSystem.card {
-                            VStack(alignment: .leading, spacing: 12) {
+                            VStack(alignment: .leading, spacing: DesignSystem.Space.m) {
                                 DesignSystem.sectionLabel("A nudge for you")
                                 Text(suggestion.message)
-                                    .font(.system(size: 14))
+                                    .font(.system(size: 16))
                                     .foregroundStyle(.white)
                                     .accessibilityIdentifier("advisorSuggestionMessage")
-                                HStack(spacing: 8) {
+                                HStack(spacing: DesignSystem.Space.s) {
                                     ForEach(suggestion.actions, id: \.label) { action in
                                         Button(action.label) { handle(action) }
-                                            .font(.system(size: 13, weight: .bold))
+                                            .font(.system(size: 14, weight: .semibold))
                                             .foregroundStyle(.white)
-                                            .padding(.horizontal, 14).padding(.vertical, 8)
-                                            .background(Capsule().fill(DesignSystem.bgCanvas))
-                                            .overlay(Capsule().stroke(DesignSystem.borderCard, lineWidth: 1))
+                                            .padding(.horizontal, DesignSystem.Space.l).frame(minHeight: 40)
+                                            .overlay(Capsule().stroke(Color.white.opacity(0.35), lineWidth: 1))
                                             .accessibilityIdentifier("advisorAction_\(action.id)")
                                     }
                                 }
@@ -69,7 +68,6 @@ struct AdvisorView: View {
                         .accessibilityIdentifier("advisorSuggestionCard")
                     } else {
                         DesignSystem.tipCard(
-                            emoji: "🙂",
                             title: "Nothing to flag right now",
                             subtitle: "No nudges right now."
                         )
@@ -78,16 +76,19 @@ struct AdvisorView: View {
 
                     DesignSystem.sectionLabel("This week")
                     DesignSystem.card {
-                        DesignSystem.statRow(emoji: "⭐", label: "Points earned", value: "\(weekPoints)")
-                        DesignSystem.statRow(emoji: "❤️", label: "Healthy breaks", value: "\(weekBreaks)")
-                        DesignSystem.statRow(emoji: "🎓", label: "Learning", value: "\(weekLearning)")
-                        DesignSystem.statRow(emoji: "🎯", label: "Focus sessions", value: "\(weekFocusSessions)")
+                        DesignSystem.statRow(label: "Points earned", value: "\(weekPoints)")
+                        DesignSystem.divider()
+                        DesignSystem.statRow(label: "Healthy breaks", value: "\(weekBreaks)")
+                        DesignSystem.divider()
+                        DesignSystem.statRow(label: "Learning", value: "\(weekLearning)")
+                        DesignSystem.divider()
+                        DesignSystem.statRow(label: "Focus sessions", value: "\(weekFocusSessions)")
                     }
                     .accessibilityIdentifier("advisorWeekCard")
                 }
-                .padding(16)
+                .padding(DesignSystem.Space.l)
             }
-            .background(DesignSystem.bgCanvas.ignoresSafeArea())
+            .visionScreen()
             .navigationTitle("Advisor")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {

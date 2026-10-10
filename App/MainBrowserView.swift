@@ -78,6 +78,7 @@ struct MainBrowserView: View {
     @State private var showAdvisor = false
     @State private var showRewards = false
     @State private var showRedeem = false
+    @State private var showOverview = false
     @State private var showMaterials = false
     @State private var showStudyMaterial = false
     @State private var showFlashcards = false
@@ -93,9 +94,11 @@ struct MainBrowserView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            addressBar
-            Rectangle().fill(DesignSystem.borderCard).frame(height: 1)
             content
+            // Address bar and controls live at the bottom, within thumb
+            // reach, like Safari.
+            Rectangle().fill(DesignSystem.borderCard).frame(height: 1)
+            addressBar
         }
         .background(DesignSystem.bgCanvas.ignoresSafeArea())
         .overlay {
@@ -112,7 +115,7 @@ struct MainBrowserView: View {
             if scenePhase != .active && tabManager.activeTab?.isPrivate == true {
                 DesignSystem.bgCanvas.ignoresSafeArea()
                     .overlay {
-                        Text("Private").font(.system(size: 15, weight: .bold)).foregroundStyle(DesignSystem.visionBlue)
+                        Text("Private").font(.system(size: 15, weight: .semibold)).foregroundStyle(.white)
                     }
                     .accessibilityIdentifier("privateSessionCover")
             }
@@ -187,6 +190,9 @@ struct MainBrowserView: View {
         }
         .sheet(isPresented: $showRewards) {
             RewardsView(rewardStore: rewardStore)
+        }
+        .sheet(isPresented: $showOverview) {
+            TodayOverviewView(wellbeingStore: wellbeingStore)
         }
         .sheet(isPresented: $showRedeem) {
             RedeemContainerView(redemptionStore: redemptionStore, rewardStore: rewardStore)
@@ -269,79 +275,112 @@ struct MainBrowserView: View {
         }
     }
 
+    /// Every toolbar button gets its own 44pt target; the address field takes
+    /// whatever width is left. Left group (Back, Forward, Reload), flexible
+    /// field, right group (Bookmark, Tabs, More) — the groups never shrink, so
+    /// on a narrow phone it's the field that gives up width, not the touch
+    /// targets. Targets sit edge to edge in a zero-spacing stack, so none of
+    /// them can overlap another's hit area.
+    private static let toolbarTarget: CGFloat = 44
+
+    @ViewBuilder
+    private func toolbarIcon(_ systemName: String) -> some View {
+        Image(systemName: systemName)
+            .font(.system(size: 18, weight: .regular))
+            .frame(width: Self.toolbarTarget, height: Self.toolbarTarget)
+            .contentShape(Rectangle())
+    }
+
     @ViewBuilder
     private var addressBar: some View {
-        HStack(spacing: 8) {
-            Button(action: goBack) {
-                Image(systemName: "chevron.left")
+        // Safari layout: the address field gets the full width on its own
+        // row; the six controls sit below it, spread evenly, each in its
+        // own 44pt target.
+        VStack(spacing: 2) {
+            HStack(spacing: 8) {
+                TextField("Search or enter address", text: $addressText, onCommit: navigateFromAddressBar)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 15))
+                    .autocapitalization(.none)
+                    .disableAutocorrection(true)
+                    .frame(height: 40)
+                    .padding(.horizontal, 14)
+                    // Direct port of bg_address_bar.xml: a true pill (radius ==
+                    // half the 40dp height) plus its own subtle 1dp stroke
+                    // (?attr/colorSurface fill + #33808080 stroke).
+                    .background(RoundedRectangle(cornerRadius: 20).fill(DesignSystem.bgCard))
+                    .overlay(RoundedRectangle(cornerRadius: 20).stroke(Color(white: 0.5).opacity(0.2), lineWidth: 1))
+                    .accessibilityIdentifier("addressBarField")
+
+                if focusManager.activeSession != nil {
+                    Text("Focus")
+                        .font(.system(size: 11, weight: .semibold))
+                        .fixedSize()
+                        .accessibilityIdentifier("focusActiveIndicator")
+                }
+
+                if tabManager.activeTab?.isPrivate == true {
+                    Text("Private")
+                        .font(.system(size: 11, weight: .semibold))
+                        .fixedSize()
+                        .accessibilityIdentifier("privateIndicator")
+                }
             }
-            .disabled(!(tabManager.activeTab?.webView.canGoBack ?? false))
-            .accessibilityIdentifier("backButton")
+            .padding(.horizontal, 12)
 
-            Button(action: goForward) {
-                Image(systemName: "chevron.right")
+            HStack(spacing: 0) {
+                Button(action: goBack) {
+                    toolbarIcon("chevron.left")
+                }
+                .disabled(!(tabManager.activeTab?.webView.canGoBack ?? false))
+                .accessibilityLabel("Back")
+                .accessibilityIdentifier("backButton")
+                .frame(maxWidth: .infinity)
+
+                Button(action: goForward) {
+                    toolbarIcon("chevron.right")
+                }
+                .disabled(!(tabManager.activeTab?.webView.canGoForward ?? false))
+                .accessibilityLabel("Forward")
+                .accessibilityIdentifier("forwardButton")
+                .frame(maxWidth: .infinity)
+
+                Button(action: reloadActiveTab) {
+                    toolbarIcon("arrow.clockwise")
+                }
+                .accessibilityLabel("Reload")
+                .accessibilityIdentifier("reloadButton")
+                .frame(maxWidth: .infinity)
+
+                Button(action: toggleBookmark) {
+                    toolbarIcon(isBookmarked ? "star.fill" : "star")
+                }
+                .accessibilityIdentifier("bookmarkButton")
+                .accessibilityLabel(isBookmarked ? "Remove bookmark" : "Add bookmark")
+                .frame(maxWidth: .infinity)
+
+                Button(action: { showTabSwitcher = true }) {
+                    Text("\(tabManager.tabs.count)")
+                        .font(.system(size: 13, weight: .bold))
+                        // bg_tab_count.xml is a real 36dp square with a 1.5dp
+                        // near-white stroke — kept exactly, now centred in a
+                        // full 44pt target.
+                        .frame(width: 30, height: 30)
+                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.white, lineWidth: 1.5))
+                        .frame(width: Self.toolbarTarget, height: Self.toolbarTarget)
+                        .contentShape(Rectangle())
+                }
+                .accessibilityIdentifier("tabCountLabel")
+                .frame(maxWidth: .infinity)
+
+                overflowMenu
+                    .frame(maxWidth: .infinity)
             }
-            .disabled(!(tabManager.activeTab?.webView.canGoForward ?? false))
-            .accessibilityIdentifier("forwardButton")
-
-            Button(action: reloadActiveTab) {
-                Image(systemName: "arrow.clockwise")
-            }
-            .accessibilityIdentifier("reloadButton")
-
-            TextField("Search or enter address", text: $addressText, onCommit: navigateFromAddressBar)
-                .textFieldStyle(.plain)
-                .font(.system(size: 14))
-                .autocapitalization(.none)
-                .disableAutocorrection(true)
-                .frame(height: 40)
-                .padding(.horizontal, 14)
-                // Direct port of bg_address_bar.xml: a true pill (radius ==
-                // half the 40dp height, not the boxy radius-10 this had
-                // drifted to) plus its own subtle 1dp stroke
-                // (?attr/colorSurface fill + #33808080 stroke) — the stroke
-                // had gone missing entirely on iOS.
-                .background(RoundedRectangle(cornerRadius: 20).fill(DesignSystem.bgCard))
-                .overlay(RoundedRectangle(cornerRadius: 20).stroke(Color(white: 0.5).opacity(0.2), lineWidth: 1))
-                .accessibilityIdentifier("addressBarField")
-
-            Button(action: toggleBookmark) {
-                Image(systemName: isBookmarked ? "star.fill" : "star")
-            }
-            .accessibilityIdentifier("bookmarkButton")
-            .accessibilityLabel(isBookmarked ? "Remove bookmark" : "Add bookmark")
-
-            Button(action: { showTabSwitcher = true }) {
-                Text("\(tabManager.tabs.count)")
-                    .font(.system(size: 13, weight: .bold))
-                    // bg_tab_count.xml is a real 36dp square with a
-                    // 1.5dp ?attr/colorOnBackground stroke (near-white in
-                    // this app's dark theme) — this had shrunk to 24dp
-                    // with a low-contrast borderCard stroke that barely
-                    // shows up against bgCanvas.
-                    .frame(width: 36, height: 36)
-                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.white, lineWidth: 1.5))
-            }
-            .accessibilityIdentifier("tabCountLabel")
-
-            if focusManager.activeSession != nil {
-                Text("Focus")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(DesignSystem.visionPurple)
-                    .accessibilityIdentifier("focusActiveIndicator")
-            }
-
-            if tabManager.activeTab?.isPrivate == true {
-                Text("Private")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(DesignSystem.visionBlue)
-                    .accessibilityIdentifier("privateIndicator")
-            }
-
-            overflowMenu
+            .padding(.horizontal, 4)
         }
         .foregroundStyle(.white)
-        .padding(8)
+        .padding(.top, 8)
+        .padding(.bottom, 2)
         .alert(
             "Save for Offline",
             isPresented: Binding(get: { saveOfflineStatus != nil }, set: { if !$0 { saveOfflineStatus = nil } })
@@ -455,8 +494,9 @@ struct MainBrowserView: View {
             // Android's own overflow glyph (ic_menu_more) is plain
             // vertical dots with no circle outline — "ellipsis.circle"
             // added a ring Android's toolbar never has.
-            Image(systemName: "ellipsis")
+            toolbarIcon("ellipsis")
         }
+        .accessibilityLabel("More")
         .accessibilityIdentifier("moreMenuButton")
     }
 
@@ -540,12 +580,28 @@ struct MainBrowserView: View {
                 shortcutStore: shortcutStore,
                 onNavigate: { destination in tabManager.navigateActiveTab(to: destination) },
                 onAskVision: { query in askVisionRequest = AskVisionRequest(query: query) },
-                onOpenVisionReady: { showVisionReady = true }
+                onOpen: { destination in openHome(destination) },
+                onOpenSavedPage: { fileURL in tabManager.openOfflineFile(fileURL) }
             )
             .onReceive(tab.$url) { _ in syncAddressBar() }
             .onReceive(tab.$isNewTab) { _ in refreshBookmarkState() }
         } else {
             ProgressView().tint(.white)
+        }
+    }
+
+    /// Every destination the homepage can open is an existing sheet here.
+    private func openHome(_ destination: HomeDestination) {
+        switch destination {
+        case .advisor: showAdvisor = true
+        case .settings: showSettings = true
+        case .overview: showOverview = true
+        case .points: showRewards = true
+        case .visionReady: showVisionReady = true
+        case .offlineLibrary: showOfflineLibrary = true
+        case .tasks: showTasks = true
+        case .focus: showFocus = true
+        case .flashcards: showFlashcards = true
         }
     }
 
@@ -626,14 +682,15 @@ private struct ActiveTabContent: View {
     let shortcutStore: ShortcutStore
     let onNavigate: (String) -> Void
     let onAskVision: (String) -> Void
-    let onOpenVisionReady: () -> Void
+    let onOpen: (HomeDestination) -> Void
+    let onOpenSavedPage: (URL) -> Void
 
     var body: some View {
         if tab.isNewTab {
             NewTabView(
                 bookmarkStore: bookmarkStore, offlineStore: offlineStore, wellbeingStore: wellbeingStore, rewardStore: rewardStore,
                 shortcutStore: shortcutStore,
-                onNavigate: onNavigate, onAskVision: onAskVision, onOpenVisionReady: onOpenVisionReady
+                onNavigate: onNavigate, onAskVision: onAskVision, onOpen: onOpen, onOpenSavedPage: onOpenSavedPage
             )
         } else {
             VStack(spacing: 0) {
@@ -645,11 +702,7 @@ private struct ActiveTabContent: View {
                 if tab.isLoading {
                     ProgressView(value: tab.estimatedProgress, total: 1.0)
                         .progressViewStyle(.linear)
-                        // activity_main.xml's progressBar has no explicit
-                        // tint of its own — it just inherits
-                        // Theme.Vision's colorAccent, which is
-                        // vision_blue, not vision_purple.
-                        .tint(DesignSystem.visionBlue)
+                        .tint(.white)
                         .frame(height: 2)
                         .accessibilityIdentifier("pageLoadProgress")
                 }

@@ -14,14 +14,19 @@ final class ConnectivityMonitor: ObservableObject {
     static let shared = ConnectivityMonitor()
 
     @Published private(set) var isOnline: Bool = true
+    /// True on mobile data / Personal Hotspot — used only to tell the user
+    /// a big download will use their data bundle, never to block anything.
+    @Published private(set) var isMetered: Bool = false
 
     private let monitor = NWPathMonitor()
 
     private init() {
         monitor.pathUpdateHandler = { [weak self] path in
             let online = path.status == .satisfied
+            let metered = path.isExpensive
             Task { @MainActor [weak self] in
                 self?.isOnline = online
+                self?.isMetered = metered
             }
         }
         monitor.start(queue: DispatchQueue(label: "ConnectivityMonitor"))

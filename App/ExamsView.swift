@@ -30,7 +30,6 @@ struct ExamsView: View {
             Group {
                 if tests.isEmpty {
                     DesignSystem.emptyState(
-                        emoji: "📝",
                         title: "No exams yet",
                         subtitle: "Create one by hand, or generate one from a processed document.",
                         ctaText: "Got it",
@@ -38,18 +37,20 @@ struct ExamsView: View {
                     )
                     .accessibilityIdentifier("emptyExamsState")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(DesignSystem.bgCanvas)
                 } else {
                     List {
                         ForEach(tests) { summary in
                             testRow(summary)
+                                .listRowBackground(DesignSystem.bgCanvas)
+                                .listRowSeparatorTint(DesignSystem.borderCard)
                         }
                     }
                     .listStyle(.plain)
+                    .scrollContentBackground(.hidden)
                     .accessibilityIdentifier("examsList")
                 }
             }
-            .background(DesignSystem.bgCanvas.ignoresSafeArea())
+            .visionScreen()
             .navigationTitle("Exams")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -90,11 +91,11 @@ struct ExamsView: View {
         let sourceLabel = summary.test.documentId != nil ? " · AI-generated" : ""
         Button(action: { openTestId = summary.id }) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(summary.test.title).foregroundStyle(.white).font(.system(size: 14, weight: .bold))
+                Text(summary.test.title).foregroundStyle(.white).font(.system(size: 15, weight: .semibold))
                 Text(questionsLabel + timeLabel + sourceLabel)
                     .font(.system(size: 12)).foregroundStyle(DesignSystem.textMuted2)
             }
-            .padding(.vertical, 8)
+            .padding(.vertical, DesignSystem.Space.s)
         }
         // One identifier on the real Button itself, not its text children
         // — matching HistoryView's own established row convention, which

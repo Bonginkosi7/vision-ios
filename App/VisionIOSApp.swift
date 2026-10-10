@@ -21,6 +21,10 @@ struct VisionIOSApp: App {
             // appearance actually is" rather than a fallback standing in
             // for a missing choice.
             MainBrowserView()
+                // Black and white: system controls (Done buttons, pickers,
+                // toggles) take the primary text colour — white on the dark
+                // screens, black on a light system screen — not iOS blue.
+                .tint(Color.primary)
                 .preferredColorScheme((AppSettings.Theme(rawValue: themeRaw) ?? .system).colorScheme)
         }
     }

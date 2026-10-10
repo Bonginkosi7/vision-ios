@@ -31,6 +31,18 @@ struct WebViewRepresentable: UIViewRepresentable {
         controller.removeScriptMessageHandler(forName: "focusBridge")
         controller.add(context.coordinator, name: "focusBridge")
 
+        // Swipe right from the left edge = back, swipe left from the right
+        // edge = forward, with WebKit's own interactive page snapshot.
+        tab.webView.allowsBackForwardNavigationGestures = true
+
+        // Pull down at the top of a page to reload it, the standard iOS
+        // browser gesture.
+        if tab.webView.scrollView.refreshControl == nil {
+            let refresh = UIRefreshControl()
+            refresh.addTarget(context.coordinator, action: #selector(Coordinator.pullToRefresh(_:)), for: .valueChanged)
+            tab.webView.scrollView.refreshControl = refresh
+        }
+
         return tab.webView
     }
 
@@ -76,8 +88,25 @@ struct WebViewRepresentable: UIViewRepresentable {
                 },
                 tab.webView.observe(\.isLoading, options: [.new]) { [weak tab] webView, _ in
                     tab?.isLoading = webView.isLoading
+                    // Whatever ended the load (finish, failure, cancel),
+                    // the pull-to-refresh spinner must stop with it.
+                    if !webView.isLoading { webView.scrollView.refreshControl?.endRefreshing() }
+                },
+                // A back/forward swipe changes these without any toolbar
+                // tap — nudge the tab so the toolbar re-reads enabled state.
+                tab.webView.observe(\.canGoBack, options: [.new]) { [weak tab] _, _ in
+                    tab?.objectWillChange.send()
+                },
+                tab.webView.observe(\.canGoForward, options: [.new]) { [weak tab] _, _ in
+                    tab?.objectWillChange.send()
                 },
             ]
+        }
+
+        @objc func pullToRefresh(_ sender: UIRefreshControl) {
+            guard let webView = tab?.webView else { sender.endRefreshing(); return }
+            // A page that never loaded (error/blank) has no URL to reload.
+            if webView.url != nil { webView.reload() } else { sender.endRefreshing() }
         }
 
         func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
@@ -96,6 +125,9 @@ struct WebViewRepresentable: UIViewRepresentable {
             guard urlString.hasPrefix("http://") || urlString.hasPrefix("https://") else { return }
             if tab?.isPrivate != true {
                 try? historyStore.record(url: urlString, title: webView.title ?? "")
+                // Saves the page's own declared icon for History/Bookmarks/
+                // Downloads/Offline Library. Never for private tabs.
+                FaviconCache.captureIcon(from: webView)
             }
             if let host = URL(string: urlString)?.host {
                 try? wellbeingStore.recordSiteVisit(hostname: host)

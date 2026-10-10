@@ -36,7 +36,6 @@ struct MaterialsView: View {
             Group {
                 if documents.isEmpty {
                     DesignSystem.emptyState(
-                        emoji: "📚",
                         title: "No materials yet",
                         subtitle: "Upload a PDF, DOCX, or TXT file to get started.",
                         ctaText: "Add material",
@@ -44,23 +43,26 @@ struct MaterialsView: View {
                     )
                     .accessibilityIdentifier("emptyMaterialsState")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(DesignSystem.bgCanvas)
                 } else {
                     List {
                         if let uploadStatus {
                             Text(uploadStatus)
-                                .font(.system(size: 12)).foregroundStyle(DesignSystem.textMuted2)
+                                .font(.system(size: 13)).foregroundStyle(DesignSystem.textMuted2)
+                                .listRowBackground(DesignSystem.bgCanvas)
                                 .accessibilityIdentifier("materialsUploadStatus")
                         }
                         ForEach(documents) { doc in
                             documentRow(doc)
+                                .listRowBackground(DesignSystem.bgCanvas)
+                                .listRowSeparatorTint(DesignSystem.borderCard)
                         }
                     }
                     .listStyle(.plain)
+                    .scrollContentBackground(.hidden)
                     .accessibilityIdentifier("materialsList")
                 }
             }
-            .background(DesignSystem.bgCanvas.ignoresSafeArea())
+            .visionScreen()
             .navigationTitle("My Materials")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -68,7 +70,7 @@ struct MaterialsView: View {
                 }
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button(action: { showFilePicker = true }) {
-                        Image(systemName: "plus.circle.fill")
+                        Image(systemName: "plus")
                     }
                     .accessibilityIdentifier("btnAddMaterial")
                 }
@@ -87,7 +89,7 @@ struct MaterialsView: View {
     @ViewBuilder
     private func documentRow(_ doc: StudyDocument) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(doc.title).foregroundStyle(.white).font(.system(size: 14, weight: .bold))
+            Text(doc.title).foregroundStyle(.white).font(.system(size: 15, weight: .semibold))
                 .accessibilityIdentifier("materialTitle_\(doc.id)")
             Text("\(statusLabel(doc.status)) · \(doc.fileType.label) · \(ByteCountFormatter.string(fromByteCount: doc.sizeBytes, countStyle: .file))")
                 .font(.system(size: 12)).foregroundStyle(DesignSystem.textMuted2)
@@ -100,7 +102,7 @@ struct MaterialsView: View {
             HStack(spacing: 12) {
                 if doc.status == .uploaded || doc.status == .failed {
                     Button(doc.status == .failed ? "Retry" : "Process") { process(doc) }
-                        .font(.system(size: 12, weight: .bold))
+                        .font(.system(size: 13, weight: .semibold))
                         .accessibilityIdentifier("btnProcessDocument_\(doc.id)")
                 }
                 if doc.status == .processed {
@@ -151,7 +153,7 @@ struct MaterialsView: View {
     private func topicsButton(_ doc: StudyDocument) -> some View {
         let state = topicsState[doc.id] ?? TopicsUIState()
         Button(state.expanded ? "Hide topics" : "Topics") { toggleTopics(doc) }
-            .font(.system(size: 12, weight: .bold))
+            .font(.system(size: 13, weight: .semibold))
             .disabled(state.loading)
             .accessibilityIdentifier("btnTopics_\(doc.id)")
     }
@@ -177,7 +179,7 @@ struct MaterialsView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     ForEach(topLevel) { topic in
                         let subtopics = topics.filter { $0.parentTopicId == topic.id }
-                        Text(topic.name).font(.system(size: 13, weight: .bold)).foregroundStyle(.white)
+                        Text(topic.name).font(.system(size: 14, weight: .semibold)).foregroundStyle(.white)
                         if !subtopics.isEmpty {
                             Text(subtopics.map(\.name).joined(separator: " · "))
                                 .font(.system(size: 12)).foregroundStyle(DesignSystem.textMuted2)

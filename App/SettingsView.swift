@@ -143,6 +143,14 @@ struct SettingsView: View {
                 } footer: {
                     Text("Your own API key, used only to call that provider directly from this device. Stored securely in the iOS Keychain, never sent anywhere except the provider itself.")
                 }
+
+                Section {
+                    OfflineModelRow()
+                } header: {
+                    Text("Offline Ask VISION")
+                } footer: {
+                    Text("Runs entirely on this phone, so Ask VISION can answer without internet and nothing you type leaves the device. Cloud AI, if configured, is tried first.")
+                }
             }
             .navigationTitle("Settings")
             .toolbar {

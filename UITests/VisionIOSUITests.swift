@@ -1265,7 +1265,7 @@ final class VisionIOSUITests: XCTestCase {
 
         XCTAssertTrue(app.staticTexts["studyReviewCaughtUp"].waitForExistence(timeout: 5), "marking the only real due item reviewed should show the real caught-up state")
         XCTAssertTrue(app.staticTexts["studyReviewStreak"].waitForExistence(timeout: 5))
-        XCTAssertEqual(app.staticTexts["studyReviewStreak"].label, "🔥 1-day streak")
+        XCTAssertEqual(app.staticTexts["studyReviewStreak"].label, "1-day streak")
 
         app.navigationBars.buttons["Done"].tap()
     }
@@ -1349,11 +1349,12 @@ final class VisionIOSUITests: XCTestCase {
         // these checks confirm each card renders a real, valid state
         // either way, not a specific pristine-install value.
         XCTAssertTrue(app.staticTexts["newTabGreeting"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["advisorMessage"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["homeModeStatus"].waitForExistence(timeout: 5), "the homepage should always state its real Online/Offline mode")
         let readinessShowsRealState = app.staticTexts["newTabReadinessEmpty"].waitForExistence(timeout: 5) || app.staticTexts["newTabReadinessPercent"].waitForExistence(timeout: 5)
         XCTAssertTrue(readinessShowsRealState, "Offline Readiness should show a real empty or real percent state, never neither")
-        XCTAssertTrue(app.staticTexts["newTabOverviewNote"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["newTabPointsBalance"].waitForExistence(timeout: 5))
+        for card in ["advisor", "settings", "overview", "points"] {
+            XCTAssertTrue(app.buttons["homeCard_\(card)"].waitForExistence(timeout: 5), "the \(card) card should be on the homepage")
+        }
 
         let askInput = app.textFields["newTabSearchInput"]
         XCTAssertTrue(askInput.waitForExistence(timeout: 5))
@@ -1395,6 +1396,9 @@ final class VisionIOSUITests: XCTestCase {
     /// already uses for its own live fetch.
     func test_newTabNewsSectionSettlesAfterARealFetch() {
         let app = XCUIApplication()
+        // Pin the saved Offline Mode choice off for this launch so a value
+        // left by another test in this shared install can't hide the section.
+        app.launchArguments = ["-offline_mode_enabled", "NO"]
         app.launch()
 
         let settled = NSPredicate { _, _ in
@@ -1408,6 +1412,105 @@ final class VisionIOSUITests: XCTestCase {
             app.staticTexts["newsStatusText"].exists || app.otherElements["newsHeadlinesList"].exists,
             "the real News section should settle into either real headlines or the honest empty/error state, not hang"
         )
+    }
+
+    /// The four homepage cards each open their existing screen.
+    func test_homeFourCardsOpenTheirRealScreens() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-offline_mode_enabled", "NO"]
+        app.launch()
+
+        func open(_ id: String, expect: () -> XCUIElement, done: () -> Void) {
+            let card = app.buttons["homeCard_\(id)"]
+            XCTAssertTrue(card.waitForExistence(timeout: 8), "\(id) card missing")
+            card.tap()
+            let landed = expect()
+            if !landed.waitForExistence(timeout: 8) { attachDiagnostics(app: app, name: "home-card-\(id)-missing") }
+            XCTAssertTrue(landed.exists, "tapping the \(id) card should open its real screen")
+            done()
+        }
+
+        open("advisor", expect: { app.staticTexts["advisorQuickStatsRow"] }, done: { app.navigationBars.buttons["Done"].tap() })
+        open("settings", expect: { app.navigationBars["Settings"] }, done: { app.buttons["settingsDoneButton"].tap() })
+        open("overview", expect: { app.staticTexts["newTabOverviewNote"] }, done: { app.navigationBars.buttons["Done"].tap() })
+        open("points", expect: { app.navigationBars["Rewards"] }, done: { app.navigationBars.buttons["Done"].tap() })
+    }
+
+    /// The Online / Offline toggle is driven by real state: switching to
+    /// Offline swaps the homepage to saved content and says plainly what
+    /// Offline Mode does, and switching back restores Online. Skipped when the
+    /// device genuinely has no connection (the toggle correctly can't go online).
+    func test_homeOfflineModeToggleSwapsTheHomepageContent() throws {
+        let app = XCUIApplication()
+        app.launch()
+
+        let status = app.staticTexts["homeModeStatus"]
+        XCTAssertTrue(status.waitForExistence(timeout: 8))
+        try XCTSkipIf(status.label.contains("No internet connection"), "device has no connection; Online can't be selected")
+
+        let offline = app.buttons["homeModeOffline"]
+        let online = app.buttons["homeModeOnline"]
+        XCTAssertTrue(offline.waitForExistence(timeout: 5))
+        offline.tap()
+
+        let offlineSection = app.otherElements["homeOfflineSection"]
+        if !offlineSection.waitForExistence(timeout: 8) { attachDiagnostics(app: app, name: "home-offline-section-missing") }
+        XCTAssertTrue(offlineSection.exists, "Offline Mode should show the saved-content section")
+        XCTAssertTrue(status.label.contains("Offline Mode"), "status should name the mode, got: \(status.label)")
+        XCTAssertTrue(status.label.contains("still use your connection"), "status should be honest that browsing isn't cut off")
+        XCTAssertFalse(app.staticTexts["newsStatusText"].exists || app.otherElements["newsHeadlinesList"].exists, "live headlines should not be fetched or shown in Offline Mode")
+        XCTAssertTrue(app.buttons["homeOpenOfflineLibrary"].exists)
+
+        online.tap()
+        let backOnline = NSPredicate { _, _ in app.staticTexts["homeModeStatus"].label.hasPrefix("Online") }
+        XCTAssertEqual(XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: backOnline, object: nil)], timeout: 8), .completed, "switching back should restore Online")
+        XCTAssertFalse(app.otherElements["homeOfflineSection"].exists)
+    }
+
+    /// Toolbar and header layout: every toolbar button has its own ~44pt
+    /// target, none overlap, none run off the screen, the connection labels
+    /// stay on one line, and the V mark shares a row with the toggle.
+    func test_toolbarAndHeaderLayoutIsRoomyAndWithinTheScreen() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-offline_mode_enabled", "NO"]
+        app.launch()
+
+        let ids = ["backButton", "forwardButton", "reloadButton", "bookmarkButton", "tabCountLabel", "moreMenuButton"]
+        XCTAssertTrue(app.buttons["moreMenuButton"].waitForExistence(timeout: 8))
+        let window = app.windows.firstMatch.frame
+        var frames: [(id: String, frame: CGRect)] = []
+        for id in ids {
+            let f = app.buttons[id].frame
+            XCTAssertGreaterThanOrEqual(f.width, 43, "\(id) should have a ~44pt-wide target, got \(f.width)")
+            XCTAssertGreaterThanOrEqual(f.height, 43, "\(id) should have a ~44pt-tall target, got \(f.height)")
+            XCTAssertGreaterThanOrEqual(f.minX, window.minX, "\(id) runs off the left edge")
+            XCTAssertLessThanOrEqual(f.maxX, window.maxX + 0.5, "\(id) runs off the right edge")
+            frames.append((id, f))
+        }
+        for i in 0..<frames.count {
+            for j in (i + 1)..<frames.count {
+                XCTAssertFalse(
+                    frames[i].frame.insetBy(dx: 0.5, dy: 0.5).intersects(frames[j].frame),
+                    "\(frames[i].id) and \(frames[j].id) have overlapping touch targets"
+                )
+            }
+        }
+        let field = app.textFields["addressBarField"].frame
+        // Safari layout: the field has its own full-width row above the buttons.
+        XCTAssertGreaterThanOrEqual(field.width, window.width - 40, "the address field should span the screen, got \(field.width)")
+        XCTAssertLessThanOrEqual(field.maxY, app.buttons["backButton"].frame.minY + 1, "the address field should sit above the button row")
+        XCTAssertGreaterThan(field.minY, window.height * 0.5, "the address bar should sit at the bottom of the screen, like Safari")
+
+        // Header: both connection labels on one line, V mark on the same row.
+        let online = app.buttons["homeModeOnline"]
+        let offline = app.buttons["homeModeOffline"]
+        XCTAssertTrue(online.waitForExistence(timeout: 5))
+        XCTAssertLessThan(online.frame.height, 50, "the Online label should not wrap")
+        XCTAssertLessThan(offline.frame.height, 50, "the Offline label should not wrap")
+        XCTAssertLessThanOrEqual(offline.frame.maxX, window.maxX + 0.5, "the toggle runs off the right edge")
+        let mark = app.images["homeHeaderMark"]
+        XCTAssertTrue(mark.waitForExistence(timeout: 5))
+        XCTAssertLessThan(abs(mark.frame.midY - online.frame.midY), 10, "the V mark and the toggle should share a row")
     }
 
     /// Real Reload button proof — found missing entirely during the same

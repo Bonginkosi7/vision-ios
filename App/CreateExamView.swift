@@ -28,22 +28,11 @@ struct CreateExamView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: DesignSystem.Space.l) {
                     DesignSystem.card {
-                        VStack(alignment: .leading, spacing: 12) {
-                            TextField("Exam title", text: $title)
-                                .textFieldStyle(.plain)
-                                .padding(.horizontal, 12).padding(.vertical, 8)
-                                .background(RoundedRectangle(cornerRadius: 10).fill(DesignSystem.bgCanvas))
-                                .foregroundStyle(.white)
-                                .accessibilityIdentifier("examTitleInput")
-                            TextField("Time limit in minutes (optional)", text: $timeLimitText)
-                                .keyboardType(.numberPad)
-                                .textFieldStyle(.plain)
-                                .padding(.horizontal, 12).padding(.vertical, 8)
-                                .background(RoundedRectangle(cornerRadius: 10).fill(DesignSystem.bgCanvas))
-                                .foregroundStyle(.white)
-                                .accessibilityIdentifier("examTimeLimitInput")
+                        VStack(alignment: .leading, spacing: DesignSystem.Space.m) {
+                            field("Exam title", text: $title, id: "examTitleInput")
+                            field("Time limit in minutes (optional)", text: $timeLimitText, id: "examTimeLimitInput", numeric: true)
                         }
                     }
 
@@ -51,20 +40,20 @@ struct CreateExamView: View {
                         questionEditor(index)
                     }
 
-                    Button("+ Add question") { questions.append(DraftQuestion()) }
+                    DesignSystem.secondaryButton("Add question", fullWidth: true) { questions.append(DraftQuestion()) }
                         .accessibilityIdentifier("btnAddQuestion")
 
-                    DesignSystem.primaryButton("Save exam") { save() }
+                    DesignSystem.primaryButton("Save exam", fullWidth: true) { save() }
                         .accessibilityIdentifier("btnSaveExam")
 
                     if let status {
-                        Text(status).font(.system(size: 12)).foregroundStyle(DesignSystem.statusDangerText)
+                        Text(status).font(.system(size: 13)).foregroundStyle(DesignSystem.statusDangerText)
                             .accessibilityIdentifier("createExamStatus")
                     }
                 }
-                .padding(16)
+                .padding(DesignSystem.Space.l)
             }
-            .background(DesignSystem.bgCanvas.ignoresSafeArea())
+            .visionScreen()
             .navigationTitle("Create Exam")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -77,12 +66,13 @@ struct CreateExamView: View {
     @ViewBuilder
     private func questionEditor(_ index: Int) -> some View {
         DesignSystem.card {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: DesignSystem.Space.m) {
                 HStack {
-                    Text("Question \(index + 1)").font(.system(size: 13, weight: .bold)).foregroundStyle(.white)
+                    DesignSystem.sectionLabel("Question \(index + 1)")
                     Spacer()
                     Button(action: { questions.remove(at: index) }) {
                         Image(systemName: "trash").foregroundStyle(DesignSystem.statusDangerText)
+                            .frame(width: 44, height: 44)
                     }
                     .accessibilityIdentifier("btnRemoveQuestion_\(index)")
                 }
@@ -97,53 +87,62 @@ struct CreateExamView: View {
                 .pickerStyle(.segmented)
                 .accessibilityIdentifier("questionTypePicker_\(index)")
 
-                TextField("Question", text: Binding(get: { questions[index].prompt }, set: { questions[index].prompt = $0 }))
-                    .textFieldStyle(.plain)
-                    .padding(.horizontal, 12).padding(.vertical, 8)
-                    .background(RoundedRectangle(cornerRadius: 10).fill(DesignSystem.bgCanvas))
-                    .foregroundStyle(.white)
-                    .accessibilityIdentifier("questionPrompt_\(index)")
+                field("Question", text: Binding(get: { questions[index].prompt }, set: { questions[index].prompt = $0 }), id: "questionPrompt_\(index)")
 
                 if questions[index].isMCQ {
                     ForEach(0..<4, id: \.self) { optionIndex in
                         HStack(spacing: 8) {
                             Button(action: { questions[index].correctOptionIndex = optionIndex }) {
                                 Image(systemName: questions[index].correctOptionIndex == optionIndex ? "largecircle.fill.circle" : "circle")
-                                    .foregroundStyle(DesignSystem.visionPurple)
+                                    .font(.system(size: 20))
+                                    .foregroundStyle(.white)
+                                    .frame(width: 44, height: 44)
                             }
+                            .accessibilityLabel("Correct answer: option \(optionIndex + 1)")
+                            .accessibilityAddTraits(questions[index].correctOptionIndex == optionIndex ? .isSelected : [])
                             .accessibilityIdentifier("mcqCorrect_\(index)_\(optionIndex)")
-                            TextField("Option \(optionIndex + 1)", text: Binding(
+                            field("Option \(optionIndex + 1)", text: Binding(
                                 get: { questions[index].options[optionIndex] },
                                 set: { questions[index].options[optionIndex] = $0 }
-                            ))
-                            .textFieldStyle(.plain)
-                            .padding(.horizontal, 12).padding(.vertical, 6)
-                            .background(RoundedRectangle(cornerRadius: 10).fill(DesignSystem.bgCanvas))
-                            .foregroundStyle(.white)
-                            .accessibilityIdentifier("mcqOption_\(index)_\(optionIndex)")
+                            ), id: "mcqOption_\(index)_\(optionIndex)")
                         }
                     }
                 } else {
-                    HStack(spacing: 8) {
-                        DesignSystem.primaryButton(questions[index].trueFalseAnswer == true ? "✓ True" : "True") {
+                    // The chosen answer is the filled button and carries the
+                    // "selected" trait; the other stays outlined.
+                    HStack(spacing: DesignSystem.Space.s) {
+                        trueFalseButton("True", selected: questions[index].trueFalseAnswer == true, id: "tfTrue_\(index)") {
                             questions[index].trueFalseAnswer = true
                         }
-                        .accessibilityIdentifier("tfTrue_\(index)")
-                        DesignSystem.primaryButton(questions[index].trueFalseAnswer == false ? "✓ False" : "False") {
+                        trueFalseButton("False", selected: questions[index].trueFalseAnswer == false, id: "tfFalse_\(index)") {
                             questions[index].trueFalseAnswer = false
                         }
-                        .accessibilityIdentifier("tfFalse_\(index)")
                     }
                 }
 
-                TextField("Explanation (optional)", text: Binding(get: { questions[index].explanation }, set: { questions[index].explanation = $0 }))
-                    .textFieldStyle(.plain)
-                    .padding(.horizontal, 12).padding(.vertical, 8)
-                    .background(RoundedRectangle(cornerRadius: 10).fill(DesignSystem.bgCanvas))
-                    .foregroundStyle(.white)
-                    .accessibilityIdentifier("questionExplanation_\(index)")
+                field("Explanation (optional)", text: Binding(get: { questions[index].explanation }, set: { questions[index].explanation = $0 }), id: "questionExplanation_\(index)")
             }
         }
+    }
+
+    private func field(_ label: String, text: Binding<String>, id: String, numeric: Bool = false) -> some View {
+        TextField("", text: text, prompt: Text(label).foregroundColor(DesignSystem.textMuted2))
+            .keyboardType(numeric ? .numberPad : .default)
+            .visionField()
+            .accessibilityLabel(label)
+            .accessibilityIdentifier(id)
+    }
+
+    private func trueFalseButton(_ title: String, selected: Bool, id: String, action: @escaping () -> Void) -> some View {
+        Group {
+            if selected {
+                DesignSystem.primaryButton(title, fullWidth: true, onClick: action)
+            } else {
+                DesignSystem.secondaryButton(title, fullWidth: true, onClick: action)
+            }
+        }
+        .accessibilityAddTraits(selected ? .isSelected : [])
+        .accessibilityIdentifier(id)
     }
 
     private func save() {

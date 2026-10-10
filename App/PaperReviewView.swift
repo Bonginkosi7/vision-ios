@@ -22,7 +22,6 @@ struct PaperReviewView: View {
             Group {
                 if processedDocs.isEmpty {
                     DesignSystem.emptyState(
-                        emoji: "📄",
                         title: "No processed documents yet",
                         subtitle: "Process a document in My Materials first.",
                         ctaText: "Got it",
@@ -30,12 +29,11 @@ struct PaperReviewView: View {
                     )
                     .accessibilityIdentifier("paperReviewNoDocuments")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(DesignSystem.bgCanvas)
                 } else {
                     ScrollView {
-                        VStack(alignment: .leading, spacing: 16) {
+                        VStack(alignment: .leading, spacing: DesignSystem.Space.l) {
                             Text("Pick a document you've uploaded, then get a real spelling/grammar check, honest writing feedback, and suggestions.")
-                                .font(.system(size: 13)).foregroundStyle(DesignSystem.textMuted2)
+                                .font(.system(size: 14)).foregroundStyle(DesignSystem.textMuted2)
 
                             Picker("Document", selection: Binding(get: { selectedDocId ?? "" }, set: { selectedDocId = $0 })) {
                                 ForEach(processedDocs) { doc in Text(doc.title).tag(doc.id) }
@@ -43,12 +41,12 @@ struct PaperReviewView: View {
                             .pickerStyle(.menu)
                             .accessibilityIdentifier("paperReviewDocumentPicker")
 
-                            DesignSystem.primaryButton(reviewing ? "Reviewing…" : "Review this document") { runReview() }
+                            DesignSystem.primaryButton(reviewing ? "Reviewing…" : "Review this document", fullWidth: true) { runReview() }
                                 .disabled(reviewing)
                                 .accessibilityIdentifier("btnReviewDocument")
 
                             if let status {
-                                Text(status).font(.system(size: 12)).foregroundStyle(DesignSystem.textMuted2)
+                                Text(status).font(.system(size: 13)).foregroundStyle(DesignSystem.textMuted2)
                                     .accessibilityIdentifier("paperReviewStatus")
                             }
 
@@ -56,11 +54,11 @@ struct PaperReviewView: View {
                                 reviewResults(review)
                             }
                         }
-                        .padding(16)
+                        .padding(DesignSystem.Space.l)
                     }
-                    .background(DesignSystem.bgCanvas.ignoresSafeArea())
                 }
             }
+            .visionScreen()
             .navigationTitle("Paper Review")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -76,20 +74,20 @@ struct PaperReviewView: View {
 
     @ViewBuilder
     private func reviewResults(_ review: PaperReview) -> some View {
-        VStack(alignment: .leading, spacing: 20) {
+        VStack(alignment: .leading, spacing: DesignSystem.Space.xl) {
             DesignSystem.sectionLabel("Spelling & grammar")
             if review.grammarIssues.isEmpty {
                 Text("No spelling or grammar issues found.")
-                    .font(.system(size: 13)).foregroundStyle(DesignSystem.textMuted2)
+                    .font(.system(size: 14)).foregroundStyle(DesignSystem.textMuted2)
                     .accessibilityIdentifier("paperReviewNoGrammarIssues")
             } else {
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: DesignSystem.Space.m) {
                     ForEach(Array(review.grammarIssues.enumerated()), id: \.offset) { index, issue in
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(issue.original).font(.system(size: 14)).foregroundStyle(DesignSystem.textMuted2).strikethrough()
-                            Text(issue.suggestion).font(.system(size: 14)).foregroundStyle(.white)
+                            Text(issue.original).font(.system(size: 15)).foregroundStyle(DesignSystem.textMuted2).strikethrough()
+                            Text(issue.suggestion).font(.system(size: 15)).foregroundStyle(.white)
                             if !issue.explanation.isEmpty {
-                                Text(issue.explanation).font(.system(size: 12)).foregroundStyle(DesignSystem.textMuted2)
+                                Text(issue.explanation).font(.system(size: 13)).foregroundStyle(DesignSystem.textMuted2)
                             }
                         }
                         .accessibilityIdentifier("grammarIssue_\(index)")
@@ -100,22 +98,22 @@ struct PaperReviewView: View {
             DesignSystem.sectionLabel("Suggestions")
             if review.improvementSuggestions.isEmpty {
                 Text("No specific suggestions.")
-                    .font(.system(size: 13)).foregroundStyle(DesignSystem.textMuted2)
+                    .font(.system(size: 14)).foregroundStyle(DesignSystem.textMuted2)
                     .accessibilityIdentifier("paperReviewNoSuggestions")
             } else {
                 VStack(alignment: .leading, spacing: 6) {
                     ForEach(Array(review.improvementSuggestions.enumerated()), id: \.offset) { index, suggestion in
-                        Text("• \(suggestion)").font(.system(size: 14)).foregroundStyle(.white)
+                        Text("• \(suggestion)").font(.system(size: 15)).foregroundStyle(.white)
                             .accessibilityIdentifier("suggestion_\(index)")
                     }
                 }
             }
 
             DesignSystem.sectionLabel("Writing review — an AI opinion, not a plagiarism database check")
-            Text(review.originalityNote).font(.system(size: 13)).foregroundStyle(.white)
+            Text(review.originalityNote).font(.system(size: 14)).foregroundStyle(.white)
                 .accessibilityIdentifier("originalityNote")
 
-            DesignSystem.primaryButton("Rewrite this document →") { showRewrite = true }
+            DesignSystem.primaryButton("Rewrite this document", fullWidth: true) { showRewrite = true }
                 .accessibilityIdentifier("btnRewriteDocument")
         }
     }

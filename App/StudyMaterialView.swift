@@ -69,7 +69,7 @@ struct StudyMaterialView: View {
                     reviewTab
                 }
             }
-            .background(DesignSystem.bgCanvas.ignoresSafeArea())
+            .visionScreen()
             .navigationTitle("Study Material")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -77,7 +77,7 @@ struct StudyMaterialView: View {
                 }
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button(action: { showFilePicker = true }) {
-                        Image(systemName: "plus.circle.fill")
+                        Image(systemName: "plus")
                     }
                     .accessibilityIdentifier("btnAddStudyMaterial")
                 }
@@ -112,18 +112,19 @@ struct StudyMaterialView: View {
             tabButton("Review", isActive: tab == .review) { tab = .review; loadReview() }
                 .accessibilityIdentifier("btnStudyTabReview")
         }
-        .padding(12)
+        .padding(DesignSystem.Space.m)
     }
 
     @ViewBuilder private func tabButton(_ title: String, isActive: Bool, onTap: @escaping () -> Void) -> some View {
         Button(action: onTap) {
             Text(title)
-                .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(isActive ? .white : DesignSystem.visionPurple)
-                .padding(.horizontal, 16).padding(.vertical, 8)
-                .background(Capsule().fill(isActive ? AnyShapeStyle(DesignSystem.brandGradient) : AnyShapeStyle(Color.clear)))
-                .overlay(Capsule().stroke(isActive ? Color.clear : DesignSystem.visionPurple, lineWidth: 1))
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(isActive ? Color.black : Color.white)
+                .padding(.horizontal, DesignSystem.Space.l).frame(minHeight: 36)
+                .background(Capsule().fill(isActive ? Color.white : Color.clear))
+                .overlay(Capsule().stroke(isActive ? Color.clear : DesignSystem.borderCard, lineWidth: 1))
         }
+        .accessibilityAddTraits(isActive ? .isSelected : [])
     }
 
     // MARK: - Browse
@@ -134,7 +135,7 @@ struct StudyMaterialView: View {
             if showFilterPanel { filterPanel }
             breadcrumbRow
             ScrollView {
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: DesignSystem.Space.m) {
                     switch currentView {
                     case .home: homeSection
                     case .grades: gradesSection
@@ -145,30 +146,29 @@ struct StudyMaterialView: View {
                     case .untagged: untaggedSection
                     }
                 }
-                .padding(16)
+                .padding(DesignSystem.Space.l)
             }
         }
     }
 
     @ViewBuilder private var searchAndFilterBar: some View {
         HStack(spacing: 8) {
-            TextField("Search materials…", text: $searchText)
-                .textFieldStyle(.plain)
-                .padding(.horizontal, 12).padding(.vertical, 8)
-                .background(RoundedRectangle(cornerRadius: 10).fill(DesignSystem.bgCard))
-                .foregroundStyle(.white)
+            TextField("", text: $searchText, prompt: Text("Search materials…").foregroundColor(DesignSystem.textMuted2))
+                .visionField()
+                .accessibilityLabel("Search materials")
                 .accessibilityIdentifier("studySearchInput")
                 .onChange(of: searchText) { newValue in applySearchText(newValue) }
             Button(action: { showFilterPanel.toggle() }) {
-                Image(systemName: "line.3.horizontal.decrease.circle")
+                Image(systemName: "line.3.horizontal.decrease")
+                    .frame(width: 44, height: 44)
             }
             .accessibilityIdentifier("btnStudyFilterToggle")
         }
-        .padding(.horizontal, 16).padding(.top, 12)
+        .padding(.horizontal, DesignSystem.Space.l).padding(.top, DesignSystem.Space.m)
     }
 
     @ViewBuilder private var filterPanel: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: DesignSystem.Space.m) {
             filterPicker("Level", selection: levelBinding, options: [nil] + StudyLevel.allCases, label: { $0?.label ?? "Any" })
             filterPicker("Grade", selection: gradeBinding, options: [nil] + studyGrades.map { $0.id }, label: { $0 == nil ? "Any" : StudyTaxonomy.gradeLabel($0) })
             filterPicker("Subject", selection: subjectBinding, options: [nil] + basicEducationSubjects, label: { $0 ?? "Any" })
@@ -176,14 +176,15 @@ struct StudyMaterialView: View {
             yearField
             filterPicker("Language", selection: languageBinding, options: [nil] + studyLanguages, label: { $0 ?? "Any" })
         }
-        .padding(16)
-        .background(DesignSystem.bgCard)
+        .padding(DesignSystem.Space.l)
+        .background(RoundedRectangle(cornerRadius: DesignSystem.Radius.card, style: .continuous).fill(DesignSystem.bgCard))
+        .padding(.horizontal, DesignSystem.Space.l).padding(.top, DesignSystem.Space.s)
         .accessibilityIdentifier("studyFilterPanel")
     }
 
     @ViewBuilder private func filterPicker<T: Hashable>(_ title: String, selection: Binding<T?>, options: [T?], label: @escaping (T?) -> String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(title).font(.system(size: 11)).foregroundStyle(DesignSystem.textMuted2)
+            Text(title).font(.system(size: 12)).foregroundStyle(DesignSystem.textMuted2)
             Picker(title, selection: selection) {
                 ForEach(options, id: \.self) { option in
                     Text(label(option)).tag(option)
@@ -195,16 +196,17 @@ struct StudyMaterialView: View {
 
     @ViewBuilder private var yearField: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text("Year").font(.system(size: 11)).foregroundStyle(DesignSystem.textMuted2)
-            TextField("Any", text: Binding(
+            Text("Year").font(.system(size: 12)).foregroundStyle(DesignSystem.textMuted2)
+            TextField("", text: Binding(
                 get: { activeFilters.year.map(String.init) ?? "" },
                 set: { newValue in
                     activeFilters.year = Int(newValue)
                     applyFilterNavigation()
                 }
-            ))
+            ), prompt: Text("Any").foregroundColor(DesignSystem.textMuted2))
             .keyboardType(.numberPad)
-            .textFieldStyle(.roundedBorder)
+            .visionField()
+            .accessibilityLabel("Year")
             .accessibilityIdentifier("studyFilterYear")
         }
     }
@@ -230,10 +232,10 @@ struct StudyMaterialView: View {
             if !viewHistory.isEmpty {
                 Button("‹ Back") { goBack() }.accessibilityIdentifier("btnStudyBack")
             }
-            Text(breadcrumbLabel).font(.system(size: 13)).foregroundStyle(DesignSystem.textMuted2)
+            Text(breadcrumbLabel).font(.system(size: 14)).foregroundStyle(DesignSystem.textMuted2)
                 .accessibilityIdentifier("studyBreadcrumb")
         }
-        .padding(.horizontal, 16).padding(.top, 10)
+        .padding(.horizontal, DesignSystem.Space.l).padding(.top, DesignSystem.Space.m)
     }
 
     private var breadcrumbLabel: String {
@@ -265,12 +267,12 @@ struct StudyMaterialView: View {
             // element below carries its own distinct identifier instead.
             DesignSystem.card {
                 Text("\(untaggedCount) item\(untaggedCount == 1 ? "" : "s") need\(untaggedCount == 1 ? "s" : "") details")
-                    .font(.system(size: 14, weight: .bold)).foregroundStyle(.white)
+                    .font(.system(size: 15, weight: .semibold)).foregroundStyle(.white)
                     .accessibilityIdentifier("studyUntaggedBanner")
                 Text("Add a level, subject, and more so these show up in the right place.")
-                    .font(.system(size: 12)).foregroundStyle(DesignSystem.textMuted2)
+                    .font(.system(size: 13)).foregroundStyle(DesignSystem.textMuted2)
                 Button("Review") { navigate(.untagged) }
-                    .padding(.top, 8)
+                    .padding(.top, DesignSystem.Space.s)
                     .accessibilityIdentifier("btnStudyReviewUntagged")
             }
         }
@@ -309,13 +311,13 @@ struct StudyMaterialView: View {
             ForEach(studyResourceTypes, id: \.id) { resourceType in
                 let inGroup = docs.filter { $0.resourceType == resourceType.id }
                 if !inGroup.isEmpty {
-                    Text("\(resourceType.emoji) \(resourceType.label)").font(.system(size: 14, weight: .bold)).foregroundStyle(.white).padding(.top, 8)
+                    DesignSystem.sectionLabel(resourceType.label).padding(.top, DesignSystem.Space.s)
                     ForEach(inGroup) { doc in docRow(doc) }
                 }
             }
             let untyped = docs.filter { $0.resourceType == nil }
             if !untyped.isEmpty {
-                Text("📄 Other").font(.system(size: 14, weight: .bold)).foregroundStyle(.white).padding(.top, 8)
+                DesignSystem.sectionLabel("Other").padding(.top, DesignSystem.Space.s)
                 ForEach(untyped) { doc in docRow(doc) }
             }
         }
@@ -341,14 +343,14 @@ struct StudyMaterialView: View {
             ForEach(untagged) { doc in
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(doc.title).font(.system(size: 14, weight: .bold)).foregroundStyle(.white)
+                        Text(doc.title).font(.system(size: 15, weight: .semibold)).foregroundStyle(.white)
                             .accessibilityIdentifier("studyUntaggedRow_\(doc.id)")
                         Text(doc.fileType.label).font(.system(size: 12)).foregroundStyle(DesignSystem.textMuted2)
                     }
                     Spacer()
                     Button("Add details") { taggingDoc = doc }.accessibilityIdentifier("btnStudyAddDetails_\(doc.id)")
                 }
-                .padding(.vertical, 6)
+                .padding(.vertical, DesignSystem.Space.s)
             }
         }
     }
@@ -356,54 +358,54 @@ struct StudyMaterialView: View {
     @ViewBuilder private func sectionCard(title: String, subtitle: String?, count: Int, identifier: String, onTap: @escaping () -> Void) -> some View {
         Button(action: onTap) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(title).font(.system(size: 15, weight: .bold)).foregroundStyle(.white)
-                if let subtitle { Text(subtitle).font(.system(size: 12)).foregroundStyle(DesignSystem.textMuted2) }
-                Text("\(count) item\(count == 1 ? "" : "s")").font(.system(size: 12)).foregroundStyle(DesignSystem.textMuted2.opacity(0.8))
+                Text(title).font(.system(size: 16, weight: .semibold)).foregroundStyle(.white)
+                if let subtitle { Text(subtitle).font(.system(size: 13)).foregroundStyle(DesignSystem.textMuted2) }
+                Text("\(count) item\(count == 1 ? "" : "s")").font(.system(size: 13)).foregroundStyle(DesignSystem.textMuted2)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(14)
-            .background(RoundedRectangle(cornerRadius: 14).fill(DesignSystem.bgCard))
+            .padding(DesignSystem.Space.l)
+            .background(RoundedRectangle(cornerRadius: DesignSystem.Radius.card, style: .continuous).fill(DesignSystem.bgCard))
         }
         .accessibilityIdentifier(identifier)
     }
 
     @ViewBuilder private func docRow(_ doc: StudyDocument) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(doc.title).font(.system(size: 14, weight: .bold)).foregroundStyle(.white)
+            Text(doc.title).font(.system(size: 15, weight: .semibold)).foregroundStyle(.white)
                 .accessibilityIdentifier("studyDocTitle_\(doc.id)")
             let meta = [doc.fileType.label, doc.year.map(String.init), doc.language].compactMap { $0 }.joined(separator: " · ")
-            Text(meta).font(.system(size: 12)).foregroundStyle(DesignSystem.textMuted2)
+            Text(meta).font(.system(size: 13)).foregroundStyle(DesignSystem.textMuted2)
 
-            HStack(spacing: 12) {
+            HStack(spacing: DesignSystem.Space.l) {
                 ShareLink(item: URL(fileURLWithPath: doc.contentPath)) {
-                    Text("Open").font(.system(size: 12, weight: .bold))
+                    Text("Open").font(.system(size: 13, weight: .semibold))
                 }
                 .accessibilityIdentifier("btnStudyOpen_\(doc.id)")
 
                 if doc.offlineReadyAt != nil {
-                    Text("Offline ready").font(.system(size: 12)).foregroundStyle(DesignSystem.textMuted2)
+                    Text("Offline ready").font(.system(size: 13)).foregroundStyle(DesignSystem.textMuted2)
                         .accessibilityIdentifier("studyOfflineReady_\(doc.id)")
                 } else {
                     Button("Mark offline") { markOfflineReady(doc) }
-                        .font(.system(size: 11))
+                        .font(.system(size: 13))
                         .accessibilityIdentifier("btnStudyMarkOffline_\(doc.id)")
                 }
 
                 Button("Edit tags") { taggingDoc = doc }
-                    .font(.system(size: 11))
+                    .font(.system(size: 13))
                     .accessibilityIdentifier("btnStudyEditTags_\(doc.id)")
             }
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, DesignSystem.Space.s)
     }
 
     // MARK: - Review
 
     @ViewBuilder private var reviewTab: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: DesignSystem.Space.m) {
                 if streak > 0 {
-                    Text("🔥 \(streak)-day streak").font(.system(size: 13, weight: .bold)).foregroundStyle(DesignSystem.statDotOrange)
+                    Text("\(streak)-day streak").font(.system(size: 14, weight: .semibold)).foregroundStyle(.white)
                         .accessibilityIdentifier("studyReviewStreak")
                 }
                 if dueItems.isEmpty {
@@ -420,23 +422,23 @@ struct StudyMaterialView: View {
                     }
                 }
             }
-            .padding(16)
+            .padding(DesignSystem.Space.l)
         }
     }
 
     @ViewBuilder private func reviewRow(entry: StudyQueueEntry, item: OfflineItem) -> some View {
         DesignSystem.card {
             Button(action: { onNavigate(item.url); dismiss() }) {
-                Text(item.title.isEmpty ? item.url : item.title).font(.system(size: 14, weight: .bold)).foregroundStyle(.white)
+                Text(item.title.isEmpty ? item.url : item.title).font(.system(size: 15, weight: .semibold)).foregroundStyle(.white)
             }
             .accessibilityIdentifier("studyReviewRow_\(item.id)")
             Text(entry.reviewCount == 0 ? "Not reviewed yet" : "Reviewed \(entry.reviewCount) time\(entry.reviewCount == 1 ? "" : "s")")
-                .font(.system(size: 12)).foregroundStyle(DesignSystem.textMuted2)
-            HStack(spacing: 12) {
+                .font(.system(size: 13)).foregroundStyle(DesignSystem.textMuted2)
+            HStack(spacing: DesignSystem.Space.l) {
                 Button("Again") { markReviewed(item.id, confident: false) }.accessibilityIdentifier("btnStudyReviewAgain_\(item.id)")
                 Button("Got it") { markReviewed(item.id, confident: true) }.accessibilityIdentifier("btnStudyReviewGotIt_\(item.id)")
             }
-            .padding(.top, 6)
+            .padding(.top, DesignSystem.Space.s)
         }
     }
 
@@ -611,7 +613,7 @@ private struct TagDocumentSheet: View {
                     Picker("Resource Type", selection: $resourceType) {
                         Text("Choose a type").tag(String?.none)
                         ForEach(studyResourceTypes, id: \.id) { resourceTypeOption in
-                            Text("\(resourceTypeOption.emoji) \(resourceTypeOption.label)").tag(Optional(resourceTypeOption.id))
+                            Text(resourceTypeOption.label).tag(Optional(resourceTypeOption.id))
                         }
                     }
                     .accessibilityIdentifier("tagResourceTypePicker")
@@ -633,6 +635,8 @@ private struct TagDocumentSheet: View {
                     .accessibilityIdentifier("tagLanguagePicker")
                 }
             }
+            .scrollContentBackground(.hidden)
+            .visionScreen()
             .navigationTitle(document.title)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {

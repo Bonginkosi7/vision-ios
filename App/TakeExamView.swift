@@ -43,10 +43,10 @@ struct TakeExamView: View {
             Group {
                 if let test {
                     ScrollView {
-                        VStack(alignment: .leading, spacing: 16) {
+                        VStack(alignment: .leading, spacing: DesignSystem.Space.l) {
                             if let expiresAt = attempt?.expiresAt, !submitted {
                                 Text(remainingTimeLabel(expiresAt))
-                                    .font(.system(size: 13, weight: .bold)).foregroundStyle(DesignSystem.textMuted2)
+                                    .font(.system(size: 14, weight: .semibold)).foregroundStyle(DesignSystem.textMuted2)
                                     .accessibilityIdentifier("takeExamTimer")
                             }
                             if submitted {
@@ -55,19 +55,18 @@ struct TakeExamView: View {
                                 ForEach(questions) { question in
                                     questionRow(question)
                                 }
-                                DesignSystem.primaryButton("Submit") { submit() }
+                                DesignSystem.primaryButton("Submit", fullWidth: true) { submit() }
                                     .accessibilityIdentifier("btnSubmitExam")
                             }
                         }
-                        .padding(16)
+                        .padding(DesignSystem.Space.l)
                     }
-                    .background(DesignSystem.bgCanvas.ignoresSafeArea())
                     .navigationTitle(test.title)
                 } else {
                     ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .background(DesignSystem.bgCanvas.ignoresSafeArea())
                 }
             }
+            .visionScreen()
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     // No explicit identifier — matching every other plain-
@@ -90,19 +89,17 @@ struct TakeExamView: View {
     @ViewBuilder
     private func questionRow(_ question: ExamQuestionRecord) -> some View {
         DesignSystem.card {
-            VStack(alignment: .leading, spacing: 10) {
-                Text(question.prompt).font(.system(size: 14)).foregroundStyle(.white)
+            VStack(alignment: .leading, spacing: DesignSystem.Space.m) {
+                Text(question.prompt).font(.system(size: 16)).foregroundStyle(.white)
                     .accessibilityIdentifier("takingPrompt_\(question.id)")
 
                 if question.type == "short_answer" {
-                    TextField("Type your answer…", text: Binding(
+                    TextField("", text: Binding(
                         get: { shortAnswers[question.id] ?? "" },
                         set: { shortAnswers[question.id] = $0 }
-                    ))
-                    .textFieldStyle(.plain)
-                    .padding(.horizontal, 12).padding(.vertical, 8)
-                    .background(RoundedRectangle(cornerRadius: 10).fill(DesignSystem.bgCanvas))
-                    .foregroundStyle(.white)
+                    ), prompt: Text("Type your answer…").foregroundColor(DesignSystem.textMuted2))
+                    .visionField()
+                    .accessibilityLabel("Your answer")
                     .accessibilityIdentifier("takingShortAnswerInput_\(question.id)")
                 } else if question.type == "mcq" {
                     ForEach(Array((question.options ?? []).enumerated()), id: \.offset) { index, optionText in
@@ -111,7 +108,7 @@ struct TakeExamView: View {
                         }
                     }
                 } else {
-                    HStack(spacing: 8) {
+                    HStack(spacing: DesignSystem.Space.l) {
                         optionButton(label: "True", selected: trueFalseAnswers[question.id] == true, id: "takingTrue_\(question.id)") {
                             trueFalseAnswers[question.id] = true
                         }
@@ -127,13 +124,17 @@ struct TakeExamView: View {
     @ViewBuilder
     private func optionButton(label: String, selected: Bool, id: String, onTap: @escaping () -> Void) -> some View {
         Button(action: onTap) {
-            HStack {
+            HStack(spacing: DesignSystem.Space.m) {
                 Image(systemName: selected ? "largecircle.fill.circle" : "circle")
-                    .foregroundStyle(DesignSystem.visionPurple)
-                Text(label).foregroundStyle(.white)
+                    .font(.system(size: 20))
+                    .foregroundStyle(selected ? Color.white : DesignSystem.textMuted2)
+                Text(label).font(.system(size: 15)).foregroundStyle(.white)
                 Spacer()
             }
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
         }
+        .accessibilityAddTraits(selected ? .isSelected : [])
         .accessibilityIdentifier(id)
     }
 
@@ -141,12 +142,12 @@ struct TakeExamView: View {
     private var resultsHeader: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(scoreLabel)
-                .font(.system(size: 18, weight: .bold)).foregroundStyle(.white)
+                .font(.system(size: 22, weight: .semibold)).foregroundStyle(.white)
                 .accessibilityIdentifier("resultsScore")
 
             if pendingCount > 0 {
                 Text("\(pendingCount) answer\(pendingCount == 1 ? "" : "s") awaiting AI marking")
-                    .font(.system(size: 12)).foregroundStyle(DesignSystem.textMuted2)
+                    .font(.system(size: 13)).foregroundStyle(DesignSystem.textMuted2)
                     .accessibilityIdentifier("resultsPendingStatus")
                 if !marking {
                     Button("Retry marking") { runShortAnswerMarking() }
@@ -156,7 +157,7 @@ struct TakeExamView: View {
 
             ForEach(results) { result in
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(result.prompt).font(.system(size: 13, weight: .bold)).foregroundStyle(.white)
+                    Text(result.prompt).font(.system(size: 15, weight: .semibold)).foregroundStyle(.white)
                         .accessibilityIdentifier("resultPrompt_\(result.questionId)")
                     if result.isCorrect == nil {
                         Text("Your answer: \(result.studentAnswer.isEmpty ? "(no answer)" : result.studentAnswer)")
@@ -170,7 +171,7 @@ struct TakeExamView: View {
                             .accessibilityIdentifier("resultFeedback_\(result.questionId)")
                     }
                 }
-                .padding(.vertical, 4)
+                .padding(.vertical, DesignSystem.Space.xs)
             }
 
             if sessionId != nil, !results.isEmpty, results.allSatisfy({ $0.isCorrect != nil }) {

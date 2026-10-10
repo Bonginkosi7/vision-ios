@@ -1,18 +1,15 @@
 import SwiftUI
+import VisionCore
 
-/// Real downloads list — port of DownloadsActivity.kt. Each row shows the
-/// real file state (progressing/completed/failed/cancelled) tracked by
+/// Real downloads list — port of DownloadsActivity.kt. Each row shows the real
+/// file state (progressing/completed/failed/cancelled) tracked by
 /// DownloadStore, backed by a real WKDownload (see WebViewRepresentable).
 ///
-/// DownloadsActivity.kt (and its activity_downloads.xml/item_download.xml
-/// layouts) is a plain, pre-DesignSystem screen — no filter chips, no
-/// per-row card/icon badge, no status pill, no fancy emoji empty state.
-/// It's a flat list sitting on the theme's day/night window background,
-/// with default (theme-adaptive) text colors, a single always-visible
-/// delete icon button per row, and a plain one-line empty-state message.
-/// This view intentionally mirrors that plainness rather than applying
-/// DesignSystem.emptyState/bgCanvas, which belong to screens whose Android
-/// counterpart actually opts into the reconstructed design system.
+/// The one icon on a row is the file's type (from its real name and MIME
+/// type), because that tells you something true about the file. The source is
+/// shown as its domain, with that site's real favicon only when one was
+/// captured while browsing — the download's host isn't always a site you've
+/// visited, so there's no icon rather than a guessed one.
 struct DownloadsView: View {
     @ObservedObject var downloadStore: DownloadStore
     @Environment(\.dismiss) private var dismiss
@@ -23,49 +20,30 @@ struct DownloadsView: View {
         NavigationStack {
             Group {
                 if records.isEmpty {
-                    // Matches activity_downloads.xml's emptyDownloadsText: a
-                    // single plain, centered, 60%-opacity line of text — no
-                    // emoji artwork, no title/subtitle split, no CTA button.
                     Text("No downloads yet.")
+                        .font(.system(size: 15))
+                        .foregroundStyle(DesignSystem.textMuted2)
                         .multilineTextAlignment(.center)
-                        .opacity(0.6)
-                        .padding(32)
+                        .padding(DesignSystem.Space.xxl)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .accessibilityIdentifier("emptyDownloadsState")
                 } else {
                     List {
                         ForEach(records) { record in
-                            HStack(spacing: 8) {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(record.filename)
-                                        .font(.system(size: 15, weight: .bold))
-                                        .lineLimit(1)
-                                        .truncationMode(.middle)
-                                    Text(statusLine(record))
-                                        .font(.system(size: 12))
-                                        .opacity(0.65)
+                            row(for: record)
+                                .listRowBackground(DesignSystem.bgCanvas)
+                                .listRowSeparatorTint(DesignSystem.borderCard)
+                                .listRowInsets(EdgeInsets(top: DesignSystem.Space.m, leading: DesignSystem.Space.l, bottom: DesignSystem.Space.m, trailing: DesignSystem.Space.s))
+                                .accessibilityIdentifier("downloadRow_\(record.id)")
+                                .swipeActions {
+                                    Button(role: .destructive) { remove(record) } label: {
+                                        Label("Remove", systemImage: "trash")
+                                    }
                                 }
-                                Spacer(minLength: 8)
-                                Button(action: { remove(record) }) {
-                                    Image(systemName: "trash")
-                                        .foregroundStyle(.secondary)
-                                        .frame(width: 40, height: 40)
-                                }
-                                .buttonStyle(.plain)
-                                .accessibilityLabel("Cancel")
-                            }
-                            .contentShape(Rectangle())
-                            .onTapGesture { if record.state == .completed { open(record) } }
-                            .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 8))
-                            .accessibilityIdentifier("downloadRow_\(record.id)")
-                            .swipeActions {
-                                Button(role: .destructive) { remove(record) } label: {
-                                    Label("Remove", systemImage: "trash")
-                                }
-                            }
                         }
                     }
                     .listStyle(.plain)
+                    .scrollContentBackground(.hidden)
                     .accessibilityIdentifier("downloadsList")
                 }
             }
@@ -78,13 +56,73 @@ struct DownloadsView: View {
                     .accessibilityIdentifier("downloadsBackButton")
                 }
             }
+            .visionScreen()
         }
         .onAppear(perform: refresh)
     }
 
-    /// Mirrors DownloadsAdapter.onBindViewHolder's `meta` line exactly:
-    /// "$statusLabel · $sizeLabel · $timeLabel" — always all three parts,
-    /// for every state (Android doesn't special-case completed-only).
+    @ViewBuilder
+    private func row(for record: DownloadRecord) -> some View {
+        let source = URL(string: record.url)?.host.map(FaviconCache.key(forHost:))
+        HStack(spacing: DesignSystem.Space.m) {
+            Image(systemName: symbol(for: FileKind.kind(filename: record.filename, mimeType: record.mimeType)))
+                .font(.system(size: 18))
+                .foregroundStyle(.white)
+                .frame(width: 40, height: 40)
+                .background(RoundedRectangle(cornerRadius: DesignSystem.Radius.control, style: .continuous).fill(DesignSystem.bgRaised))
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(record.filename)
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Text(statusLine(record))
+                    .font(.system(size: 12))
+                    .foregroundStyle(record.state == .failed ? DesignSystem.statusDangerText : DesignSystem.textMuted2)
+                if record.state == .progressing, record.totalBytes > 0 {
+                    ProgressView(value: Double(record.receivedBytes), total: Double(record.totalBytes))
+                        .tint(.white)
+                }
+                if let source {
+                    HStack(spacing: 6) {
+                        if FaviconCache.image(forHost: source) != nil { FaviconView(host: source, size: 14) }
+                        Text(source).font(.system(size: 12)).foregroundStyle(DesignSystem.textMuted2).lineLimit(1)
+                    }
+                }
+            }
+            Spacer(minLength: DesignSystem.Space.s)
+            Button(action: { remove(record) }) {
+                Image(systemName: "trash")
+                    .font(.system(size: 15))
+                    .foregroundStyle(DesignSystem.textMuted2)
+                    .frame(width: 44, height: 44)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Cancel")
+        }
+        .contentShape(Rectangle())
+        .onTapGesture { if record.state == .completed { open(record) } }
+    }
+
+    private func symbol(for kind: FileKind) -> String {
+        switch kind {
+        case .pdf: return "doc.richtext"
+        case .image: return "photo"
+        case .video: return "film"
+        case .audio: return "music.note"
+        case .archive: return "doc.zipper"
+        case .document: return "doc.text"
+        case .spreadsheet: return "tablecells"
+        case .presentation: return "play.rectangle"
+        case .text: return "doc.plaintext"
+        case .other: return "doc"
+        }
+    }
+
+    /// "<status> · <size> · <when>" — all three parts for every state, as
+    /// DownloadsAdapter does on Android.
     private func statusLine(_ record: DownloadRecord) -> String {
         let statusLabel: String
         switch record.state {
@@ -101,8 +139,7 @@ struct DownloadsView: View {
             sizeLabel = ByteCountFormatter.string(fromByteCount: record.receivedBytes, countStyle: .file)
         }
 
-        let timeFormatter = RelativeDateTimeFormatter()
-        let timeLabel = timeFormatter.localizedString(for: record.completedAt ?? record.startedAt, relativeTo: Date())
+        let timeLabel = HistoryGrouping.dateTimeLabel(for: record.completedAt ?? record.startedAt)
 
         return "\(statusLabel) · \(sizeLabel) · \(timeLabel)"
     }
@@ -117,11 +154,10 @@ struct DownloadsView: View {
     }
 
     private func open(_ record: DownloadRecord) {
-        // Parity note: Android's openDownload() resolves a content:// URI via
-        // DownloadManager and launches an ACTION_VIEW intent. iOS has no
-        // equivalent file-opening plumbing wired up yet (no QuickLook/share
-        // sheet presentation exists in this view or DownloadStore), so this
-        // is left as a no-op tap target rather than invented here — that's a
-        // functional gap, not a visual one, and out of this UI-only fix's scope.
+        // Android's openDownload() resolves a content:// URI and launches an
+        // ACTION_VIEW intent. iOS has no file-opening plumbing wired up yet (no
+        // QuickLook/share sheet in this view or DownloadStore), so this stays a
+        // no-op tap target rather than inventing one — a functional gap, not a
+        // visual one, and out of this UI refinement's scope.
     }
 }

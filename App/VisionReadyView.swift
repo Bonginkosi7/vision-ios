@@ -3,22 +3,18 @@ import VisionCore
 
 /// Real "is my offline setup actually ready" screen — port of
 /// VisionReadyActivity.kt, itself the Android counterpart of desktop's
-/// vision-ready page (`src/renderer/vision-ready/vision-ready.ts`): real
-/// connectivity, the same Offline Readiness numbers as the New Tab widget
-/// (percent of bookmarks also saved offline, real storage used against the
-/// real configurable limit, a real per-category breakdown), plus honest
-/// disabled states for the sections this port can't back with a real
-/// capability yet.
+/// vision-ready page: real connectivity, the same Offline Readiness numbers as
+/// the homepage card (percent of bookmarks also saved offline, real storage used
+/// against the real configurable limit, a per-category breakdown), plus honest
+/// "not available yet" notes for what this port can't back with a real
+/// capability.
 ///
-/// Deliberately different from Android here, not a missed port: Android's
-/// own "Keeping Pages Up to Date" card has a real `Switch` because Android
-/// ships a real Smart Cache background-refresh worker
-/// (`BackgroundRefreshScheduler`) to flip on. iOS has never had that worker
-/// — disclosed as a scope trim as far back as the Phase 2 migration
-/// comment in `AppDatabase.swift` — so a switch here would control nothing
-/// real. This card instead states that honestly, the same way Sports (no
-/// live data provider configured, on any platform) and Maps (not built on
-/// iOS yet) are already honestly disabled below it.
+/// Deliberately different from Android, not a missed port: Android's "Keeping
+/// Pages Up to Date" has a real `Switch` because it ships a Smart Cache
+/// background-refresh worker to flip on. iOS never has — disclosed as a scope
+/// trim since the Phase 2 migration comment in `AppDatabase.swift` — so a
+/// switch here would control nothing. It states that plainly instead, like
+/// Sports (no live data provider on any platform) and Maps (not built on iOS).
 struct VisionReadyView: View {
     @ObservedObject var bookmarkStore: BookmarkStore
     @ObservedObject var offlineStore: OfflineStore
@@ -39,22 +35,20 @@ struct VisionReadyView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: DesignSystem.Space.l) {
                     connectivityRow
                     offlineReadinessCard
-                    upToDateCard
-                    sportsCard
-                    mapsCard
+                    notAvailableCard
                 }
-                .padding(16)
+                .padding(DesignSystem.Space.l)
             }
-            .background(DesignSystem.bgCanvas.ignoresSafeArea())
             .navigationTitle("VISION Ready")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Done") { dismiss() }
                 }
             }
+            .visionScreen()
         }
         .onAppear(perform: load)
         .sheet(isPresented: $showOfflineLibrary) {
@@ -62,170 +56,132 @@ struct VisionReadyView: View {
         }
     }
 
-    @ViewBuilder
+    /// Green means online — the one place colour carries state here.
     private var connectivityRow: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: DesignSystem.Space.s) {
             Circle()
                 .fill(connectivity.isOnline ? DesignSystem.statusSuccess : DesignSystem.textMuted2)
                 .frame(width: 8, height: 8)
             Text(connectivity.isOnline ? "Online" : "Offline")
-                .font(.system(size: 13, weight: .bold))
+                .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(DesignSystem.textMuted2)
                 .accessibilityIdentifier("visionReadyConnectivityLabel")
         }
     }
 
-    @ViewBuilder
     private var offlineReadinessCard: some View {
         DesignSystem.card {
-            Button(action: { showOfflineLibrary = true }) {
-                HStack {
-                    DesignSystem.iconBadge("☁️")
-                    Text("Offline Readiness")
-                        .font(.system(size: 17, weight: .bold)).foregroundStyle(.white)
-                        .padding(.leading, 12)
-                    Spacer()
-                    Text("›").font(.system(size: 20)).foregroundStyle(DesignSystem.textMuted2)
-                }
-            }
-            .accessibilityIdentifier("btnManageOfflineContent")
+            Text("Offline readiness")
+                .font(.system(size: 17, weight: .semibold)).foregroundStyle(.white)
 
             if let result, let percent = result.percent {
-                HStack(alignment: .bottom, spacing: 8) {
+                HStack(alignment: .firstTextBaseline, spacing: DesignSystem.Space.s) {
                     Text("\(percent)%")
-                        .font(.system(size: 28, weight: .bold)).foregroundStyle(.white)
+                        .font(.system(size: 34, weight: .semibold)).foregroundStyle(.white)
                         .accessibilityIdentifier("visionReadyPercent")
-                    Text("of bookmarks saved offline").font(.system(size: 14)).foregroundStyle(DesignSystem.textMuted2)
+                    Text("of bookmarks saved offline")
+                        .font(.system(size: 14)).foregroundStyle(DesignSystem.textMuted2)
                 }
-                .padding(.top, 16)
+                .padding(.top, DesignSystem.Space.m)
 
-                // Gradient fill (visionPurple -> visionBlue, left to right) over a
-                // flat track — matches Android's progress_bar_gradient layer-list
-                // (a clipped linear gradient inside an 8dp-radius track), rather
-                // than a plain single-tint ProgressView.
                 GeometryReader { geometry in
                     ZStack(alignment: .leading) {
-                        RoundedRectangle(cornerRadius: 4)
-                            .fill(DesignSystem.bgCard)
-                        RoundedRectangle(cornerRadius: 4)
-                            .fill(
-                                LinearGradient(
-                                    colors: [DesignSystem.visionPurple, DesignSystem.visionBlue],
-                                    startPoint: .leading, endPoint: .trailing
-                                )
-                            )
+                        Capsule().fill(DesignSystem.bgRaised)
+                        Capsule().fill(Color.white)
                             .frame(width: geometry.size.width * CGFloat(percent) / 100)
                     }
                 }
-                .frame(height: 8)
-                .padding(.top, 12)
+                .frame(height: 6)
+                .padding(.top, DesignSystem.Space.m)
 
-                HStack(spacing: 24) {
+                HStack(alignment: .top, spacing: DesignSystem.Space.xl) {
                     statColumn(
                         value: "\(result.savedCount)", label: "of \(result.bookmarkCount) bookmarks saved offline",
                         valueId: "visionReadyStatsSaved"
                     )
-                    Rectangle()
-                        .fill(DesignSystem.borderCard)
-                        .frame(width: 1)
                     statColumn(
                         value: Self.byteCountFormatter.string(fromByteCount: usedBytes),
                         label: "used of \(AppSettings.offlineStorageLimitMb) MB storage limit",
                         valueId: "visionReadyStatsStorage"
                     )
                 }
-                .padding(.top, 18)
+                .padding(.top, DesignSystem.Space.l)
 
                 if !result.byCategory.isEmpty {
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: DesignSystem.Space.xs) {
                         ForEach(result.byCategory.sorted(by: { $0.key < $1.key }), id: \.key) { category, count in
                             Text("\(category.capitalized): \(count)")
                                 .font(.system(size: 13)).foregroundStyle(DesignSystem.textMuted2)
                                 .accessibilityIdentifier("visionReadyCategory_\(category)")
                         }
                     }
-                    .padding(.top, 14)
+                    .padding(.top, DesignSystem.Space.m)
                 }
             } else {
                 Text("Bookmark a page, then save it offline, to see how ready you are to browse without a connection.")
-                    .font(.system(size: 13)).foregroundStyle(DesignSystem.textMuted2)
-                    .padding(.top, 14)
+                    .font(.system(size: 14)).foregroundStyle(DesignSystem.textMuted2)
+                    .padding(.top, DesignSystem.Space.s)
                     .accessibilityIdentifier("visionReadyEmptyReadiness")
             }
 
-            // The real "Manage offline content" pill CTA — shown regardless of
-            // whether there's readiness data yet, matching Android's layout
-            // (added unconditionally below the if/else block in
-            // VisionReadyActivity.renderOfflineReadinessCard), not folded into
-            // the header-row tap target above.
+            // The one action on this card, shown whether or not there's
+            // readiness data yet (as on Android).
             Button(action: { showOfflineLibrary = true }) {
-                HStack(spacing: 10) {
-                    Text("⬇").font(.system(size: 15)).foregroundStyle(DesignSystem.visionBlue)
-                    Text("Manage offline content")
-                        .font(.system(size: 14, weight: .bold)).foregroundStyle(.white)
+                HStack {
+                    Text("Manage offline content").font(.system(size: 15, weight: .semibold)).foregroundStyle(.white)
                     Spacer()
-                    Text("›").font(.system(size: 20)).foregroundStyle(DesignSystem.textMuted2)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 13, weight: .semibold)).foregroundStyle(DesignSystem.textMuted2)
                 }
-                .padding(.horizontal, 14).padding(.vertical, 12)
-                .background(RoundedRectangle(cornerRadius: 16).fill(DesignSystem.bgCanvas))
-                .overlay(RoundedRectangle(cornerRadius: 16).stroke(DesignSystem.borderCard, lineWidth: 1))
+                .padding(.horizontal, DesignSystem.Space.l).frame(minHeight: 48)
+                .overlay(RoundedRectangle(cornerRadius: DesignSystem.Radius.control, style: .continuous).stroke(DesignSystem.borderCard, lineWidth: 1))
             }
-            .padding(.top, 16)
-            .accessibilityIdentifier("btnManageOfflineContentPill")
+            .padding(.top, DesignSystem.Space.l)
+            .accessibilityIdentifier("btnManageOfflineContent")
         }
     }
 
-    @ViewBuilder
     private func statColumn(value: String, label: String, valueId: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(value)
-                .font(.system(size: 17, weight: .bold)).foregroundStyle(.white)
+                .font(.system(size: 17, weight: .semibold)).foregroundStyle(.white)
                 .accessibilityIdentifier(valueId)
             Text(label).font(.system(size: 12)).foregroundStyle(DesignSystem.textMuted2)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    @ViewBuilder
-    private var upToDateCard: some View {
+    /// Three honest "not available on this build" notes in one quiet card,
+    /// instead of three separate bordered cards.
+    private var notAvailableCard: some View {
         DesignSystem.card {
-            HStack {
-                DesignSystem.iconBadge("🔄")
-                Text("Keeping Pages Up to Date")
-                    .font(.system(size: 17, weight: .bold)).foregroundStyle(.white)
-                    .padding(.leading, 12)
-            }
-            Text("Background refresh for saved pages isn't built on VISION for iOS yet — pages you save offline stay exactly as they were when you saved them. Reopen a page and save it again for a current copy.")
-                .font(.system(size: 13)).foregroundStyle(DesignSystem.textMuted2)
-                .padding(.top, 12)
-                .accessibilityIdentifier("visionReadyUpToDateBody")
+            note(
+                title: "Keeping pages up to date",
+                body: "Background refresh for saved pages isn't built on VISION for iOS yet — pages you save offline stay exactly as they were when you saved them. Reopen a page and save it again for a current copy.",
+                id: "visionReadyUpToDateBody"
+            )
+            DesignSystem.divider().padding(.vertical, DesignSystem.Space.m)
+            note(
+                title: "Sports",
+                body: "Sports requires configuration — no live data provider is connected.",
+                id: "visionReadySportsBody"
+            )
+            DesignSystem.divider().padding(.vertical, DesignSystem.Space.m)
+            note(
+                title: "Maps",
+                body: "Offline maps aren't available on VISION for iOS yet.",
+                id: "visionReadyMapsBody"
+            )
         }
     }
 
-    @ViewBuilder
-    private var sportsCard: some View {
-        DesignSystem.card {
-            HStack {
-                DesignSystem.iconBadge("🏆")
-                Text("Sports").font(.system(size: 17, weight: .bold)).foregroundStyle(.white).padding(.leading, 12)
-            }
-            Text("Sports requires configuration — no live data provider is connected.")
-                .font(.system(size: 13)).foregroundStyle(DesignSystem.textMuted2)
-                .padding(.top, 10)
-                .accessibilityIdentifier("visionReadySportsBody")
-        }
-    }
-
-    @ViewBuilder
-    private var mapsCard: some View {
-        DesignSystem.card {
-            HStack {
-                DesignSystem.iconBadge("📍")
-                Text("Maps").font(.system(size: 17, weight: .bold)).foregroundStyle(.white).padding(.leading, 12)
-            }
-            Text("Offline maps aren't available on VISION for iOS yet.")
-                .font(.system(size: 13)).foregroundStyle(DesignSystem.textMuted2)
-                .padding(.top, 10)
-                .accessibilityIdentifier("visionReadyMapsBody")
+    private func note(title: String, body: String, id: String) -> some View {
+        VStack(alignment: .leading, spacing: DesignSystem.Space.xs) {
+            Text(title).font(.system(size: 15, weight: .semibold)).foregroundStyle(.white)
+            Text(body)
+                .font(.system(size: 14)).foregroundStyle(DesignSystem.textMuted2)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier(id)
         }
     }
 

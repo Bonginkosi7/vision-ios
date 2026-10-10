@@ -1,54 +1,40 @@
 import SwiftUI
 import VisionCore
 
-/// Real New Tab page — port of `NewTabController.kt`/desktop's
-/// `newtab.ts`: a real time-of-day greeting, an "Ask VISION" box (real
-/// URLs navigate, everything else routes to a real Ask VISION chat —
-/// never a search-engine fallback, this box is not the address bar),
-/// the same real widget cards New Tab shares with their own full
-/// screens elsewhere in this app — VISION Advisor (`AdvisorLogic`),
-/// Offline Readiness (`VisionCore.ReadinessLogic`, same numbers as
-/// VisionReadyView), Today's Overview (`WellbeingStore`/
-/// `WellbeingManager`), and VISION Points (`RewardStore`/`RewardRules`,
-/// same numbers as RewardsView) — and the real "Top Stories — BBC News"
-/// section (`NewsLogic`/`NewsClient`, a real feed fetch, no API key).
-///
-/// Found via a cross-source design sweep as a major, previously-
-/// undisclosed gap: this screen had stayed at its original Phase 1 cut
-/// (bookmarks row only) ever since, even though three separate doc
-/// comments elsewhere in this codebase (this file's own original one,
-/// plus `WellbeingActions.swift`'s) already said these widgets belonged
-/// here "in a later phase" that never actually arrived.
-///
-/// **No bookmarks row here, on purpose, matching Android exactly**:
-/// Android's own `view_new_tab.xml` has never shown a bookmarks list on
-/// New Tab — `bookmarkDb` there is only read for the Readiness widget's
-/// count, never rendered as rows (confirmed by grepping it). This
-/// screen's own bookmarks row was this port's own, Android-divergent
-/// invention from Phase 1 (before a real New Tab reference existed to
-/// check against) — replaced here with the real News section Android
-/// actually has in that spot; the dedicated `BookmarksView` screen
-/// remains the real place to browse/manage bookmarks, same split
-/// Android itself has (`BookmarksActivity.kt`, separate from New Tab).
-///
-/// **Disclosed scope trim, not an oversight**: Android's real Weather
-/// pill (`WeatherLogic`, a real location-based API call) is deliberately
-/// NOT ported here — a genuine new external-API integration plus a new
-/// location-permission flow that deserves its own real-source-verified
-/// phase. Full onboarding is trimmed too — every destination it would
-/// point to is already one tap away from the toolbar/menu.
-///
-/// The photo background (`bg_new_tab.jpg`, the exact same real asset
-/// Android bundles at res/drawable-nodpi/bg_new_tab.jpg — not a
-/// different stock photo standing in for it) and the real user-managed
-/// Shortcuts row (`ShortcutStore`, a GRDB port of `ShortcutDbHelper.kt`,
-/// icons sourced from the same real favicon service `FaviconLoader`
-/// already uses elsewhere) were added in a later pass, closing what had
-/// been this screen's two remaining disclosed trims.
 private enum NewsStatus {
     case loading, empty, loaded
 }
 
+private struct HomeFeatureCard: Identifiable {
+    let id: String
+    let icon: String
+    let title: String
+    let description: String
+    let destination: HomeDestination
+    let chip: String?
+}
+
+/// The Vision homepage (new-tab page): header with the Online / Offline
+/// toggle, a greeting, the Ask box, the user's shortcuts, four cards that open
+/// existing screens (Advisor, Settings, Today's Overview, Points), and one
+/// content section that depends on the mode — live BBC headlines when Online,
+/// saved pages and on-device tools when Offline.
+///
+/// The Online / Offline control reflects real state only: the device's actual
+/// connection (`ConnectivityMonitor`) plus the user's saved Offline Mode choice
+/// (`HomeConnectivityMode`). Offline Mode here is a homepage-level choice — it
+/// stops live fetches and shows saved content — and does not cut the device's
+/// network; the status line says so.
+///
+/// Kept from the previous homepage, unchanged in behaviour: the Ask box (a URL
+/// navigates, anything else opens Ask VISION), user-managed shortcuts, the
+/// real Advisor nudge with its actions, Offline Readiness, and the BBC News
+/// section. There is no bookmarks list here on purpose — Android's new-tab
+/// never had one (`bookmarkStore` is read only to compute Offline Readiness);
+/// bookmarks live in the dedicated Bookmarks screen.
+///
+/// Not ported: Android's Weather pill (a location-permission + API
+/// integration that deserves its own phase).
 struct NewTabView: View {
     @ObservedObject var bookmarkStore: BookmarkStore
     @ObservedObject var offlineStore: OfflineStore
@@ -57,118 +43,98 @@ struct NewTabView: View {
     @ObservedObject var shortcutStore: ShortcutStore
     let onNavigate: (String) -> Void
     let onAskVision: (String) -> Void
-    let onOpenVisionReady: () -> Void
+    let onOpen: (HomeDestination) -> Void
+    let onOpenSavedPage: (URL) -> Void
+
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    @ObservedObject private var connectivity = ConnectivityMonitor.shared
+    @AppStorage(AppSettings.offlineModeKey) private var offlineModeEnabled = false
 
     @State private var bookmarks: [Bookmark] = []
     @State private var shortcuts: [Shortcut] = []
+    @State private var savedPages: [OfflineItem] = []
     @State private var headlines: [NewsHeadline] = []
     @State private var newsStatus: NewsStatus = .loading
     @State private var askText = ""
     @State private var showAddShortcut = false
+    @State private var showCannotGoOnline = false
     @State private var newShortcutTitle = ""
     @State private var newShortcutUrl = ""
 
     @State private var advisorSuggestion: AdvisorSuggestion?
     @State private var advisorDismissed = false
-
     @State private var readiness: ReadinessResult?
-
-    @State private var focusLabel = "0m"
-    @State private var breaksToday = 0
-    @State private var sitesToday = 0
-    @State private var tabsToday = 0
-
+    @State private var overview = TodayOverviewSnapshot(focusLabel: "0m", breaks: 0, sites: 0, tabs: 0)
     @State private var pointsBalance = 0
-    @State private var pointsLevel = 1
-    @State private var pointsIntoLevel = 0
-    @State private var latestReward: RewardEvent?
+
+    /// Shortcut icons: 44pt (they were 52 and read as too large).
+    private static let shortcutIconSize: CGFloat = 44
+
+    private var mode: HomeConnectivityMode {
+        .resolve(deviceOnline: connectivity.isOnline, offlineModeEnabled: offlineModeEnabled)
+    }
 
     var body: some View {
         ZStack {
-            // bg_new_tab.jpg + bg_new_tab_scrim.xml: the real photo
-            // Android shows behind this whole screen, with the same
-            // top-to-bottom dark gradient scrim over it so white text
-            // stays readable over any part of the image.
             GeometryReader { proxy in
                 Image("NewTabBackground")
                     .resizable()
                     .aspectRatio(contentMode: .fill)
                     .frame(width: proxy.size.width, height: proxy.size.height)
+                    .saturation(0.15)
                     .clipped()
             }
             .ignoresSafeArea()
             LinearGradient(
-                colors: [
-                    Color(hex: 0x050608).opacity(0.35),
-                    Color(hex: 0x050608).opacity(0.55),
-                    Color(hex: 0x050608).opacity(0.88),
-                ],
+                colors: [Color.black.opacity(0.50), Color.black.opacity(0.74), Color.black.opacity(0.94)],
                 startPoint: .top, endPoint: .bottom
             )
             .ignoresSafeArea()
 
             VStack(spacing: 0) {
-                // view_new_tab.xml shows the greeting ABOVE the Ask VISION
-                // box (centered, 22sp) — pinned here, above askVisionBox, in
-                // that same real order, rather than inside the ScrollView.
+                header
+                    .padding(.horizontal, 20).padding(.top, 14)
+
                 Text(greeting)
-                    .font(.system(size: 22, weight: .bold)).foregroundStyle(.white)
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .padding(.horizontal, 20).padding(.top, 28)
+                    .font(.system(size: 34, weight: .bold)).foregroundStyle(.white)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 20).padding(.top, 36)
                     .accessibilityIdentifier("newTabGreeting")
 
-                // Deliberately pinned outside the ScrollView below, matching
-                // NewTabController.kt's own fixed-position search row (it
-                // never scrolls away with the widget cards) — found the hard
-                // way via a real CI failure, not by design: with this box
-                // inside the ScrollView, the keyboard's own scroll-into-view
-                // adjustment on focus could shift the submit button out from
-                // under an already-computed tap coordinate, the same real
-                // "tap reports success, the real target never receives it"
-                // class of bug Phase 11's Tutor screen hit for a different
-                // reason (a horizontal ScrollView swallowing the gesture).
+                modeStatus
+                    .padding(.horizontal, 20).padding(.top, 6)
+
+                // Pinned outside the ScrollView on purpose: with the Ask box
+                // inside it, the keyboard's own scroll-into-view adjustment
+                // shifted the submit button out from under an already-computed
+                // tap coordinate (a real CI-caught bug — the tap reported
+                // success but the action never ran).
                 askVisionBox
-                    .padding(.horizontal, 20).padding(.top, 20).padding(.bottom, 2)
+                    .padding(.horizontal, 20).padding(.top, 16).padding(.bottom, 8)
 
-                // new_tab_ask_label — the "✨ Ask VISION" caption under the
-                // input box, present in view_new_tab.xml but previously
-                // missing from this port entirely.
-                Text("✨ Ask VISION")
-                    .font(.system(size: 12)).foregroundStyle(.white.opacity(0.75))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 24).padding(.bottom, 10)
-                    .accessibilityIdentifier("newTabAskLabel")
-
-                shortcutsRow
-                    .padding(.top, 2).padding(.bottom, 4)
-
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 16) {
-                        // view_new_tab.xml lays its four widget cards out as
-                        // a real 2x2 grid (two MaterialCardViews per
-                        // horizontal row, each layout_weight="1") — not a
-                        // single-column stack. Row order (Advisor/Readiness,
-                        // then Overview/Points) matches this port's existing
-                        // top-to-bottom order exactly; only the grouping
-                        // changes.
-                        HStack(alignment: .top, spacing: 12) {
-                            advisorCard.frame(maxWidth: .infinity)
-                            readinessCard.frame(maxWidth: .infinity)
-                        }
-                        HStack(alignment: .top, spacing: 12) {
-                            overviewCard.frame(maxWidth: .infinity)
-                            pointsCard.frame(maxWidth: .infinity)
-                        }
-
-                        newsSection
+                ScrollView(showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: 22) {
+                        shortcutsRow
+                        OfflineModelPromptCard().padding(.horizontal, 20)
+                        advisorNudge.padding(.horizontal, 20)
+                        featureCards.padding(.horizontal, 20)
+                        modeContent.padding(.horizontal, 20)
+                        footer.padding(.horizontal, 20)
                     }
-                    .padding(20)
+                    .padding(.vertical, 12)
+                    .padding(.bottom, 12)
                 }
             }
+            .frame(maxWidth: 820)
         }
+        .environment(\.colorScheme, .dark)
         .onAppear {
             refresh()
-            Task { await refreshNews() }
+            if !mode.isOffline { Task { await refreshNews() } }
+        }
+        .onChange(of: mode.isOffline) { offline in
+            refresh()
+            if !offline { Task { await refreshNews() } }
         }
         .alert("Add shortcut", isPresented: $showAddShortcut) {
             TextField("Title", text: $newShortcutTitle)
@@ -183,17 +149,123 @@ struct NewTabView: View {
         }
     }
 
-    /// Horizontal row of real, user-managed shortcuts (`ShortcutStore`) —
-    /// the SwiftUI counterpart of `refreshShortcuts()`/`buildShortcutTile()`
-    /// in NewTabController.kt: one tile per real saved shortcut, a trailing
-    /// "+" tile to add another, real favicons (not fabricated brand icons)
-    /// via the same `FaviconLoader` the rest of this app already uses, and
-    /// a long-press-to-remove affordance in place of Android's long-click
-    /// popup menu.
-    @ViewBuilder
+    // MARK: - Header, greeting, mode status
+
+    private var header: some View {
+        HStack(spacing: 8) {
+            VisionMark(height: 26)
+                .accessibilityIdentifier("homeHeaderMark")
+            Spacer(minLength: 8)
+            HomeModeToggle(
+                mode: mode,
+                onOnline: {
+                    switch mode {
+                    case .online:
+                        break
+                    case .offlineByChoice:
+                        offlineModeEnabled = false
+                        Task { @MainActor in AnalyticsClient.shared.track(AnalyticsEvent.offlineModeExited) }
+                    case .offlineNoConnection:
+                        showCannotGoOnline = true
+                    }
+                },
+                onOffline: {
+                    if mode == .online {
+                        offlineModeEnabled = true
+                        Task { @MainActor in AnalyticsClient.shared.track(AnalyticsEvent.offlineModeEntered) }
+                    }
+                }
+            )
+        }
+        .alert("Can't go online", isPresented: $showCannotGoOnline) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(HomeConnectivityMode.cannotGoOnlineExplanation)
+        }
+    }
+
+    private var modeStatus: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Circle()
+                .fill(mode.isOffline ? Color.clear : Color.white)
+                .overlay(Circle().stroke(Color.white.opacity(0.75), lineWidth: 1.5))
+                .frame(width: 8, height: 8)
+                .padding(.top, 5)
+            Text(mode.statusText)
+                .font(.system(size: 13)).foregroundStyle(HomeTheme.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("homeModeStatus")
+    }
+
+    private var greeting: String {
+        let hour = Calendar.current.component(.hour, from: Date())
+        switch hour {
+        case 5..<12: return "Good morning"
+        case 12..<17: return "Good afternoon"
+        case 17..<21: return "Good evening"
+        default: return "Good night"
+        }
+    }
+
+    // MARK: - Ask box
+
+    private var askVisionBox: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 16, weight: .medium)).foregroundStyle(HomeTheme.textSecondary)
+                .accessibilityHidden(true)
+            TextField(
+                "", text: $askText,
+                prompt: Text("Ask anything or enter a website").foregroundColor(Color.white.opacity(0.5))
+            )
+            .textFieldStyle(.plain)
+            .autocapitalization(.none)
+            .disableAutocorrection(true)
+            .submitLabel(.go)
+            .onSubmit(submitAsk)
+            .foregroundStyle(.white)
+            .accessibilityLabel("Ask anything or enter a website")
+            .accessibilityIdentifier("newTabSearchInput")
+            Button(action: submitAsk) {
+                Image(systemName: "arrow.up")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(.black)
+                    .frame(width: 36, height: 36)
+                    .background(Circle().fill(Color.white))
+            }
+            .accessibilityLabel("Ask")
+            .accessibilityIdentifier("newTabAskSubmit")
+        }
+        .padding(.leading, 18).padding(.trailing, 10)
+        .frame(height: 56)
+        .background(Capsule().fill(Color.black.opacity(0.42)))
+        .overlay(Capsule().stroke(HomeTheme.stroke, lineWidth: 1))
+        .shadow(color: .black.opacity(0.3), radius: 12, x: 0, y: 6)
+    }
+
+    /// A URL or domain navigates, exactly like the address bar. Anything else
+    /// goes to Ask VISION — this box is not the address bar, even though it
+    /// accepts URLs too (port of NewTabController.kt's submitAsk()).
+    private func submitAsk() {
+        let trimmed = askText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        askText = ""
+        if AddressResolver.isDirectUrl(trimmed) {
+            let destination = (trimmed.hasPrefix("http://") || trimmed.hasPrefix("https://")) ? trimmed : "https://\(trimmed)"
+            onNavigate(destination)
+        } else {
+            onAskVision(trimmed)
+        }
+    }
+
+    // MARK: - Shortcuts
+
     private var shortcutsRow: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(alignment: .top, spacing: 4) {
+            HStack(alignment: .top, spacing: 6) {
                 ForEach(shortcuts) { shortcut in
                     shortcutTile(shortcut)
                 }
@@ -204,19 +276,14 @@ struct NewTabView: View {
         .accessibilityIdentifier("newTabShortcutsRow")
     }
 
-    @ViewBuilder
     private func shortcutTile(_ shortcut: Shortcut) -> some View {
         Button(action: { onNavigate(shortcut.url) }) {
-            VStack(spacing: 4) {
-                ZStack {
-                    Circle().fill(Color.white.opacity(0.14))
-                    FaviconView(host: shortcutFaviconHost(shortcut.url))
-                }
-                .frame(width: 48, height: 48)
+            VStack(spacing: 6) {
+                FaviconView(host: shortcutFaviconHost(shortcut.url), size: Self.shortcutIconSize, remoteLookup: true)
                 Text(shortcut.title)
-                    .font(.system(size: 11)).foregroundStyle(.white)
+                    .font(.system(size: 11)).foregroundStyle(HomeTheme.textSecondary)
                     .lineLimit(1)
-                    .frame(width: 72)
+                    .frame(width: 64)
             }
         }
         .accessibilityIdentifier("newTabShortcut_\(shortcut.id ?? 0)")
@@ -228,24 +295,24 @@ struct NewTabView: View {
         }
     }
 
-    @ViewBuilder
     private var addShortcutTile: some View {
         Button(action: { showAddShortcut = true }) {
-            VStack(spacing: 4) {
-                Circle().fill(Color.white.opacity(0.14))
-                    .frame(width: 48, height: 48)
-                    .overlay(Image(systemName: "plus").foregroundStyle(.white))
-                Text("Add").font(.system(size: 11)).foregroundStyle(.white)
+            VStack(spacing: 6) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: Self.shortcutIconSize * 0.26, style: .continuous).fill(Color.white.opacity(0.10))
+                    RoundedRectangle(cornerRadius: Self.shortcutIconSize * 0.26, style: .continuous).stroke(HomeTheme.stroke, lineWidth: 1)
+                    Image(systemName: "plus").foregroundStyle(.white)
+                }
+                .frame(width: Self.shortcutIconSize, height: Self.shortcutIconSize)
+                Text("Add").font(.system(size: 11)).foregroundStyle(HomeTheme.textSecondary)
             }
         }
         .accessibilityIdentifier("newTabAddShortcut")
     }
 
     /// web.whatsapp.com has no favicon of its own indexed by the lookup
-    /// service (it 404s to a generic globe fallback) — whatsapp.com does
-    /// have the real logo, same real host substitution NewTabController.kt
-    /// makes for this one known case; every other URL still resolves from
-    /// its own real host.
+    /// service (it 404s to a generic globe) — whatsapp.com has the real logo,
+    /// the same host substitution NewTabController.kt makes for this one case.
     private func shortcutFaviconHost(_ urlString: String) -> String {
         let host = URL(string: urlString)?.host ?? urlString
         return host == "web.whatsapp.com" ? "whatsapp.com" : host
@@ -264,283 +331,36 @@ struct NewTabView: View {
         refresh()
     }
 
-    /// Each of the four home-screen cards' title row: Android's
-    /// NewTabCardTitle style (13sp bold white — a dedicated, smaller
-    /// style than the 16sp DesignSystem.sectionLabel used on this app's
-    /// other, full-screen activities) plus the same translucent "›"
-    /// Android draws in the top-right corner of every one of these four
-    /// cards, not just Offline Readiness.
-    @ViewBuilder
-    private func newTabCardHeader(_ title: String) -> some View {
-        HStack {
-            Text(title).font(.system(size: 13, weight: .bold)).foregroundStyle(.white)
-            Spacer()
-            Text("›").font(.system(size: 18, weight: .bold)).foregroundStyle(.white.opacity(0.4))
-        }
-    }
+    // MARK: - Advisor nudge
 
-    private var greeting: String {
-        let hour = Calendar.current.component(.hour, from: Date())
-        switch hour {
-        case 5..<12: return "Good morning"
-        case 12..<17: return "Good afternoon"
-        case 17..<21: return "Good evening"
-        default: return "Good night"
-        }
-    }
-
+    /// Shown only when AdvisorLogic genuinely has a suggestion (e.g. a long
+    /// continuous session). Take a break / Dismiss behave exactly as before.
     @ViewBuilder
-    private var askVisionBox: some View {
-        HStack(spacing: 8) {
-            // new_tab_ask_hint is literally "Ask me anything" — not this
-            // box's own invented placeholder copy.
-            TextField("Ask me anything", text: $askText, onCommit: submitAsk)
-                .textFieldStyle(.plain)
-                .autocapitalization(.none)
-                .disableAutocorrection(true)
-                .frame(height: 56)
-                .padding(.horizontal, 16)
-                // bg_new_tab_input.xml: a near-pill (24dp radius on a
-                // 56dp box) translucent dark fill with a translucent
-                // white stroke — not this app's opaque, unbordered
-                // bgCard, which belongs to the regular toolbar/widget
-                // cards, not this photo-backed hero box.
-                .background(RoundedRectangle(cornerRadius: 24).fill(Color.black.opacity(0.2)))
-                .overlay(RoundedRectangle(cornerRadius: 24).stroke(Color.white.opacity(0.25), lineWidth: 1))
-                .foregroundStyle(.white)
-                .accessibilityIdentifier("newTabSearchInput")
-            Button(action: submitAsk) {
-                // bg_avatar_circle.xml: a solid vision_purple circle
-                // behind the send glyph — this had been a bare,
-                // backgroundless icon.
-                Image(systemName: "paperplane.fill")
-                    .font(.system(size: 16))
-                    .foregroundStyle(.white)
-                    .frame(width: 40, height: 40)
-                    .background(Circle().fill(DesignSystem.visionPurple))
-            }
-            .accessibilityIdentifier("newTabAskSubmit")
-        }
-    }
-
-    @ViewBuilder
-    private var advisorCard: some View {
-        DesignSystem.card {
-            newTabCardHeader("VISION Advisor")
-                .accessibilityIdentifier("advisorCardTitle")
-            if let advisorSuggestion, !advisorDismissed {
-                Text(advisorSuggestion.message)
-                    .font(.system(size: 13)).foregroundStyle(DesignSystem.textMuted2)
-                    .padding(.top, 8)
-                    .accessibilityIdentifier("advisorMessage")
+    private var advisorNudge: some View {
+        if let advisorSuggestion, !advisorDismissed {
+            VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 8) {
-                    ForEach(advisorSuggestion.actions, id: \.label) { action in
-                        Button(action.label) { performAdvisorAction(action.id) }
-                            .font(.system(size: 12, weight: .bold))
-                            .accessibilityIdentifier("advisorAction_\(action.label)")
-                    }
+                    Image(systemName: "sparkles").font(.system(size: 13, weight: .semibold)).accessibilityHidden(true)
+                    Text("Vision Advisor").font(.system(size: 13, weight: .semibold))
                 }
-                .padding(.top, 8)
-            } else {
-                Text("You're on track — nothing needs your attention right now.")
-                    .font(.system(size: 13)).foregroundStyle(DesignSystem.textMuted2)
-                    .padding(.top, 8)
+                .foregroundStyle(HomeTheme.textSecondary)
+                Text(advisorSuggestion.message)
+                    .font(.system(size: 16)).foregroundStyle(.white)
+                    .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("advisorMessage")
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var readinessCard: some View {
-        DesignSystem.card {
-            Button(action: onOpenVisionReady) {
-                newTabCardHeader("Offline Readiness")
-            }
-            if let readiness, let percent = readiness.percent {
-                HStack(alignment: .bottom, spacing: 6) {
-                    Text("\(percent)%").font(.system(size: 26, weight: .bold)).foregroundStyle(.white)
-                        .accessibilityIdentifier("newTabReadinessPercent")
-                    Text("of bookmarks saved offline").font(.system(size: 13)).foregroundStyle(DesignSystem.textMuted2)
-                }
-                .padding(.top, 10)
-                Text("🔖 \(readiness.savedCount) of \(readiness.bookmarkCount) bookmarks saved offline")
-                    .font(.system(size: 12)).foregroundStyle(DesignSystem.textMuted2)
-                    .padding(.top, 10)
-            } else {
-                Text("Bookmark a page, then save it offline, to see how ready you are to browse without a connection.")
-                    .font(.system(size: 13)).foregroundStyle(DesignSystem.textMuted2)
-                    .padding(.top, 10)
-                    .accessibilityIdentifier("newTabReadinessEmpty")
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var overviewCard: some View {
-        DesignSystem.card {
-            newTabCardHeader("Today's Overview")
-            VStack(alignment: .leading, spacing: 6) {
-                overviewStatRow(color: DesignSystem.visionPurple, label: "Focus time", value: focusLabel)
-                overviewStatRow(color: DesignSystem.statusSuccess, label: "Breaks", value: "\(breaksToday)")
-                overviewStatRow(color: DesignSystem.statDotOrange, label: "Sites", value: "\(sitesToday)")
-                overviewStatRow(color: DesignSystem.visionBlue, label: "Tabs", value: "\(tabsToday)")
-            }
-            .padding(.top, 10)
-            Text(breaksToday > 0 ? "💡 Nice, you've taken a real break today." : "💡 No breaks logged yet today.")
-                .font(.system(size: 12)).foregroundStyle(DesignSystem.textMuted2)
-                .padding(.top, 10)
-                .accessibilityIdentifier("newTabOverviewNote")
-        }
-    }
-
-    @ViewBuilder
-    private func overviewStatRow(color: Color, label: String, value: String) -> some View {
-        HStack(spacing: 8) {
-            Circle().fill(color).frame(width: 6, height: 6)
-            Text("\(label): \(value)").font(.system(size: 13)).foregroundStyle(DesignSystem.textMuted2)
-        }
-    }
-
-    @ViewBuilder
-    private var pointsCard: some View {
-        DesignSystem.card {
-            newTabCardHeader("VISION Points")
-            Text("\(pointsBalance)").font(.system(size: 26, weight: .bold)).foregroundStyle(.white)
-                .padding(.top, 10)
-                .accessibilityIdentifier("newTabPointsBalance")
-            Text("Level \(pointsLevel) — \(RewardRules.levelName(pointsLevel))")
-                .font(.system(size: 13)).foregroundStyle(DesignSystem.textMuted2)
-            Text("\(pointsIntoLevel) / \(RewardRules.levelSize) to next level")
-                .font(.system(size: 12)).foregroundStyle(DesignSystem.textMuted2)
-                .padding(.top, 4)
-            if let latestReward {
-                Text("🔖 \(latestReward.note) +\(latestReward.points)")
-                    .font(.system(size: 12)).foregroundStyle(DesignSystem.statusSuccess)
-                    .padding(.horizontal, 8).padding(.vertical, 6)
-                    .background(Capsule().fill(DesignSystem.statusSuccess.opacity(0.1)))
-                    .padding(.top, 10)
-                    .accessibilityIdentifier("newTabLatestReward")
-            } else {
-                Text("No real points earned yet — browse, focus, and study to start earning.")
-                    .font(.system(size: 12)).foregroundStyle(DesignSystem.textMuted2)
-                    .padding(.top, 10)
-            }
-        }
-    }
-
-    /// Real "Top Stories — BBC News" section — port of
-    /// `NewTabController.kt`'s `refreshNews()`/`buildNewsCard()` (itself
-    /// matching desktop's `loadNews()`). A plain vertical block (not a
-    /// `DesignSystem.card`), matching Android's own `view_new_tab.xml`
-    /// layout there exactly — header, a status line while loading/on
-    /// failure, then up to 5 real headline rows. Tapping one navigates the
-    /// current tab in place to the real article URL, same as a bookmark
-    /// row or shortcut tap elsewhere on this screen — not "open in a new
-    /// tab".
-    @ViewBuilder
-    private var newsSection: some View {
-        DesignSystem.sectionLabel("Top Stories — BBC News")
-
-        switch newsStatus {
-        case .loading:
-            Text("Loading headlines…")
-                .font(.system(size: 13)).foregroundStyle(DesignSystem.textMuted2)
-                .accessibilityIdentifier("newsStatusText")
-        case .empty:
-            // Verbatim port of Android's new_tab_news_empty copy — a real
-            // fetch was attempted and failed (or returned nothing usable),
-            // never silently replaced with fabricated headlines.
-            Text("Couldn't reach BBC News right now — check your connection and reopen a new tab.")
-                .font(.system(size: 13)).foregroundStyle(DesignSystem.textMuted2)
-                .accessibilityIdentifier("newsStatusText")
-        case .loaded:
-            VStack(alignment: .leading, spacing: 0) {
-                ForEach(Array(headlines.enumerated()), id: \.element.id) { index, headline in
-                    Button(action: { onNavigate(headline.url) }) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(headline.title)
-                                .font(.system(size: 15)).foregroundStyle(.white)
-                                .multilineTextAlignment(.leading)
-                            Text(headline.source)
-                                .font(.system(size: 12)).foregroundStyle(DesignSystem.textMuted2.opacity(0.65))
+                HStack(spacing: 10) {
+                    ForEach(advisorSuggestion.actions, id: \.label) { action in
+                        Button(action: { performAdvisorAction(action.id) }) {
+                            Text(action.label)
+                                .font(.system(size: 13, weight: .semibold)).foregroundStyle(.white)
+                                .padding(.horizontal, 14).frame(minHeight: 36)
+                                .overlay(Capsule().stroke(Color.white.opacity(0.4), lineWidth: 1))
                         }
-                        .padding(.vertical, 12)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .accessibilityIdentifier("newsHeadline_\(headline.id)")
-
-                    if index < headlines.count - 1 {
-                        Divider().background(DesignSystem.borderCard)
+                        .accessibilityIdentifier("advisorAction_\(action.label)")
                     }
                 }
             }
-            // Pre-emptively applied: the bookmarks row this section
-            // replaced hit a real CI-caught bug from SwiftUI's default
-            // accessibility-element merging collapsing each row's own
-            // Button into one outer element — `.contain` keeps each
-            // headline Button independently tappable/identifiable instead.
-            .accessibilityElement(children: .contain)
-            .accessibilityIdentifier("newsHeadlinesList")
-        }
-    }
-
-    private func refresh() {
-        // Only ever used below for the Readiness widget's real count — not
-        // rendered as a list on this screen, matching Android's own
-        // bookmarkDb usage in NewTabController.kt exactly.
-        bookmarks = (try? bookmarkStore.list()) ?? []
-        shortcuts = (try? shortcutStore.list()) ?? []
-
-        advisorDismissed = false
-        advisorSuggestion = AdvisorLogic.getSuggestion(continuousSessionMs: WellbeingManager.shared.continuousSessionMs())
-
-        let bookmarkUrls = bookmarks.map { $0.url }
-        let offlineItems = (try? offlineStore.list()) ?? []
-        readiness = ReadinessLogic.compute(
-            bookmarkUrls: bookmarkUrls,
-            offlineUrls: offlineItems.map { $0.url },
-            offlineCategories: offlineItems.map { $0.category }
-        )
-
-        let ms = WellbeingManager.shared.continuousSessionMs()
-        let totalMinutes = Int(ms / 60_000)
-        let h = totalMinutes / 60
-        let m = totalMinutes % 60
-        focusLabel = h > 0 ? "\(h)h \(m)m" : "\(m)m"
-        breaksToday = (try? wellbeingStore.breaksToday()) ?? 0
-        sitesToday = (try? wellbeingStore.distinctSitesToday()) ?? 0
-        tabsToday = WellbeingManager.shared.tabsOpenedToday()
-
-        let total = (try? rewardStore.total()) ?? 0
-        pointsBalance = (try? rewardStore.availableBalance()) ?? 0
-        pointsLevel = total / RewardRules.levelSize + 1
-        pointsIntoLevel = total % RewardRules.levelSize
-        latestReward = (try? rewardStore.recent(limit: 1))?.first
-    }
-
-    /// Real fetch, no caching — matches Android/desktop exactly: every
-    /// time New Tab is shown, this refetches rather than reading a stale
-    /// cache (see `NewsClient`'s own doc comment).
-    private func refreshNews() async {
-        newsStatus = .loading
-        let fetched = await NewsClient.fetchTopHeadlines()
-        headlines = fetched
-        newsStatus = fetched.isEmpty ? .empty : .loaded
-    }
-
-    /// Real URL/domain -> navigate, exactly like the address bar.
-    /// Anything else -> Ask VISION — this box is not the address bar,
-    /// even though it accepts URLs too. Direct port of
-    /// NewTabController.kt's own submitAsk().
-    private func submitAsk() {
-        let trimmed = askText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        askText = ""
-        if AddressResolver.isDirectUrl(trimmed) {
-            let destination = (trimmed.hasPrefix("http://") || trimmed.hasPrefix("https://")) ? trimmed : "https://\(trimmed)"
-            onNavigate(destination)
-        } else {
-            onAskVision(trimmed)
+            .homeCard()
         }
     }
 
@@ -552,5 +372,320 @@ struct NewTabView: View {
         case .dismiss:
             advisorDismissed = true
         }
+    }
+
+    // MARK: - Four feature cards
+
+    private var featureItems: [HomeFeatureCard] {
+        [
+            HomeFeatureCard(
+                id: "advisor", icon: "sparkles", title: "Vision Advisor",
+                description: "Personalised recommendations, learning support and smart guidance.",
+                destination: .advisor, chip: nil
+            ),
+            HomeFeatureCard(
+                id: "settings", icon: "gearshape", title: "Settings",
+                description: "Customise your experience and manage your preferences.",
+                destination: .settings, chip: nil
+            ),
+            HomeFeatureCard(
+                id: "overview", icon: "calendar", title: "Today's Overview",
+                description: "See your schedule, progress and important updates at a glance.",
+                destination: .overview, chip: "\(overview.focusLabel) focus"
+            ),
+            HomeFeatureCard(
+                id: "points", icon: "star.circle", title: "Vision Points",
+                description: "Track your points, build healthy habits and explore available rewards.",
+                destination: .points, chip: "\(pointsBalance) pts"
+            ),
+        ]
+    }
+
+    /// One row of four on wide layouts (iPad), a stacked list on phones.
+    @ViewBuilder
+    private var featureCards: some View {
+        if sizeClass == .regular {
+            HStack(alignment: .top, spacing: 14) {
+                ForEach(featureItems) { featureTile($0) }
+            }
+        } else {
+            VStack(spacing: 12) {
+                ForEach(featureItems) { featureRow($0) }
+            }
+        }
+    }
+
+    private func featureIcon(_ name: String) -> some View {
+        Image(systemName: name)
+            .font(.system(size: 20, weight: .regular)).foregroundStyle(.white)
+            .frame(width: 44, height: 44)
+            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.white.opacity(0.10)))
+            .accessibilityHidden(true)
+    }
+
+    private func chipView(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 12, weight: .semibold)).foregroundStyle(.white)
+            .padding(.horizontal, 10).padding(.vertical, 4)
+            .background(Capsule().fill(Color.white.opacity(0.12)))
+    }
+
+    private func featureRow(_ card: HomeFeatureCard) -> some View {
+        Button(action: { onOpen(card.destination) }) {
+            // Icon, chip and chevron share the top row, so the title and
+            // description below get the card's full width instead of
+            // being squeezed beside a chip.
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 8) {
+                    featureIcon(card.icon)
+                    Spacer(minLength: 8)
+                    if let chip = card.chip { chipView(chip) }
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 13, weight: .semibold)).foregroundStyle(HomeTheme.textTertiary)
+                        .accessibilityHidden(true)
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(card.title).font(.system(size: 17, weight: .semibold)).foregroundStyle(.white)
+                    Text(card.description)
+                        .font(.system(size: 13)).foregroundStyle(HomeTheme.textSecondary)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .homeCard(padding: 14)
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("homeCard_\(card.id)")
+    }
+
+    private func featureTile(_ card: HomeFeatureCard) -> some View {
+        Button(action: { onOpen(card.destination) }) {
+            VStack(alignment: .leading, spacing: 12) {
+                featureIcon(card.icon)
+                Text(card.title).font(.system(size: 17, weight: .semibold)).foregroundStyle(.white)
+                Text(card.description)
+                    .font(.system(size: 13)).foregroundStyle(HomeTheme.textSecondary)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+                if let chip = card.chip { chipView(chip) }
+            }
+            .frame(minHeight: 190, alignment: .topLeading)
+            .homeCard(padding: 16)
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("homeCard_\(card.id)")
+    }
+
+    // MARK: - Mode-dependent content
+
+    private var modeContent: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            readinessCard
+            if mode.isOffline { offlineSection } else { newsSection }
+        }
+    }
+
+    private func sectionLabel(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 13, weight: .semibold)).tracking(0.4).foregroundStyle(HomeTheme.textSecondary)
+    }
+
+    /// Whole card opens VISION Ready; `.contain` keeps the percent / empty
+    /// texts independently addressable instead of merging into one button.
+    private var readinessCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                Image(systemName: "checkmark.shield").font(.system(size: 16)).accessibilityHidden(true)
+                Text("Offline readiness").font(.system(size: 15, weight: .semibold))
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .semibold)).foregroundStyle(HomeTheme.textTertiary)
+                    .accessibilityHidden(true)
+            }
+            .foregroundStyle(.white)
+            if let readiness, let percent = readiness.percent {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text("\(percent)%").font(.system(size: 28, weight: .bold)).foregroundStyle(.white)
+                        .accessibilityIdentifier("newTabReadinessPercent")
+                    Text("\(readiness.savedCount) of \(readiness.bookmarkCount) bookmarks saved offline")
+                        .font(.system(size: 13)).foregroundStyle(HomeTheme.textSecondary)
+                }
+                ProgressView(value: Double(percent), total: 100).tint(.white)
+            } else {
+                Text("Bookmark a page, then save it offline, to see how ready you are to browse without a connection.")
+                    .font(.system(size: 13)).foregroundStyle(HomeTheme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("newTabReadinessEmpty")
+            }
+        }
+        .homeCard()
+        .contentShape(Rectangle())
+        .onTapGesture { onOpen(.visionReady) }
+        .accessibilityElement(children: .contain)
+        .accessibilityAddTraits(.isButton)
+    }
+
+    // Offline: only things that genuinely work without a connection.
+    private var offlineSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            sectionLabel("Available offline")
+            VStack(alignment: .leading, spacing: 0) {
+                if savedPages.isEmpty {
+                    Text("Nothing saved yet. Open a page and choose Save Offline to keep it here.")
+                        .font(.system(size: 14)).foregroundStyle(HomeTheme.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.vertical, 4)
+                        .accessibilityIdentifier("offlineSavedEmptyText")
+                } else {
+                    ForEach(Array(savedPages.enumerated()), id: \.element.id) { index, page in
+                        Button(action: { onOpenSavedPage(URL(fileURLWithPath: page.contentPath)) }) {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(page.title).font(.system(size: 15)).foregroundStyle(.white)
+                                    .multilineTextAlignment(.leading).lineLimit(2)
+                                Text(ByteCountFormatter.string(fromByteCount: page.sizeBytes, countStyle: .file))
+                                    .font(.system(size: 12)).foregroundStyle(HomeTheme.textTertiary)
+                            }
+                            .padding(.vertical, 11)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .accessibilityIdentifier("offlineSavedPage_\(page.id)")
+                        if index < savedPages.count - 1 {
+                            Rectangle().fill(HomeTheme.divider).frame(height: 1)
+                        }
+                    }
+                }
+                Rectangle().fill(HomeTheme.divider).frame(height: 1).padding(.top, savedPages.isEmpty ? 8 : 0)
+                Button(action: { onOpen(.offlineLibrary) }) {
+                    HStack {
+                        Text("Open Offline Library").font(.system(size: 15, weight: .semibold)).foregroundStyle(.white)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 13, weight: .semibold)).foregroundStyle(HomeTheme.textTertiary)
+                    }
+                    .padding(.top, 12)
+                }
+                .accessibilityIdentifier("homeOpenOfflineLibrary")
+            }
+            .homeCard()
+
+            sectionLabel("On-device tools")
+            HStack(spacing: 10) {
+                toolChip("Tasks", icon: "checklist", destination: .tasks, id: "homeTool_tasks")
+                toolChip("Focus", icon: "scope", destination: .focus, id: "homeTool_focus")
+                toolChip("Flashcards", icon: "rectangle.on.rectangle", destination: .flashcards, id: "homeTool_flashcards")
+            }
+        }
+        .accessibilityIdentifier("homeOfflineSection")
+    }
+
+    private func toolChip(_ title: String, icon: String, destination: HomeDestination, id: String) -> some View {
+        Button(action: { onOpen(destination) }) {
+            VStack(spacing: 8) {
+                Image(systemName: icon).font(.system(size: 18)).accessibilityHidden(true)
+                Text(title).font(.system(size: 13, weight: .semibold))
+            }
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity, minHeight: 72)
+            .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color.black.opacity(0.42)))
+            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(HomeTheme.stroke, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier(id)
+    }
+
+    /// Real "Top Stories — BBC News" section (port of NewTabController.kt's
+    /// refreshNews()/buildNewsCard()): a status line while loading or on
+    /// failure, then up to 5 real headlines. Tapping one navigates the
+    /// current tab in place to the article.
+    @ViewBuilder
+    private var newsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionLabel("Top Stories — BBC News")
+            switch newsStatus {
+            case .loading:
+                Text("Loading headlines…")
+                    .font(.system(size: 13)).foregroundStyle(HomeTheme.textSecondary)
+                    .accessibilityIdentifier("newsStatusText")
+            case .empty:
+                Text("Couldn't reach BBC News right now — check your connection and reopen a new tab.")
+                    .font(.system(size: 13)).foregroundStyle(HomeTheme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("newsStatusText")
+            case .loaded:
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(headlines.enumerated()), id: \.element.id) { index, headline in
+                        Button(action: { onNavigate(headline.url) }) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(headline.title)
+                                    .font(.system(size: 15)).foregroundStyle(.white)
+                                    .multilineTextAlignment(.leading)
+                                Text(headline.source)
+                                    .font(.system(size: 12)).foregroundStyle(HomeTheme.textTertiary)
+                            }
+                            .padding(.vertical, 12)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .accessibilityIdentifier("newsHeadline_\(headline.id)")
+                        if index < headlines.count - 1 {
+                            Rectangle().fill(HomeTheme.divider).frame(height: 1)
+                        }
+                    }
+                }
+                .homeCard(padding: 14)
+                // `.contain` keeps each headline Button independently
+                // addressable (SwiftUI otherwise merges them into one).
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("newsHeadlinesList")
+            }
+        }
+    }
+
+    // MARK: - Footer
+
+    private var footer: some View {
+        VStack(spacing: 12) {
+            Rectangle().fill(HomeTheme.divider).frame(height: 1)
+            VisionWordmark(height: 16)
+            Text("For you to know the future, you need to have vision.")
+                .font(.system(size: 12)).foregroundStyle(HomeTheme.textTertiary)
+                .multilineTextAlignment(.center)
+                .accessibilityIdentifier("homeTagline")
+        }
+        .padding(.top, 6).padding(.bottom, 8)
+        .frame(maxWidth: .infinity)
+    }
+
+    // MARK: - Data
+
+    private func refresh() {
+        // Bookmarks are read only to compute Offline Readiness — not listed on
+        // this screen, matching Android's NewTabController.kt.
+        bookmarks = (try? bookmarkStore.list()) ?? []
+        shortcuts = (try? shortcutStore.list()) ?? []
+        savedPages = Array(((try? offlineStore.list()) ?? []).prefix(5))
+
+        advisorDismissed = false
+        advisorSuggestion = AdvisorLogic.getSuggestion(continuousSessionMs: WellbeingManager.shared.continuousSessionMs())
+
+        let offlineItems = (try? offlineStore.list()) ?? []
+        readiness = ReadinessLogic.compute(
+            bookmarkUrls: bookmarks.map { $0.url },
+            offlineUrls: offlineItems.map { $0.url },
+            offlineCategories: offlineItems.map { $0.category }
+        )
+
+        overview = TodayOverviewSnapshot.current(wellbeingStore: wellbeingStore)
+        pointsBalance = (try? rewardStore.availableBalance()) ?? 0
+    }
+
+    /// Real fetch, no caching — every time Home is shown while Online it
+    /// refetches (matches Android/desktop; see NewsClient).
+    private func refreshNews() async {
+        newsStatus = .loading
+        let fetched = await NewsClient.fetchTopHeadlines()
+        headlines = fetched
+        newsStatus = fetched.isEmpty ? .empty : .loaded
     }
 }

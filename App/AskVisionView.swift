@@ -97,7 +97,6 @@ struct AskVisionView: View {
                     conversationView
                 }
             }
-            .background(DesignSystem.bgCanvas.ignoresSafeArea())
             .navigationTitle(navigationTitleText)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -122,6 +121,7 @@ struct AskVisionView: View {
                     }
                 }
             }
+            .visionScreen()
         }
         .onAppear {
             if let initialQuery, !initialQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -149,21 +149,18 @@ struct AskVisionView: View {
             // Search + "New chat" row — always visible, matching
             // ChatSessionListActivity's own search row sitting above the
             // list regardless of whether it's empty.
-            HStack(spacing: 8) {
-                TextField("Search chats", text: $sessionSearchText)
-                    .textFieldStyle(.plain)
-                    .padding(.horizontal, 12).padding(.vertical, 8)
-                    .background(RoundedRectangle(cornerRadius: 10).fill(DesignSystem.bgCard))
-                    .foregroundStyle(.white)
+            HStack(spacing: DesignSystem.Space.s) {
+                TextField("", text: $sessionSearchText, prompt: Text("Search chats").foregroundColor(DesignSystem.textMuted2))
+                    .visionField()
+                    .accessibilityLabel("Search chats")
                     .accessibilityIdentifier("chatSessionSearchInput")
                 DesignSystem.primaryButton("New chat", onClick: startNewChat)
                     .accessibilityIdentifier("btnNewChatFromList")
             }
-            .padding(16)
+            .padding(DesignSystem.Space.l)
 
             if sessions.isEmpty {
                 DesignSystem.emptyState(
-                    emoji: "💬",
                     title: "No chats yet",
                     subtitle: "Start a real conversation with VISION.",
                     ctaText: "New chat",
@@ -186,9 +183,9 @@ struct AskVisionView: View {
                                 sessionRow(session)
                             }
                         } header: {
-                            Text(group.label)
-                                .font(.system(size: 12)).foregroundStyle(DesignSystem.textMuted2)
+                            DesignSystem.sectionLabel(group.label)
                                 .textCase(nil)
+                                .padding(.horizontal, DesignSystem.Space.l)
                         }
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
@@ -215,25 +212,28 @@ struct AskVisionView: View {
     @ViewBuilder
     private func sessionRow(_ session: ChatSessionSummary) -> some View {
         Button(action: { openSession(session.id) }) {
-            HStack(spacing: 12) {
+            HStack(spacing: DesignSystem.Space.m) {
                 Text(session.title)
-                    .font(.system(size: 14)).foregroundStyle(.white)
+                    .font(.system(size: 15)).foregroundStyle(.white)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 Button(action: { deleteSession(session.id) }) {
                     Image(systemName: "xmark")
                         .font(.system(size: 13))
                         .foregroundStyle(DesignSystem.textMuted2)
+                        .frame(width: 32, height: 32)
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("btnDeleteSessionRow_\(session.id)")
                 .accessibilityLabel("Delete chat")
             }
-            .padding(.horizontal, 16).padding(.vertical, 14)
-            .background(RoundedRectangle(cornerRadius: 16).fill(DesignSystem.bgCard))
-            .overlay(RoundedRectangle(cornerRadius: 16).stroke(DesignSystem.borderCard, lineWidth: 1))
+            .padding(.horizontal, DesignSystem.Space.l).padding(.vertical, DesignSystem.Space.m)
+            .background(RoundedRectangle(cornerRadius: DesignSystem.Radius.card, style: .continuous).fill(DesignSystem.bgCard))
         }
         .buttonStyle(.plain)
-        .padding(.bottom, 8)
+        .padding(.horizontal, DesignSystem.Space.l)
+        .padding(.bottom, DesignSystem.Space.s)
         .accessibilityIdentifier("askVisionSessionRow_\(session.id)")
         .swipeActions {
             Button(role: .destructive) {
@@ -266,7 +266,7 @@ struct AskVisionView: View {
                             .padding(.bottom, bubble.role == "assistant" ? 20 : 0)
                     }
                 }
-                .padding(16)
+                .padding(DesignSystem.Space.l)
             }
             .onChange(of: bubbles.count) { _ in
                 if let last = bubbles.last { proxy.scrollTo(last.id, anchor: .bottom) }
@@ -291,18 +291,18 @@ struct AskVisionView: View {
     private func bubbleView(_ bubble: ChatBubble) -> some View {
         if bubble.role == "user" {
             Text(bubble.content)
-                .font(.system(size: 14, weight: .bold))
+                .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(.white)
-                .padding(.horizontal, 16).padding(.vertical, 12)
-                .background(RoundedRectangle(cornerRadius: 16).fill(DesignSystem.bgCard))
-                .overlay(RoundedRectangle(cornerRadius: 16).stroke(DesignSystem.borderCard, lineWidth: 1))
+                .padding(.horizontal, DesignSystem.Space.l).padding(.vertical, DesignSystem.Space.m)
+                .background(RoundedRectangle(cornerRadius: DesignSystem.Radius.card, style: .continuous).fill(DesignSystem.bgRaised))
                 .accessibilityIdentifier("chatUserMessage_\(bubble.id)")
                 .id(bubble.id)
         } else {
             Text(bubble.content)
-                .font(.system(size: 14))
+                .font(.system(size: 15))
+                .lineSpacing(3)
                 .foregroundStyle(.white)
-                .padding(.horizontal, 8).padding(.vertical, 6)
+                .padding(.horizontal, DesignSystem.Space.s).padding(.vertical, DesignSystem.Space.xs)
                 .accessibilityIdentifier("chatAssistantMessage_\(bubble.id)")
                 .id(bubble.id)
         }
@@ -310,20 +310,21 @@ struct AskVisionView: View {
 
     @ViewBuilder
     private var askBar: some View {
-        HStack(spacing: 8) {
-            TextField("Ask VISION anything…", text: $messageText)
+        HStack(spacing: DesignSystem.Space.s) {
+            TextField("", text: $messageText, prompt: Text("Ask VISION anything…").foregroundColor(DesignSystem.textMuted2))
                 .textFieldStyle(.plain)
                 .disabled(sending)
-                .padding(.horizontal, 12).padding(.vertical, 8)
-                .background(RoundedRectangle(cornerRadius: 10).fill(DesignSystem.bgCard))
+                .padding(.horizontal, DesignSystem.Space.m).frame(minHeight: 44)
+                .background(RoundedRectangle(cornerRadius: DesignSystem.Radius.control, style: .continuous).fill(DesignSystem.bgRaised))
                 .foregroundStyle(.white)
+                .accessibilityLabel("Ask VISION")
                 .accessibilityIdentifier("chatMessageInput")
             DesignSystem.primaryButton("Send", onClick: send)
                 .opacity(sending ? 0.5 : 1)
                 .disabled(sending)
                 .accessibilityIdentifier("btnChatSend")
         }
-        .padding(16)
+        .padding(DesignSystem.Space.l)
         .background(DesignSystem.bgCanvas)
     }
 

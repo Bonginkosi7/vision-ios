@@ -14,27 +14,26 @@ struct SessionConfidencePrompt: View {
     var body: some View {
         if completed {
             Text("Session complete — nice work.")
-                .font(.system(size: 13)).foregroundStyle(DesignSystem.textMuted2)
+                .font(.system(size: 14)).foregroundStyle(DesignSystem.textMuted2)
                 .accessibilityIdentifier("studySessionComplete")
         } else {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: DesignSystem.Space.m) {
                 Text("How confident do you feel about this topic?")
-                    .font(.system(size: 13)).foregroundStyle(DesignSystem.textMuted2)
-                HStack(spacing: 4) {
-                    confidenceButton(1, "😕 Not confident")
-                    confidenceButton(2, "😐 Getting there")
-                    confidenceButton(3, "🙂 Confident")
-                    confidenceButton(4, "🔥 Very confident")
+                    .font(.system(size: 15, weight: .semibold)).foregroundStyle(.white)
+                VStack(spacing: DesignSystem.Space.s) {
+                    confidenceButton(1, "Not confident")
+                    confidenceButton(2, "Getting there")
+                    confidenceButton(3, "Confident")
+                    confidenceButton(4, "Very confident")
                 }
             }
-            .padding(.top, 12)
+            .padding(.top, DesignSystem.Space.m)
         }
     }
 
-    @ViewBuilder
+    /// Plain words, one per row: the scale reads without emoji or colour.
     private func confidenceButton(_ value: Int, _ label: String) -> some View {
-        Button(label) { onRate(value) }
-            .font(.system(size: 11, weight: .bold))
+        DesignSystem.secondaryButton(label, fullWidth: true) { onRate(value) }
             .accessibilityIdentifier("studyConfidence_\(value)")
     }
 }

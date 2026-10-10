@@ -26,6 +26,8 @@ struct TabSwitcherView: View {
                         dismiss()
                     }
                     .accessibilityIdentifier("tabRow_\(tab.id)")
+                    .listRowBackground(DesignSystem.bgCanvas)
+                    .listRowSeparatorTint(DesignSystem.borderCard)
                     .swipeActions {
                         Button(role: .destructive) {
                             tabManager.closeTab(tab)
@@ -37,8 +39,9 @@ struct TabSwitcherView: View {
                 }
             }
             .listStyle(.plain)
+            .scrollContentBackground(.hidden)
             .accessibilityIdentifier("tabsList")
-            .background(DesignSystem.bgCanvas.ignoresSafeArea())
+            .visionScreen()
             .navigationTitle("Tabs")
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -68,17 +71,19 @@ private struct TabRow: View {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(tab.isNewTab ? "New Tab" : (tab.title.isEmpty ? tab.url : tab.title))
+                        .font(.system(size: 15, weight: .medium))
                         .foregroundStyle(.white).lineLimit(1)
                     if !tab.isNewTab {
-                        Text(tab.url).font(.caption).foregroundStyle(DesignSystem.textMuted2).lineLimit(1)
+                        Text(FaviconCache.host(from: tab.url) ?? tab.url)
+                            .font(.system(size: 12)).foregroundStyle(DesignSystem.textMuted2).lineLimit(1)
                     }
                 }
                 Spacer()
                 if tab.isPrivate {
-                    Text("Private").font(.caption).foregroundStyle(DesignSystem.visionBlue)
+                    Text("Private").font(.system(size: 12, weight: .semibold)).foregroundStyle(DesignSystem.textMuted2)
                 }
                 if isActive {
-                    Image(systemName: "checkmark").foregroundStyle(DesignSystem.visionPurple)
+                    Image(systemName: "checkmark").foregroundStyle(.white)
                         .accessibilityIdentifier("activeTabCheckmark_\(tab.id)")
                 }
             }

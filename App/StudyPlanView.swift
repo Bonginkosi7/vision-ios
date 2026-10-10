@@ -49,26 +49,26 @@ struct StudyPlanView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: DesignSystem.Space.l) {
                     Text("A weekly plan generated from your real topic mastery — weaker topics get more sessions, automatically.")
-                        .font(.system(size: 13)).foregroundStyle(DesignSystem.textMuted2)
+                        .font(.system(size: 14)).foregroundStyle(DesignSystem.textMuted2)
 
                     documentPicker
                     examDateRow
-                    DesignSystem.primaryButton("Generate weekly plan") { generatePlan() }
+                    DesignSystem.primaryButton("Generate weekly plan", fullWidth: true) { generatePlan() }
                         .accessibilityIdentifier("btnGenerateStudyPlan")
 
                     if let currentPlan {
                         if let countdown = examCountdownText(currentPlan.examDate) {
-                            Text(countdown).font(.system(size: 13, weight: .bold)).foregroundStyle(DesignSystem.textMuted2)
+                            Text(countdown).font(.system(size: 14, weight: .semibold)).foregroundStyle(DesignSystem.textMuted2)
                                 .accessibilityIdentifier("studyPlanExamCountdown")
                         }
                         weeklyGrid(currentPlan)
                     }
                 }
-                .padding(16)
+                .padding(DesignSystem.Space.l)
             }
-            .background(DesignSystem.bgCanvas.ignoresSafeArea())
+            .visionScreen()
             .navigationTitle("My Week")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -117,13 +117,15 @@ struct StudyPlanView: View {
 
     @ViewBuilder
     private var examDateRow: some View {
-        HStack {
+        HStack(spacing: DesignSystem.Space.m) {
             Button(examDate.map(formattedExamDate) ?? "Exam date (optional)") { showDatePicker = true }
-                .font(.system(size: 13)).foregroundStyle(.white)
+                .font(.system(size: 15)).foregroundStyle(.white)
+                .frame(minHeight: 44)
                 .accessibilityIdentifier("studyPlanExamDateInput")
             if examDate != nil {
                 Button("Clear") { examDate = nil }
-                    .font(.system(size: 12)).foregroundStyle(DesignSystem.textMuted2)
+                    .font(.system(size: 14)).foregroundStyle(DesignSystem.textMuted2)
+                    .frame(minHeight: 44)
                     .accessibilityIdentifier("btnClearExamDate")
             }
         }
@@ -167,10 +169,10 @@ struct StudyPlanView: View {
     private func weeklyGrid(_ plan: StudyPlan) -> some View {
         if currentItems.isEmpty {
             Text("No topics available yet to build a plan from — process a document first.")
-                .font(.system(size: 13)).foregroundStyle(DesignSystem.textMuted2)
+                .font(.system(size: 14)).foregroundStyle(DesignSystem.textMuted2)
                 .accessibilityIdentifier("studyPlanEmpty")
         } else {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: DesignSystem.Space.m) {
                 ForEach(0..<7, id: \.self) { offset in
                     dayCard(plan, offset: offset)
                 }
@@ -183,10 +185,10 @@ struct StudyPlanView: View {
         let dayDate = plan.weekStartAt.addingTimeInterval(Double(offset) * 24 * 60 * 60)
         let items = currentItems.filter { $0.dayOffset == offset }
         DesignSystem.card {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(formattedDay(dayDate)).font(.system(size: 14, weight: .bold)).foregroundStyle(.white)
+            VStack(alignment: .leading, spacing: DesignSystem.Space.s) {
+                Text(formattedDay(dayDate)).font(.system(size: 15, weight: .semibold)).foregroundStyle(.white)
                 if items.isEmpty {
-                    Text("Rest / review").font(.system(size: 13)).foregroundStyle(DesignSystem.textMuted2)
+                    Text("Rest / review").font(.system(size: 14)).foregroundStyle(DesignSystem.textMuted2)
                 } else {
                     ForEach(items) { item in
                         planItemRow(item)
@@ -202,20 +204,22 @@ struct StudyPlanView: View {
         VStack(alignment: .leading, spacing: 2) {
             HStack {
                 Text(activityLabel(item.activityType) + (topicName.map { " — \($0)" } ?? ""))
-                    .font(.system(size: 13)).foregroundStyle(.white)
+                    .font(.system(size: 15)).foregroundStyle(.white)
                 if item.completedAt != nil {
-                    Text("Done").font(.system(size: 11)).foregroundStyle(DesignSystem.textMuted2)
+                    // "Done" is stated in words, not signalled by colour.
+                    Text("Done").font(.system(size: 12, weight: .semibold)).foregroundStyle(DesignSystem.textMuted2)
                         .accessibilityIdentifier("studyPlanItemDone_\(item.id)")
                 }
             }
-            Text(item.rationale).font(.system(size: 12)).foregroundStyle(DesignSystem.textMuted2)
+            Text(item.rationale).font(.system(size: 13)).foregroundStyle(DesignSystem.textMuted2)
             if item.completedAt == nil {
                 Button("Start session") { startSession(item) }
-                    .font(.system(size: 11, weight: .bold))
+                    .font(.system(size: 14, weight: .semibold))
+                    .frame(minHeight: 36)
                     .accessibilityIdentifier("btnStartSession_\(item.id)")
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, DesignSystem.Space.xs)
     }
 
     private func activityLabel(_ type: EduPlanActivityType) -> String {

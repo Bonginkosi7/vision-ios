@@ -27,20 +27,22 @@ struct TasksView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                HStack {
-                    TextField("Add a task", text: $newTaskTitle, onCommit: addTask)
-                        .textFieldStyle(.plain)
-                        .padding(.horizontal, 12).padding(.vertical, 8)
-                        .background(RoundedRectangle(cornerRadius: 10).fill(DesignSystem.bgCard))
-                        .foregroundStyle(.white)
+                HStack(spacing: DesignSystem.Space.s) {
+                    TextField("", text: $newTaskTitle, prompt: Text("Add a task").foregroundColor(DesignSystem.textMuted2))
+                        .onSubmit(addTask)
+                        .visionField()
+                        .accessibilityLabel("Add a task")
                         .accessibilityIdentifier("newTaskField")
                     Button(action: addTask) {
-                        Image(systemName: "plus.circle.fill")
+                        Text("Add")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(newTaskTitle.trimmingCharacters(in: .whitespaces).isEmpty ? DesignSystem.textMuted2 : .white)
+                            .padding(.horizontal, DesignSystem.Space.m).frame(minHeight: 44)
                     }
                     .disabled(newTaskTitle.trimmingCharacters(in: .whitespaces).isEmpty)
                     .accessibilityIdentifier("addTaskButton")
                 }
-                .padding(16)
+                .padding(DesignSystem.Space.l)
 
                 Picker("Filter", selection: $filter) {
                     ForEach(Filter.allCases, id: \.self) { option in
@@ -48,13 +50,12 @@ struct TasksView: View {
                     }
                 }
                 .pickerStyle(.segmented)
-                .padding(.horizontal, 16)
+                .padding(.horizontal, DesignSystem.Space.l)
                 .accessibilityIdentifier("taskFilterPicker")
 
                 if filteredTasks.isEmpty {
                     Spacer()
                     DesignSystem.emptyState(
-                        emoji: "✅",
                         title: "No tasks here",
                         subtitle: filter == .all ? "Add your first task above." : "Nothing in this filter yet.",
                         ctaText: "Got it",
@@ -65,15 +66,22 @@ struct TasksView: View {
                 } else {
                     List {
                         ForEach(filteredTasks) { task in
+                            // Done-ness is shown by the checkmark shape and the
+                            // strikethrough, not by colour.
                             Button(action: { toggleComplete(task) }) {
-                                HStack {
+                                HStack(spacing: DesignSystem.Space.m) {
                                     Image(systemName: task.completedAt != nil ? "checkmark.circle.fill" : "circle")
-                                        .foregroundStyle(task.completedAt != nil ? DesignSystem.statusSuccess : DesignSystem.textMuted2)
+                                        .font(.system(size: 20))
+                                        .foregroundStyle(task.completedAt != nil ? Color.white : DesignSystem.textMuted2)
                                     Text(task.title)
-                                        .foregroundStyle(.white)
+                                        .font(.system(size: 15))
+                                        .foregroundStyle(task.completedAt != nil ? DesignSystem.textMuted2 : .white)
                                         .strikethrough(task.completedAt != nil)
                                 }
+                                .padding(.vertical, DesignSystem.Space.xs)
                             }
+                            .listRowBackground(DesignSystem.bgCanvas)
+                            .listRowSeparatorTint(DesignSystem.borderCard)
                             .accessibilityIdentifier("taskRow_\(task.id)")
                             .swipeActions {
                                 Button(role: .destructive) { removeTask(task) } label: {
@@ -83,10 +91,11 @@ struct TasksView: View {
                         }
                     }
                     .listStyle(.plain)
+                    .scrollContentBackground(.hidden)
                     .accessibilityIdentifier("tasksList")
                 }
             }
-            .background(DesignSystem.bgCanvas.ignoresSafeArea())
+            .visionScreen()
             .navigationTitle("Tasks")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {

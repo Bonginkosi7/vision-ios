@@ -64,6 +64,9 @@ enum AppSettings {
     static let searchEngineKey = "search_engine"
     static let themeKey = "theme"
     static let offlineStorageLimitMbKey = "offline_storage_limit_mb"
+    /// The homepage's Offline Mode choice (see HomeConnectivityMode). Off by
+    /// default; read via @AppStorage so the homepage redraws when it changes.
+    static let offlineModeKey = "offline_mode_enabled"
     static let analyticsEnabledKey = "analytics_enabled"
     static let diagnosticsEnabledKey = "diagnostics_enabled"
     private static let analyticsInstallationIDKey = "analytics_installation_id"

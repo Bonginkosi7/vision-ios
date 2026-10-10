@@ -27,7 +27,7 @@ struct PerformanceView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .leading, spacing: DesignSystem.Space.xl) {
                     documentPicker
                     DesignSystem.sectionLabel("All Topics")
                     topicsSection
@@ -36,15 +36,15 @@ struct PerformanceView: View {
                     DesignSystem.sectionLabel("Needs Attention")
                     summarySection(weakTopics, emptyText: "Nothing flagged as weak right now.", emptyId: "performanceEmptyWeak", idPrefix: "performanceWeakRow_")
                 }
-                .padding(16)
+                .padding(DesignSystem.Space.l)
             }
-            .background(DesignSystem.bgCanvas.ignoresSafeArea())
             .navigationTitle("Your Performance")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Done") { dismiss() }
                 }
             }
+            .visionScreen()
         }
         .onAppear(perform: loadDocuments)
     }
@@ -66,16 +66,14 @@ struct PerformanceView: View {
     private var topicsSection: some View {
         if allTopics.isEmpty {
             Text("No topics yet — process a document and generate flashcards or a mock test to see real performance data build up here.")
-                .font(.system(size: 13)).foregroundStyle(DesignSystem.textMuted2)
+                .font(.system(size: 14)).foregroundStyle(DesignSystem.textMuted2)
                 .accessibilityIdentifier("performanceEmptyTopics")
         } else {
-            VStack(alignment: .leading, spacing: 10) {
-                let level1 = allTopics.filter { $0.level == 1 }
-                ForEach(level1) { topic in
-                    topicRow(topic, indented: false)
-                    ForEach(allTopics.filter { $0.parentTopicId == topic.topicId }) { sub in
-                        topicRow(sub, indented: true)
-                    }
+            DesignSystem.card {
+                let rows = orderedTopicRows()
+                ForEach(Array(rows.enumerated()), id: \.element.topic.topicId) { index, row in
+                    topicRow(row.topic, indented: row.indented)
+                    if index < rows.count - 1 { DesignSystem.divider() }
                 }
             }
         }
@@ -83,17 +81,21 @@ struct PerformanceView: View {
 
     @ViewBuilder
     private func topicRow(_ topic: TopicMastery, indented: Bool) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: DesignSystem.Space.m) {
             Text(topic.name)
-                .font(.system(size: 13)).foregroundStyle(.white.opacity(indented ? 0.7 : 1))
+                .font(.system(size: 15)).foregroundStyle(indented ? DesignSystem.textMuted2 : .white)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            ProgressView(value: Double(topic.masteryPercent), total: 100)
-                .tint(color(for: topic.status))
-                .frame(width: 80)
-            Text(topic.status == .notAssessed ? "Not yet assessed" : "\(topic.masteryPercent)%")
-                .font(.system(size: 12)).foregroundStyle(DesignSystem.textMuted2)
+            if topic.status != .notAssessed {
+                masteryBar(percent: topic.masteryPercent, status: topic.status)
+            }
+            // Status is always stated in words as well as shown by the bar,
+            // so it never depends on colour alone.
+            Text(statusText(for: topic))
+                .font(.system(size: 12)).foregroundStyle(statusTextColor(for: topic.status))
+                .frame(minWidth: 84, alignment: .trailing)
         }
-        .padding(.leading, indented ? 24 : 0)
+        .padding(.vertical, DesignSystem.Space.m)
+        .padding(.leading, indented ? DesignSystem.Space.xl : 0)
         .accessibilityIdentifier("performanceTopicRow_\(topic.topicId)")
     }
 
@@ -101,26 +103,62 @@ struct PerformanceView: View {
     private func summarySection(_ topics: [TopicMastery], emptyText: String, emptyId: String, idPrefix: String) -> some View {
         if topics.isEmpty {
             Text(emptyText)
-                .font(.system(size: 13)).foregroundStyle(DesignSystem.textMuted2)
+                .font(.system(size: 14)).foregroundStyle(DesignSystem.textMuted2)
                 .accessibilityIdentifier(emptyId)
         } else {
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: DesignSystem.Space.s) {
                 ForEach(topics) { topic in
                     Text("\(topic.name) — \(topic.masteryPercent)%")
-                        .font(.system(size: 13)).foregroundStyle(.white)
+                        .font(.system(size: 15)).foregroundStyle(.white)
                         .accessibilityIdentifier("\(idPrefix)\(topic.topicId)")
                 }
             }
         }
     }
 
-    private func color(for status: MasteryStatus) -> Color {
+    /// Level-1 topics each followed by their sub-topics, in display order.
+    private func orderedTopicRows() -> [(topic: TopicMastery, indented: Bool)] {
+        var rows: [(topic: TopicMastery, indented: Bool)] = []
+        for topic in allTopics.filter({ $0.level == 1 }) {
+            rows.append((topic, false))
+            for sub in allTopics.filter({ $0.parentTopicId == topic.topicId }) { rows.append((sub, true)) }
+        }
+        return rows
+    }
+
+    private func masteryBar(percent: Int, status: MasteryStatus) -> some View {
+        GeometryReader { geometry in
+            ZStack(alignment: .leading) {
+                Capsule().fill(DesignSystem.bgRaised)
+                Capsule().fill(barColor(for: status))
+                    .frame(width: geometry.size.width * CGFloat(min(max(percent, 0), 100)) / 100)
+            }
+        }
+        .frame(width: 64, height: 6)
+    }
+
+    /// Red only for a weak topic (a real warning); everything else is white,
+    /// dimmer while still developing.
+    private func barColor(for status: MasteryStatus) -> Color {
         switch status {
-        case .strong: return DesignSystem.statusSuccess
+        case .strong: return .white
+        case .developing: return Color.white.opacity(0.55)
         case .weak: return DesignSystem.statusDangerText
-        case .developing: return DesignSystem.statDotOrange
         case .notAssessed: return DesignSystem.textMuted2
         }
+    }
+
+    private func statusText(for topic: TopicMastery) -> String {
+        switch topic.status {
+        case .strong: return "Strong · \(topic.masteryPercent)%"
+        case .developing: return "Developing · \(topic.masteryPercent)%"
+        case .weak: return "Weak · \(topic.masteryPercent)%"
+        case .notAssessed: return "Not yet assessed"
+        }
+    }
+
+    private func statusTextColor(for status: MasteryStatus) -> Color {
+        status == .weak ? DesignSystem.statusDangerText : DesignSystem.textMuted2
     }
 
     private func loadDocuments() {

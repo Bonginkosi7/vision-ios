@@ -1,12 +1,17 @@
 import SwiftUI
 
-/// Real saved bookmarks list — port of `BookmarksActivity.kt`: list, tap
-/// to open, per-entry delete. New Tab already shows a bookmarks row for
-/// quick access; this is the real, dedicated management screen Android's
-/// own overflow menu reaches separately (`action_bookmarks`) — found as
-/// a genuine, previously-undisclosed gap during a cross-source sweep
-/// (`BookmarkStore.swift` already had everything this screen needs
-/// since Phase 1, it just had no screen of its own yet).
+/// Real saved bookmarks list — port of `BookmarksActivity.kt`: list, tap to
+/// open, per-entry delete. Each row shows the site's real favicon (cached
+/// on-device, a grey globe when none was captured), the page title and the
+/// domain. Bookmarks are a flat list on iOS — there are no folders to preserve.
+///
+/// Accessibility structure below is deliberate and CI-proven, not incidental:
+/// - the open button and the delete button are siblings, each with its own
+///   URL-scoped identifier (putting one identifier on the row container pushed
+///   it onto BOTH children and broke queries);
+/// - `.accessibilityElement(children: .contain)` stops SwiftUI merging the two
+///   buttons into one element for VoiceOver, which had swallowed the delete
+///   button's identity.
 struct BookmarksView: View {
     @ObservedObject var bookmarkStore: BookmarkStore
     let onOpen: (String) -> Void
@@ -18,88 +23,25 @@ struct BookmarksView: View {
         NavigationStack {
             Group {
                 if bookmarks.isEmpty {
-                    // Android's emptyBookmarksText (activity_bookmarks.xml) is a single
-                    // plain, centered, 32dp-padded, 0.6-alpha TextView with one line of
-                    // copy — no emoji, no title/subtitle split, no CTA button. This
-                    // screen (BookmarksActivity.kt) never touches the componentized
-                    // DesignSystem.kt, so DesignSystem.emptyState (which always renders
-                    // an illustration + CTA) doesn't belong here; match the plain text.
                     Text("No bookmarks yet — tap the star on any page to save it.")
+                        .font(.system(size: 15))
+                        .foregroundStyle(DesignSystem.textMuted2)
                         .multilineTextAlignment(.center)
-                        .opacity(0.6)
-                        .padding(32)
+                        .padding(DesignSystem.Space.xxl)
                         .accessibilityIdentifier("emptyBookmarksListState")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     List {
                         ForEach(bookmarks) { bookmark in
-                            HStack(spacing: 12) {
-                                // The real bug this fixes (hit several times before in this
-                                // codebase): applying .accessibilityIdentifier to a container
-                                // with more than one interactive child — here, this open
-                                // button AND the trailing delete button — doesn't tag one
-                                // merged element, it pushes the SAME identifier onto every
-                                // child independently. A real CI run confirmed this exactly:
-                                // app.buttons["bookmarksListRow_<url>"] matched BOTH buttons.
-                                // The identifier belongs on the specific button this screen's
-                                // own UI test actually queries, not the row container.
-                                Button(action: { onOpen(bookmark.url); dismiss() }) {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        // Android's bookmarkTitle is textStyle="bold" 15sp.
-                                        Text(bookmark.title)
-                                            .font(.system(size: 15, weight: .bold))
-                                            .lineLimit(1)
-                                        // Android's bookmarkUrl is 12sp at alpha 0.65 of the
-                                        // default (theme-adaptive) text color.
-                                        Text(bookmark.url)
-                                            .font(.system(size: 12))
-                                            .foregroundStyle(.secondary)
-                                            .lineLimit(1)
-                                    }
-                                }
-                                .buttonStyle(.plain)
-                                .accessibilityIdentifier("bookmarksListRow_\(bookmark.url)")
-                                Spacer(minLength: 8)
-                                // Android has no swipe-to-delete here: btnDeleteBookmark is an
-                                // always-visible 40dp ImageButton (ic_menu_delete) at the row's
-                                // trailing end, a separate tap target from the row body.
-                                Button(action: { delete(bookmark) }) {
-                                    Image(systemName: "trash")
-                                        .foregroundStyle(.secondary)
-                                }
-                                .buttonStyle(.plain)
-                                // A third real CI run found a third real issue once
-                                // the delete button was no longer swallowed: every
-                                // row's delete button shares the plain label
-                                // "Delete", and this suite's tests all share one
-                                // real database across the whole run — by this
-                                // point more than one real bookmark exists, so
-                                // app.buttons["Delete"] matched multiple rows at
-                                // once. A URL-scoped identifier, same pattern as
-                                // the open button above, disambiguates it for real
-                                // regardless of how many bookmarks exist.
-                                .accessibilityIdentifier("btnDeleteBookmark_\(bookmark.url)")
-                                .accessibilityLabel("Delete")
-                            }
-                            .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 8))
-                            // A second real CI run found a second, different
-                            // half of the same accessibility-merging class of
-                            // bug fixed above: without this, SwiftUI's default
-                            // behavior re-merges a row's multiple interactive
-                            // children into one accessibility element for
-                            // VoiceOver — which swallowed the trailing delete
-                            // button's own identity entirely (app.buttons["Delete"]
-                            // stopped resolving to anything after the open
-                            // button gained its own identifier). Confirmed via
-                            // the real captured log: the delete button simply
-                            // never appeared after an otherwise-successful
-                            // swipe. `.contain` keeps every child independently
-                            // accessible — same fix New Tab's own bookmarks row
-                            // already needed for the identical reason.
-                            .accessibilityElement(children: .contain)
+                            row(for: bookmark)
+                                .listRowBackground(DesignSystem.bgCanvas)
+                                .listRowSeparatorTint(DesignSystem.borderCard)
+                                .listRowInsets(EdgeInsets(top: DesignSystem.Space.m, leading: DesignSystem.Space.l, bottom: DesignSystem.Space.m, trailing: DesignSystem.Space.s))
+                                .accessibilityElement(children: .contain)
                         }
                     }
                     .listStyle(.plain)
+                    .scrollContentBackground(.hidden)
                     .accessibilityIdentifier("bookmarksList")
                 }
             }
@@ -109,8 +51,48 @@ struct BookmarksView: View {
                     Button("Done") { dismiss() }
                 }
             }
+            .visionScreen()
         }
         .onAppear(perform: refresh)
+    }
+
+    @ViewBuilder
+    private func row(for bookmark: Bookmark) -> some View {
+        let host = FaviconCache.host(from: bookmark.url) ?? bookmark.url
+        HStack(spacing: DesignSystem.Space.m) {
+            Button(action: { onOpen(bookmark.url); dismiss() }) {
+                HStack(spacing: DesignSystem.Space.m) {
+                    FaviconView(host: host, size: 32)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(bookmark.title)
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundStyle(.white)
+                            .lineLimit(1)
+                        Text(host)
+                            .font(.system(size: 12))
+                            .foregroundStyle(DesignSystem.textMuted2)
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("bookmarksListRow_\(bookmark.url)")
+
+            // Always visible, a separate target from the row body (as on
+            // Android). Identifier is URL-scoped because every row's button
+            // shares the label "Delete" and the suite shares one database.
+            Button(action: { delete(bookmark) }) {
+                Image(systemName: "trash")
+                    .font(.system(size: 15))
+                    .foregroundStyle(DesignSystem.textMuted2)
+                    .frame(width: 44, height: 44)
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("btnDeleteBookmark_\(bookmark.url)")
+            .accessibilityLabel("Delete")
+        }
     }
 
     private func refresh() {

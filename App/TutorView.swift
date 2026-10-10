@@ -43,22 +43,22 @@ struct TutorView: View {
                 documentPicker
                 ScrollViewReader { proxy in
                     ScrollView {
-                        VStack(alignment: .leading, spacing: 12) {
+                        VStack(alignment: .leading, spacing: DesignSystem.Space.m) {
                             suggestionChips
                             ForEach(exchanges) { exchange in
                                 exchangeCard(exchange)
                             }
                         }
-                        .padding(16)
+                        .padding(DesignSystem.Space.l)
                     }
                     .onChange(of: exchanges.count) { _ in
                         if let last = exchanges.last { proxy.scrollTo(last.id, anchor: .bottom) }
                     }
                 }
-                Divider()
+                DesignSystem.divider()
                 askBar
             }
-            .background(DesignSystem.bgCanvas.ignoresSafeArea())
+            .visionScreen()
             .navigationTitle("AI Tutor")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -76,7 +76,7 @@ struct TutorView: View {
             ForEach(processedDocs) { doc in Text(doc.title).tag(doc.id) }
         }
         .pickerStyle(.menu)
-        .padding(.horizontal, 16).padding(.top, 8)
+        .padding(.horizontal, DesignSystem.Space.l).padding(.top, DesignSystem.Space.s)
         .accessibilityIdentifier("tutorDocumentPicker")
     }
 
@@ -86,9 +86,10 @@ struct TutorView: View {
             HStack(spacing: 8) {
                 ForEach(Array(tutorSuggestions.enumerated()), id: \.offset) { index, suggestion in
                     Button(suggestion) { ask(suggestion) }
-                        .font(.system(size: 12, weight: .bold))
-                        .padding(.horizontal, 12).padding(.vertical, 8)
+                        .font(.system(size: 13, weight: .medium))
+                        .padding(.horizontal, DesignSystem.Space.m).padding(.vertical, DesignSystem.Space.s)
                         .background(Capsule().fill(DesignSystem.bgCard))
+                        .overlay(Capsule().stroke(DesignSystem.borderCard, lineWidth: 1))
                         .foregroundStyle(.white)
                         .accessibilityIdentifier("tutorSuggestion_\(index)")
                 }
@@ -100,18 +101,18 @@ struct TutorView: View {
     @ViewBuilder
     private func exchangeCard(_ exchange: TutorExchange) -> some View {
         DesignSystem.card {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(exchange.question).font(.system(size: 14, weight: .bold)).foregroundStyle(.white)
+            VStack(alignment: .leading, spacing: DesignSystem.Space.s) {
+                Text(exchange.question).font(.system(size: 15, weight: .semibold)).foregroundStyle(.white)
                     .accessibilityIdentifier("tutorQuestion_\(exchange.id)")
                 if let answerText = exchange.answerText {
-                    Text(answerText).font(.system(size: 13)).foregroundStyle(.white)
+                    Text(answerText).font(.system(size: 15)).lineSpacing(3).foregroundStyle(.white)
                         .accessibilityIdentifier("tutorAnswer_\(exchange.id)")
                     if let sourceLabel = exchange.sourceLabel {
-                        Text(sourceLabel).font(.system(size: 11)).foregroundStyle(DesignSystem.textMuted2)
+                        Text(sourceLabel).font(.system(size: 12)).foregroundStyle(DesignSystem.textMuted2)
                             .accessibilityIdentifier("tutorSource_\(exchange.id)")
                     }
                 } else {
-                    Text("Thinking…").font(.system(size: 13)).foregroundStyle(DesignSystem.textMuted2)
+                    Text("Thinking…").font(.system(size: 14)).foregroundStyle(DesignSystem.textMuted2)
                         .accessibilityIdentifier("tutorThinking_\(exchange.id)")
                 }
             }
@@ -121,22 +122,22 @@ struct TutorView: View {
 
     @ViewBuilder
     private var askBar: some View {
-        HStack(spacing: 8) {
-            TextField("Ask about your material…", text: $askText)
-                .textFieldStyle(.plain)
-                .padding(.horizontal, 12).padding(.vertical, 8)
-                .background(RoundedRectangle(cornerRadius: 10).fill(DesignSystem.bgCard))
-                .foregroundStyle(.white)
+        HStack(spacing: DesignSystem.Space.s) {
+            TextField("", text: $askText, prompt: Text("Ask about your material…").foregroundColor(DesignSystem.textMuted2))
+                .visionField()
+                .accessibilityLabel("Ask about your material")
                 .accessibilityIdentifier("tutorAskInput")
             Button("Ask") {
                 let question = askText
                 askText = ""
                 ask(question)
             }
+            .font(.system(size: 15, weight: .semibold))
+            .frame(minHeight: 44)
             .disabled(sending)
             .accessibilityIdentifier("btnTutorAsk")
         }
-        .padding(16)
+        .padding(DesignSystem.Space.l)
         .background(DesignSystem.bgCanvas)
     }
 

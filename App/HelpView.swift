@@ -8,25 +8,25 @@ struct HelpView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .leading, spacing: DesignSystem.Space.xl) {
                     ForEach(Array(helpSections.enumerated()), id: \.offset) { sectionIndex, section in
-                        VStack(alignment: .leading, spacing: 10) {
+                        VStack(alignment: .leading, spacing: DesignSystem.Space.m) {
                             DesignSystem.sectionLabel(section.label)
                             ForEach(Array(section.cards.enumerated()), id: \.offset) { cardIndex, card in
                                 DesignSystem.card {
-                                    VStack(alignment: .leading, spacing: 6) {
-                                        Text(card.title).font(.system(size: 14, weight: .bold)).foregroundStyle(.white)
+                                    VStack(alignment: .leading, spacing: DesignSystem.Space.xs) {
+                                        Text(card.title).font(.system(size: 15, weight: .semibold)).foregroundStyle(.white)
                                             .accessibilityIdentifier("helpCardTitle_\(sectionIndex)_\(cardIndex)")
-                                        Text(card.body).font(.system(size: 13)).foregroundStyle(DesignSystem.textMuted2)
+                                        Text(card.body).font(.system(size: 14)).foregroundStyle(DesignSystem.textMuted2)
                                     }
                                 }
                             }
                         }
                     }
                 }
-                .padding(16)
+                .padding(DesignSystem.Space.l)
             }
-            .background(DesignSystem.bgCanvas.ignoresSafeArea())
+            .visionScreen()
             .navigationTitle("Help")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {

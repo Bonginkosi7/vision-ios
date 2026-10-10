@@ -40,7 +40,6 @@ struct GenerateExamView: View {
             Group {
                 if processedDocs.isEmpty {
                     DesignSystem.emptyState(
-                        emoji: "📝",
                         title: "No processed material yet",
                         subtitle: "Process a document in My Materials first.",
                         ctaText: "Got it",
@@ -48,10 +47,9 @@ struct GenerateExamView: View {
                     )
                     .accessibilityIdentifier("generateExamNoDocuments")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(DesignSystem.bgCanvas)
                 } else {
                     ScrollView {
-                        VStack(alignment: .leading, spacing: 16) {
+                        VStack(alignment: .leading, spacing: DesignSystem.Space.l) {
                             Picker("Document", selection: Binding(get: { selectedDocId ?? "" }, set: { selectedDocId = $0 })) {
                                 ForEach(processedDocs) { doc in Text(doc.title).tag(doc.id) }
                             }
@@ -59,27 +57,27 @@ struct GenerateExamView: View {
                             .accessibilityIdentifier("generateExamDocumentPicker")
 
                             DesignSystem.card {
-                                VStack(alignment: .leading, spacing: 12) {
+                                VStack(alignment: .leading, spacing: DesignSystem.Space.m) {
                                     labeledField("Exam title (optional)", text: $titleText, id: "generateExamTitleInput")
                                     labeledField("Time limit in minutes (optional)", text: $timeLimitText, id: "generateExamTimeLimitInput", numeric: true)
                                     labeledField("MCQ", text: $mcqCountText, id: "generateExamMcqCount", numeric: true)
                                     labeledField("True/False", text: $tfCountText, id: "generateExamTfCount", numeric: true)
                                     labeledField("Short answer", text: $shortCountText, id: "generateExamShortCount", numeric: true)
-                                    DesignSystem.primaryButton(generating ? "Generating…" : "Generate Mock Test") { generate() }
+                                    DesignSystem.primaryButton(generating ? "Generating…" : "Generate Mock Test", fullWidth: true) { generate() }
                                         .disabled(generating)
                                         .accessibilityIdentifier("btnGenerateExam")
                                     if let status {
-                                        Text(status).font(.system(size: 12)).foregroundStyle(DesignSystem.textMuted2)
+                                        Text(status).font(.system(size: 13)).foregroundStyle(DesignSystem.textMuted2)
                                             .accessibilityIdentifier("generateExamStatus")
                                     }
                                 }
                             }
                         }
-                        .padding(16)
+                        .padding(DesignSystem.Space.l)
                     }
-                    .background(DesignSystem.bgCanvas.ignoresSafeArea())
                 }
             }
+            .visionScreen()
             .navigationTitle("Generate Mock Test")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -92,12 +90,10 @@ struct GenerateExamView: View {
 
     @ViewBuilder
     private func labeledField(_ label: String, text: Binding<String>, id: String, numeric: Bool = false) -> some View {
-        TextField(label, text: text)
+        TextField("", text: text, prompt: Text(label).foregroundColor(DesignSystem.textMuted2))
             .keyboardType(numeric ? .numberPad : .default)
-            .textFieldStyle(.plain)
-            .padding(.horizontal, 12).padding(.vertical, 8)
-            .background(RoundedRectangle(cornerRadius: 10).fill(DesignSystem.bgCanvas))
-            .foregroundStyle(.white)
+            .visionField()
+            .accessibilityLabel(label)
             .accessibilityIdentifier(id)
     }
 

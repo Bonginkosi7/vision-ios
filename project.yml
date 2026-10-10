@@ -10,6 +10,8 @@ packages:
   ZIPFoundation:
     url: https://github.com/weichsel/ZIPFoundation
     from: "0.9.0"
+  LlamaBinary:
+    path: Packages/LlamaBinary
 targets:
   VisionIOS:
     type: application
@@ -23,6 +25,8 @@ targets:
         product: GRDB
       - package: ZIPFoundation
         product: ZIPFoundation
+      - package: LlamaBinary
+        product: llama
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.vision.browser

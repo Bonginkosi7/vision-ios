@@ -1,170 +1,203 @@
 import SwiftUI
 
-/// Reusable pieces of the reconstructed design system, ported from
-/// DesignSystem.kt (vision-android) — same component list, same color
-/// tokens (copied verbatim from vision-android's colors.xml), same
-/// "reconstructed by eye from real reference screenshots" origin. SwiftUI
-/// expresses each Android drawable (bg_card_rounded, bg_pill_button_primary,
-/// etc.) as an inline background modifier here instead of a separate
-/// drawable XML file — a real simplification versus Android, not a silent
-/// divergence.
+/// VISION's shared visual language: black and white, with restrained greys.
+///
+/// - Backgrounds are near-black; white carries primary text and the one
+///   primary action on a screen; greys carry secondary text, borders and
+///   quieter surfaces.
+/// - Colour is reserved for state that means something: green for a
+///   completed/successful state, red for failure or a blocked action. Nothing
+///   is coloured for decoration.
+/// - Icons appear only where they do work (a file type, a website's own
+///   favicon, an action). No icon tiles, no emoji badges.
+/// - Spacing comes from `Space`, corner radii from `Radius`; screens should use
+///   those rather than ad-hoc numbers.
 enum DesignSystem {
-    // MARK: - Color tokens (vision-android colors.xml, verbatim)
-    static let visionPurple = Color(hex: 0x7B3FF2)
-    static let visionBlue = Color(hex: 0x3B6FFF)
-    static let bgCanvas = Color(hex: 0x0A0D16)
-    static let bgCard = Color(hex: 0x131829)
-    static let borderCard = Color(hex: 0x1E2436)
-    static let textMuted2 = Color(hex: 0x8890A6)
-    static let statusSuccess = Color(hex: 0x3ECF8E)
-    static let statusDangerText = Color(hex: 0xFF8FA3)
-    static let statDotOrange = Color(hex: 0xF5A623)
+    // MARK: - Colour tokens
+    static let bgCanvas = Color(hex: 0x0A0A0A)
+    static let bgCard = Color(hex: 0x141414)
+    /// Inputs, selected chips and other surfaces one step above a card.
+    static let bgRaised = Color(hex: 0x1F1F1F)
+    static let borderCard = Color(hex: 0x2A2A2A)
+    /// Secondary text. 9A9A9A on 0A0A0A is ~7:1, on 141414 ~6:1.
+    static let textMuted2 = Color(hex: 0x9A9A9A)
+    static let statusSuccess = Color(hex: 0x5BD08F)
+    static let statusDangerText = Color(hex: 0xFF6B6B)
 
-    static let brandGradient = LinearGradient(
-        colors: [visionPurple, visionBlue], startPoint: .topLeading, endPoint: .bottomTrailing
-    )
+    // MARK: - Spacing and shape scale
+    enum Space {
+        static let xs: CGFloat = 4
+        static let s: CGFloat = 8
+        static let m: CGFloat = 12
+        static let l: CGFloat = 16
+        static let xl: CGFloat = 24
+        static let xxl: CGFloat = 32
+    }
+
+    enum Radius {
+        static let control: CGFloat = 12
+        static let card: CGFloat = 16
+    }
 
     // MARK: - Components
 
-    /// The gradient rounded-square page/stat icon, holding one emoji glyph.
+    /// A compact stat: big value over a muted label. Four of these sit across a row.
     @ViewBuilder
-    static func iconBadge(_ emoji: String, size: CGFloat = 40, textSize: CGFloat = 18) -> some View {
-        Text(emoji)
-            .font(.system(size: textSize))
-            .frame(width: size, height: size)
-            .background(RoundedRectangle(cornerRadius: size * 0.3).fill(brandGradient))
-    }
-
-    /// A horizontally-scrolling row of filter pills, each with a real count badge.
-    @ViewBuilder
-    static func filterChipRow(options: [(label: String, count: Int)], selected: Int, onSelect: @escaping (Int) -> Void) -> some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(Array(options.enumerated()), id: \.offset) { index, option in
-                    Button(action: { onSelect(index) }) {
-                        HStack(spacing: 8) {
-                            Text(option.label).foregroundStyle(.white).font(.system(size: 13))
-                            Text("\(option.count)")
-                                .font(.system(size: 11))
-                                .foregroundStyle(.white)
-                                .frame(minWidth: 20)
-                                .padding(.horizontal, 6).padding(.vertical, 2)
-                                .background(Capsule().fill(Color.black.opacity(0.2)))
-                        }
-                        .padding(.horizontal, 14).padding(.vertical, 8)
-                        .background(
-                            Capsule().fill(index == selected ? AnyShapeStyle(brandGradient) : AnyShapeStyle(bgCard))
-                        )
-                        .overlay(Capsule().stroke(index == selected ? Color.clear : borderCard, lineWidth: 1))
-                    }
-                }
-            }
+    static func statMiniCard(value: String, label: String) -> some View {
+        VStack(alignment: .leading, spacing: Space.xs) {
+            Text(value).font(.system(size: 22, weight: .semibold)).foregroundStyle(.white)
+                .lineLimit(1).minimumScaleFactor(0.7)
+            Text(label).font(.system(size: 12)).foregroundStyle(textMuted2)
+                .lineLimit(2).minimumScaleFactor(0.85)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(Space.m)
+        .background(RoundedRectangle(cornerRadius: Radius.card).fill(bgCard))
+        .overlay(RoundedRectangle(cornerRadius: Radius.card).stroke(borderCard, lineWidth: 1))
     }
 
-    /// One 4-across mini stat card — a real icon badge, a big value, a muted label.
+    /// A one-pixel grey rule, for separating rows inside a card.
     @ViewBuilder
-    static func statMiniCard(emoji: String, value: String, label: String) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            iconBadge(emoji, size: 28, textSize: 13)
-            Text(value).font(.system(size: 20, weight: .bold)).foregroundStyle(.white)
-            Text(label).font(.system(size: 11)).foregroundStyle(textMuted2)
-        }
-        .padding(12)
-        .background(RoundedRectangle(cornerRadius: 16).fill(bgCard))
-        .overlay(RoundedRectangle(cornerRadius: 16).stroke(borderCard, lineWidth: 1))
+    static func divider() -> some View {
+        Rectangle().fill(borderCard).frame(height: 1)
     }
 
-    /// A bordered row inside a card: icon, label, and a real value pill on the trailing end.
+    /// A label on the left and a real value on the right.
     @ViewBuilder
-    static func statRow(emoji: String, label: String, value: String) -> some View {
-        HStack(spacing: 12) {
-            iconBadge(emoji, size: 32, textSize: 14)
-            Text(label).font(.system(size: 14)).foregroundStyle(.white)
+    static func statRow(label: String, value: String) -> some View {
+        HStack(spacing: Space.m) {
+            Text(label).font(.system(size: 15)).foregroundStyle(.white)
             Spacer()
             if !value.isEmpty {
-                Text(value)
-                    .font(.system(size: 13)).foregroundStyle(.white)
-                    .padding(.horizontal, 10).padding(.vertical, 4)
-                    .background(Capsule().fill(Color.black.opacity(0.2)))
+                Text(value).font(.system(size: 15, weight: .semibold)).foregroundStyle(.white)
             }
         }
-        .padding(.vertical, 10)
+        .padding(.vertical, Space.m)
     }
 
-    /// The bottom hint card — icon, bold title, muted subtitle, trailing chevron.
+    /// A hint card: bold title, muted body. No icon.
     @ViewBuilder
-    static func tipCard(emoji: String, title: String, subtitle: String) -> some View {
-        HStack(spacing: 12) {
-            iconBadge(emoji, size: 36, textSize: 16)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.system(size: 14, weight: .bold)).foregroundStyle(.white)
-                Text(subtitle).font(.system(size: 12)).foregroundStyle(textMuted2)
-            }
-            Spacer()
-            Text("›").font(.system(size: 18)).foregroundStyle(textMuted2)
+    static func tipCard(title: String, subtitle: String) -> some View {
+        VStack(alignment: .leading, spacing: Space.xs) {
+            Text(title).font(.system(size: 15, weight: .semibold)).foregroundStyle(.white)
+            Text(subtitle).font(.system(size: 14)).foregroundStyle(textMuted2)
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.horizontal, 16).padding(.vertical, 14)
-        .background(RoundedRectangle(cornerRadius: 16).fill(bgCard))
-        .overlay(RoundedRectangle(cornerRadius: 16).stroke(borderCard, lineWidth: 1))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(Space.l)
+        .background(RoundedRectangle(cornerRadius: Radius.card).fill(bgCard))
+        .overlay(RoundedRectangle(cornerRadius: Radius.card).stroke(borderCard, lineWidth: 1))
     }
 
-    /// A real (never fabricated-content) empty state: illustration square, headline, subtext, CTA.
+    /// A real (never fabricated-content) empty state: headline, one line of
+    /// explanation, and a quiet outlined action.
     @ViewBuilder
-    static func emptyState(emoji: String, title: String, subtitle: String, ctaText: String, onCta: @escaping () -> Void) -> some View {
-        VStack(spacing: 16) {
-            Text(emoji)
-                .font(.system(size: 40))
-                .frame(width: 96, height: 96)
-                .background(RoundedRectangle(cornerRadius: 16).fill(bgCard))
-            VStack(spacing: 6) {
-                Text(title).font(.system(size: 18, weight: .bold)).foregroundStyle(.white)
-                Text(subtitle).font(.system(size: 13)).foregroundStyle(textMuted2)
+    static func emptyState(title: String, subtitle: String, ctaText: String, onCta: @escaping () -> Void) -> some View {
+        VStack(spacing: Space.l) {
+            VStack(spacing: Space.s) {
+                Text(title).font(.system(size: 18, weight: .semibold)).foregroundStyle(.white)
+                Text(subtitle).font(.system(size: 14)).foregroundStyle(textMuted2)
             }
             .multilineTextAlignment(.center)
-            Button(action: onCta) {
-                Text("+  \(ctaText)")
-                    .font(.system(size: 14, weight: .bold)).foregroundStyle(.white)
-                    .padding(.horizontal, 20).padding(.vertical, 12)
-                    .background(Capsule().fill(brandGradient))
-            }
+            secondaryButton(ctaText, onClick: onCta)
         }
-        .padding(.vertical, 32).padding(.horizontal, 24)
+        .padding(.vertical, Space.xxl).padding(.horizontal, Space.xl)
     }
 
-    /// A small status pill — e.g. a "Blocked"-style indicator.
+    /// The one primary action on a screen: white pill, black label.
     @ViewBuilder
-    static func statusPill(_ text: String) -> some View {
-        Text(text)
-            .font(.system(size: 11)).foregroundStyle(statusDangerText)
-            .padding(.horizontal, 10).padding(.vertical, 4)
-            .background(Capsule().fill(statusDangerText.opacity(0.16)))
-    }
-
-    /// A full-width or wrap-content primary pill button/CTA.
-    @ViewBuilder
-    static func primaryButton(_ text: String, onClick: @escaping () -> Void) -> some View {
+    static func primaryButton(_ text: String, fullWidth: Bool = false, onClick: @escaping () -> Void) -> some View {
         Button(action: onClick) {
             Text(text)
-                .font(.system(size: 14, weight: .bold)).foregroundStyle(.white)
-                .padding(.horizontal, 20).padding(.vertical, 12)
-                .background(Capsule().fill(brandGradient))
+                .font(.system(size: 15, weight: .semibold)).foregroundStyle(.black)
+                .padding(.horizontal, Space.xl)
+                .frame(maxWidth: fullWidth ? .infinity : nil, minHeight: 44)
+                .background(Capsule().fill(Color.white))
         }
     }
 
-    /// A bold section label — "This Week", "How you earn points", etc.
+    /// A quieter outlined pill for secondary actions.
+    @ViewBuilder
+    static func secondaryButton(_ text: String, fullWidth: Bool = false, onClick: @escaping () -> Void) -> some View {
+        Button(action: onClick) {
+            Text(text)
+                .font(.system(size: 15, weight: .semibold)).foregroundStyle(.white)
+                .padding(.horizontal, Space.xl)
+                .frame(maxWidth: fullWidth ? .infinity : nil, minHeight: 44)
+                .overlay(Capsule().stroke(Color.white.opacity(0.35), lineWidth: 1))
+        }
+    }
+
+    /// A quiet section heading: small, semibold, grey — content leads, labels follow.
     @ViewBuilder
     static func sectionLabel(_ text: String) -> some View {
-        Text(text).font(.system(size: 16, weight: .bold)).foregroundStyle(.white)
+        Text(text).font(.system(size: 13, weight: .semibold)).tracking(0.4).foregroundStyle(textMuted2)
     }
 
     /// A generic rounded card container.
     @ViewBuilder
     static func card<Content: View>(@ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 0, content: content)
-            .padding(16)
-            .background(RoundedRectangle(cornerRadius: 16).fill(bgCard))
-            .overlay(RoundedRectangle(cornerRadius: 16).stroke(borderCard, lineWidth: 1))
+            .padding(Space.l)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: Radius.card).fill(bgCard))
+            .overlay(RoundedRectangle(cornerRadius: Radius.card).stroke(borderCard, lineWidth: 1))
+    }
+}
+
+extension View {
+    /// The one text-input style: 44pt tall, raised-grey surface, white text.
+    func visionField() -> some View {
+        self
+            .textFieldStyle(.plain)
+            .padding(.horizontal, DesignSystem.Space.m)
+            .frame(minHeight: 44)
+            .background(RoundedRectangle(cornerRadius: DesignSystem.Radius.control, style: .continuous).fill(DesignSystem.bgRaised))
+            .foregroundStyle(.white)
+    }
+
+    /// Standard chrome for a full-screen VISION sheet: near-black canvas, a
+    /// dark colour scheme and a matching navigation bar. These screens are
+    /// dark-only by design (the brand theme is black and white).
+    func visionScreen() -> some View {
+        self
+            .background(DesignSystem.bgCanvas.ignoresSafeArea())
+            .toolbarBackground(DesignSystem.bgCanvas, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .toolbarColorScheme(.dark, for: .navigationBar)
+            .preferredColorScheme(.dark)
+    }
+}
+
+/// The official VISION wordmark: the black-on-white artwork as a template
+/// image, drawn white on the dark UI.
+struct VisionWordmark: View {
+    let height: CGFloat
+
+    var body: some View {
+        Image("VisionWordmark")
+            .renderingMode(.template)
+            .resizable()
+            .scaledToFit()
+            .frame(height: height)
+            .foregroundStyle(.white)
+            .accessibilityLabel("Vision")
+    }
+}
+
+/// The V from the official VISION logo (cropped from the same artwork, not
+/// redrawn), as a template image drawn white.
+struct VisionMark: View {
+    let height: CGFloat
+
+    var body: some View {
+        Image("VisionMark")
+            .renderingMode(.template)
+            .resizable()
+            .scaledToFit()
+            .frame(height: height)
+            .foregroundStyle(.white)
+            .accessibilityLabel("Vision")
     }
 }
 

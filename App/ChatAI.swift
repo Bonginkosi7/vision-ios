@@ -12,12 +12,13 @@ struct ChatAnswer {
 /// pure VisionCore logic; this is only the real network call glue).
 /// Classifies the message locally, then tries each configured cloud
 /// provider in order — same real/pure split and provider-loop shape as
-/// TutorAI.swift. Android's local-model fallback (`LocalModelManager`)
-/// is deliberately NOT ported — no on-device model exists on iOS yet
-/// (see README's disclosed scope trim); the honest "not configured"
-/// reply covers the same ground TutorLogic's own already does.
+/// TutorAI.swift. The on-device model (LocalLLM, llama.cpp) is the last
+/// provider — the counterpart of Android's local-model fallback — so a
+/// configured cloud key still wins and the local model answers when none
+/// is set or the network is down. If it hasn't been downloaded, the
+/// honest "not configured" reply below explains how to get an answer.
 enum ChatAI {
-    private static let providers: [CloudAIProvider] = [AnthropicProvider(), OpenAIProvider()]
+    private static let providers: [CloudAIProvider] = [AnthropicProvider(), OpenAIProvider(), LocalModelProvider()]
 
     static func ask(message: String, history: [ChatMessage]) async -> ChatAnswer {
         let category = ChatCategoryLogic.classify(message)
@@ -33,7 +34,7 @@ enum ChatAI {
         }
 
         return ChatAnswer(
-            text: "VISION doesn't have a local AI model installed, and no cloud AI is configured right now, so it can't generate a free-form answer. Add an OpenAI or Anthropic API key in Settings to chat with me.",
+            text: "VISION can't answer free-form questions yet: the offline model isn't downloaded and no cloud AI is configured. Download the offline model, or add an OpenAI or Anthropic API key, in Settings.",
             category: category,
             providerName: nil
         )

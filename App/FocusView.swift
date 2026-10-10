@@ -1,10 +1,15 @@
 import SwiftUI
 
-/// Real Focus Mode screen — direct port of FocusActivity.kt: start a
-/// session from a real duration preset, see a real live countdown against
+/// Real Focus Mode screen — direct port of FocusActivity.kt: start a session
+/// from a real duration preset, see a real live countdown against
 /// FocusManager's real endsAt timestamp, stop it early, and manage a real
-/// user-authored blocklist (no built-in "distracting sites" list — same
-/// as Android/desktop, this app has no honest basis to curate one itself).
+/// user-authored blocklist (no built-in "distracting sites" list — same as
+/// Android/desktop, this app has no honest basis to curate one itself).
+///
+/// Layout: when idle, pick a duration and start; when running, the countdown
+/// is the whole point and stopping is a quiet secondary action. The selected
+/// duration is shown by a filled chip (and the `selected` accessibility trait),
+/// not by colour.
 struct FocusView: View {
     @ObservedObject var focusStore: FocusStore
     @ObservedObject var focusManager: FocusManager
@@ -19,20 +24,18 @@ struct FocusView: View {
     @State private var now = Date()
     // @State, deliberately, not a plain `let`: Timer.publish(...).autoconnect()
     // starts a real, already-running Timer the instant it's created, and a
-    // plain stored `let` gets re-created (reconnecting a brand-new Timer)
-    // on every body re-evaluation of this struct — a well-documented real
-    // Combine leak. Opening FocusView twice in one real CI run (start a
-    // session, close, reopen to clean up the blocklist) leaked enough
-    // independently-firing Timers to stall the app's idle detection for a
-    // genuine ~60 real seconds, caught as a real CI timeout, not a guess.
-    // @State preserves this publisher's identity across re-renders for
-    // the same view identity instead of reconnecting a new one each time.
+    // plain stored `let` gets re-created (reconnecting a brand-new Timer) on
+    // every body re-evaluation — a well-documented real Combine leak. Opening
+    // FocusView twice in one real CI run leaked enough independently-firing
+    // Timers to stall the app's idle detection for ~60 real seconds, caught as
+    // a real CI timeout. @State preserves this publisher's identity across
+    // re-renders for the same view identity.
     @State private var tick = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .leading, spacing: DesignSystem.Space.xl) {
                     if let session = focusManager.activeSession {
                         activeSessionCard(session)
                     } else {
@@ -40,65 +43,64 @@ struct FocusView: View {
                     }
                     blocklistSection
                 }
-                .padding(16)
+                .padding(DesignSystem.Space.l)
             }
-            .background(DesignSystem.bgCanvas.ignoresSafeArea())
             .navigationTitle("Focus Mode")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Done") { dismiss() }
                 }
             }
+            .visionScreen()
         }
         .onAppear(perform: refreshBlockedDomains)
         .onReceive(tick) { now = $0 }
     }
 
-    @ViewBuilder
     private func activeSessionCard(_ session: ActiveFocusSession) -> some View {
         DesignSystem.card {
-            VStack(spacing: 12) {
+            VStack(spacing: DesignSystem.Space.m) {
                 DesignSystem.sectionLabel("Session in progress")
                 Text(remainingText(session))
-                    .font(.system(size: 32, weight: .bold, design: .monospaced))
+                    .font(.system(size: 48, weight: .semibold, design: .monospaced))
                     .foregroundStyle(.white)
                     .accessibilityIdentifier("focusCountdownLabel")
                 if session.blockedAttempts > 0 {
                     Text("\(session.blockedAttempts) blocked attempt\(session.blockedAttempts == 1 ? "" : "s")")
-                        .font(.system(size: 12))
+                        .font(.system(size: 13))
                         .foregroundStyle(DesignSystem.textMuted2)
                         .accessibilityIdentifier("focusBlockedAttemptsLabel")
                 }
-                DesignSystem.primaryButton("Stop session") {
+                DesignSystem.secondaryButton("Stop session") {
                     focusManager.stopSession()
                 }
                 .accessibilityIdentifier("stopFocusSessionButton")
+                .padding(.top, DesignSystem.Space.s)
             }
             .frame(maxWidth: .infinity)
         }
     }
 
-    @ViewBuilder
     private var startSessionCard: some View {
         DesignSystem.card {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: DesignSystem.Space.l) {
                 DesignSystem.sectionLabel("Start a focus session")
-                HStack(spacing: 8) {
+                HStack(spacing: DesignSystem.Space.s) {
                     ForEach(Self.sessionPresetsMinutes, id: \.self) { minutes in
+                        let selected = minutes == selectedPreset
                         Button(action: { selectedPreset = minutes }) {
                             Text("\(minutes)m")
-                                .font(.system(size: 13, weight: .bold))
-                                .foregroundStyle(.white)
-                                .padding(.horizontal, 14).padding(.vertical, 8)
-                                .background(
-                                    Capsule().fill(minutes == selectedPreset ? AnyShapeStyle(DesignSystem.brandGradient) : AnyShapeStyle(DesignSystem.bgCanvas))
-                                )
-                                .overlay(Capsule().stroke(minutes == selectedPreset ? Color.clear : DesignSystem.borderCard, lineWidth: 1))
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundStyle(selected ? Color.black : Color.white)
+                                .frame(maxWidth: .infinity, minHeight: 40)
+                                .background(Capsule().fill(selected ? Color.white : Color.clear))
+                                .overlay(Capsule().stroke(selected ? Color.clear : DesignSystem.borderCard, lineWidth: 1))
                         }
+                        .accessibilityAddTraits(selected ? .isSelected : [])
                         .accessibilityIdentifier("focusPreset_\(minutes)")
                     }
                 }
-                DesignSystem.primaryButton("Start \(selectedPreset)-minute session") {
+                DesignSystem.primaryButton("Start \(selectedPreset)-minute session", fullWidth: true) {
                     startSession()
                 }
                 .accessibilityIdentifier("startFocusSessionButton")
@@ -106,21 +108,25 @@ struct FocusView: View {
         }
     }
 
-    @ViewBuilder
     private var blocklistSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: DesignSystem.Space.m) {
             DesignSystem.sectionLabel("Blocked sites")
-            HStack {
-                TextField("e.g. youtube.com", text: $newDomainText, onCommit: addDomain)
+            HStack(spacing: DesignSystem.Space.s) {
+                TextField("", text: $newDomainText, prompt: Text("e.g. youtube.com").foregroundColor(DesignSystem.textMuted2))
+                    .onSubmit(addDomain)
                     .textFieldStyle(.plain)
                     .autocapitalization(.none)
                     .disableAutocorrection(true)
-                    .padding(.horizontal, 12).padding(.vertical, 8)
-                    .background(RoundedRectangle(cornerRadius: 10).fill(DesignSystem.bgCard))
+                    .padding(.horizontal, DesignSystem.Space.m).frame(minHeight: 44)
+                    .background(RoundedRectangle(cornerRadius: DesignSystem.Radius.control, style: .continuous).fill(DesignSystem.bgRaised))
                     .foregroundStyle(.white)
+                    .accessibilityLabel("Site to block")
                     .accessibilityIdentifier("addBlockedDomainField")
                 Button(action: addDomain) {
-                    Image(systemName: "plus.circle.fill")
+                    Text("Add")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(newDomainText.trimmingCharacters(in: .whitespaces).isEmpty ? DesignSystem.textMuted2 : .white)
+                        .padding(.horizontal, DesignSystem.Space.l).frame(minHeight: 44)
                 }
                 .disabled(newDomainText.trimmingCharacters(in: .whitespaces).isEmpty)
                 .accessibilityIdentifier("addBlockedDomainButton")
@@ -128,29 +134,33 @@ struct FocusView: View {
 
             if blockedDomains.isEmpty {
                 Text("No sites blocked yet.")
-                    .font(.system(size: 13))
+                    .font(.system(size: 14))
                     .foregroundStyle(DesignSystem.textMuted2)
                     .accessibilityIdentifier("emptyBlocklistLabel")
             } else {
-                ForEach(blockedDomains, id: \.self) { domain in
-                    HStack(spacing: 12) {
-                        FaviconView(host: domain)
-                        Text(domain).foregroundStyle(.white)
-                        Spacer()
-                        Button(action: { removeDomain(domain) }) {
-                            Image(systemName: "xmark.circle.fill").foregroundStyle(DesignSystem.textMuted2)
+                DesignSystem.card {
+                    ForEach(Array(blockedDomains.enumerated()), id: \.element) { index, domain in
+                        HStack(spacing: DesignSystem.Space.m) {
+                            FaviconView(host: domain, size: 28)
+                            Text(domain).font(.system(size: 15)).foregroundStyle(.white)
+                            Spacer()
+                            Button(action: { removeDomain(domain) }) {
+                                Image(systemName: "xmark")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(DesignSystem.textMuted2)
+                                    .frame(width: 44, height: 44)
+                            }
+                            .accessibilityIdentifier("removeBlockedDomain_\(domain)")
                         }
-                        .accessibilityIdentifier("removeBlockedDomain_\(domain)")
+                        .padding(.vertical, DesignSystem.Space.xs)
+                        // `.contain` keeps the remove button independently
+                        // reachable: SwiftUI's default merging can fold a
+                        // child button's identifier into its row's (the same
+                        // thing that bit the Phase 1 bookmark row).
+                        .accessibilityElement(children: .contain)
+                        .accessibilityIdentifier("blockedDomainRow_\(domain)")
+                        if index < blockedDomains.count - 1 { DesignSystem.divider() }
                     }
-                    .padding(.vertical, 6)
-                    // A single-child-ish composition like this is exactly
-                    // the shape that bit the bookmark row in Phase 1 —
-                    // SwiftUI's default accessibility merging can fold the
-                    // remove button's own identifier into this row's.
-                    // .contain keeps every child, including the button,
-                    // independently reachable by a UI test.
-                    .accessibilityElement(children: .contain)
-                    .accessibilityIdentifier("blockedDomainRow_\(domain)")
                 }
             }
         }
