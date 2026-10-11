@@ -1767,7 +1767,13 @@ final class VisionIOSUITests: XCTestCase {
         XCTAssertTrue(app.buttons["bookmarksListRow_https://example.net/"].waitForExistence(timeout: 3))
         app.buttons["bookmarkRange_all"].tap()
         XCTAssertTrue(app.buttons["bookmarksListRow_https://example.net/"].waitForExistence(timeout: 3))
-        row.tap()
+        // A tap straight after a chip change can be swallowed: tap the row, and again if the screen is still up.
+        Thread.sleep(forTimeInterval: 0.7)
+        let sheetMarker = app.buttons["bookmarkRange_all"]
+        for _ in 0..<3 where sheetMarker.exists {
+            row.tap()
+            _ = XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: sheetMarker)], timeout: 3)
+        }
 
         // Tapping the row should navigate the real active tab and dismiss,
         // same real path History's own row tap already exercises.
@@ -2460,6 +2466,8 @@ final class VisionIOSUITests: XCTestCase {
     /// keyboard layout).
     private func navigate(app: XCUIApplication, addressField: XCUIElement, to text: String) {
         addressField.tap()
+        // A tap right after a screen change can be swallowed; if the keyboard didn't come up, tap again.
+        if !app.keyboards.firstMatch.waitForExistence(timeout: 2) { addressField.tap() }
         addressField.typeText(text)
 
         let returnKey = app.keyboards.buttons["Return"]
