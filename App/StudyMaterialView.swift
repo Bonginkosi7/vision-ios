@@ -377,7 +377,7 @@ struct StudyMaterialView: View {
             Text(meta).font(.system(size: 13)).foregroundStyle(DesignSystem.textMuted2)
 
             HStack(spacing: DesignSystem.Space.l) {
-                ShareLink(item: URL(fileURLWithPath: doc.contentPath)) {
+                ShareLink(item: StoredFilePath.url(for: doc.contentPath)) {
                     Text("Open").font(.system(size: 13, weight: .semibold))
                 }
                 .accessibilityIdentifier("btnStudyOpen_\(doc.id)")

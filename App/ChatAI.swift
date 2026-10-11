@@ -28,7 +28,10 @@ enum ChatAI {
 
     static func ask(message: String, history: [ChatMessage], attachment: ChatAttachment? = nil) async -> ChatAnswer {
         let category = ChatCategoryLogic.classify(message)
-        let instruction = ChatCategoryLogic.buildSystemInstruction(category: category)
+        var instruction = ChatCategoryLogic.buildSystemInstruction(category: category)
+        // Facts the user told VISION to remember (Settings → VISION Memory).
+        let facts = await MainActor.run { MemoryStore.shared.facts() }
+        if let memory = MemoryContext.build(facts: facts) { instruction += "\n\n" + memory }
         let trimmedHistory = ChatCategoryLogic.trimmedHistory(history)
 
         for provider in providers {

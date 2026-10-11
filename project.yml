@@ -32,6 +32,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.vision.browser
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_UILaunchStoryboardName: LaunchScreen
+        INFOPLIST_FILE: App/Info-ATS.plist
         MARKETING_VERSION: "0.1.0"
         CURRENT_PROJECT_VERSION: "1"
         # The app icon is the official VISION mark (white V on near-black), in
@@ -62,6 +63,7 @@ targets:
         # with GENERATE_INFOPLIST_FILE's auto-generated one above) is how
         # this same file already injects a key into that auto-generated
         # plist, e.g. INFOPLIST_KEY_UILaunchScreen_Generation above.
+        INFOPLIST_KEY_NSFaceIDUsageDescription: "VISION asks for Face ID before it shows or fills in a saved password."
         INFOPLIST_KEY_NSMicrophoneUsageDescription: "VISION uses the microphone so you can dictate your questions to Ask VISION."
         INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: "VISION turns your speech into text so you can dictate questions to Ask VISION."
         INFOPLIST_KEY_VisionFirebaseAPIKey: "$(VISION_FIREBASE_API_KEY)"

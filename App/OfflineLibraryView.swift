@@ -110,12 +110,12 @@ struct OfflineLibraryView: View {
     }
 
     private func open(_ item: OfflineItem) {
-        onOpen(URL(fileURLWithPath: item.contentPath))
+        onOpen(StoredFilePath.url(for: item.contentPath))
         dismiss()
     }
 
     private func delete(_ item: OfflineItem) {
-        try? FileManager.default.removeItem(atPath: item.contentPath)
+        try? FileManager.default.removeItem(at: StoredFilePath.url(for: item.contentPath))
         try? offlineStore.remove(id: item.id)
         refresh()
     }

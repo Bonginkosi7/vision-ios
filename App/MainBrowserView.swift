@@ -72,6 +72,10 @@ struct MainBrowserView: View {
     @State private var showDownloads = false
     @State private var showOfflineLibrary = false
     @State private var showSettings = false
+    @State private var autofillChoices: [SavedCredential] = []
+    @State private var showAutofillChoices = false
+    @State private var autofillNoLoginFor: String?
+    @State private var autofillNoField = false
     @State private var showRewrite = false
     @State private var showFocus = false
     @State private var showTasks = false
@@ -178,6 +182,23 @@ struct MainBrowserView: View {
             OfflineLibraryView(offlineStore: offlineStore) { fileURL in
                 tabManager.openOfflineFile(fileURL)
             }
+        }
+        .confirmationDialog("Choose an account to fill in", isPresented: $showAutofillChoices, titleVisibility: .visible) {
+            ForEach(autofillChoices) { credential in
+                Button(credential.username) { fill(credential) }
+            }
+            Button("Cancel", role: .cancel) {}
+        }
+        .alert("No saved login for this site", isPresented: Binding(get: { autofillNoLoginFor != nil }, set: { if !$0 { autofillNoLoginFor = nil } })) {
+            Button("Open Settings") { showSettings = true }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("VISION has no saved password for \(autofillNoLoginFor ?? "this site"). Add one in Settings → Saved passwords.")
+        }
+        .alert("Nothing to fill in", isPresented: $autofillNoField) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("This page doesn't show a password field right now. Open the login form first, then try Autofill again.")
         }
         .sheet(isPresented: $showSettings) {
             SettingsView(historyStore: historyStore) { url in
@@ -473,11 +494,20 @@ struct MainBrowserView: View {
             }
             .accessibilityIdentifier("menu_tasks")
 
-            Button(action: saveActiveTabOffline) {
-                Label("Save Offline", systemImage: "square.and.arrow.down")
+            // Both act on the open page, so they share one row — keeps the menu short enough to fit the screen.
+            ControlGroup {
+                Button(action: saveActiveTabOffline) {
+                    Label("Save Offline", systemImage: "square.and.arrow.down")
+                }
+                .disabled(tabManager.activeTab?.isNewTab ?? true)
+                .accessibilityIdentifier("menu_saveOffline")
+
+                Button(action: autofillActiveTab) {
+                    Label("Autofill", systemImage: "key")
+                }
+                .disabled(tabManager.activeTab?.isNewTab ?? true)
+                .accessibilityIdentifier("menu_autofill")
             }
-            .disabled(tabManager.activeTab?.isNewTab ?? true)
-            .accessibilityIdentifier("menu_saveOffline")
 
             Button(action: { showAdvisor = true }) {
                 Label("Advisor", systemImage: "sparkles")
@@ -660,6 +690,35 @@ struct MainBrowserView: View {
             // (never claims success on a write that didn't happen) even
             // though it's not yet a great UX. Real error surfacing is a
             // later-phase concern, not invented here.
+        }
+    }
+
+    /// Fills the open page's login form from a saved password — matched on the page's exact origin only.
+    private func autofillActiveTab() {
+        guard let tab = tabManager.activeTab, !tab.isNewTab, let origin = AutofillLogic.originOf(tab.url) else {
+            autofillNoField = true
+            return
+        }
+        let matches = CredentialStore.shared.find(origin: origin)
+        if matches.isEmpty {
+            autofillNoLoginFor = origin
+        } else if matches.count == 1 {
+            fill(matches[0])
+        } else {
+            autofillChoices = matches
+            showAutofillChoices = true
+        }
+    }
+
+    private func fill(_ credential: SavedCredential) {
+        Task { @MainActor in
+            guard await DeviceAuth.authenticate(reason: "Fill in your saved password"),
+                  let password = CredentialStore.shared.reveal(id: credential.id),
+                  let webView = tabManager.activeTab?.webView
+            else { return }
+            let script = AutofillLogic.buildFillScript(username: credential.username, password: password)
+            let filled = (try? await webView.evaluateJavaScript(script)) as? Bool
+            if filled != true { autofillNoField = true }
         }
     }
 

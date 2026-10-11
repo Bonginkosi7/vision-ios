@@ -379,6 +379,10 @@ enum AppDatabase {
         // AnalyticsQueueStore.swift, same per-feature migration convention.
         AnalyticsMigrations.register(&migrator)
 
+        // Saved passwords and VISION Memory — see CredentialStore.swift and MemoryStore.swift.
+        CredentialMigrations.register(&migrator)
+        MemoryMigrations.register(&migrator)
+
         return migrator
     }
 }

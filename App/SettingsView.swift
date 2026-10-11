@@ -196,6 +196,8 @@ struct SettingsView: View {
                 searchEngineSection
                 offlineStorageSection
                 privacySection
+                SavedPasswordsSection()
+                MemorySection()
                 cloudAISection
                 offlineModelSection
                 aboutSection

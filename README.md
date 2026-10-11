@@ -1599,3 +1599,37 @@ real photo background and user-managed Shortcuts row in the same pass
 `VisionIOS.xcodeproj`, and everything here still works locally too — CI
 was the necessary path given no Xcode locally, not a permanent substitute
 for it.
+
+## Saved passwords, Autofill, VISION Memory and certificate warnings
+
+These close the Android-only gaps noted earlier ("Autofill stays deferred", "a Memory feature"). They
+supersede those notes.
+
+- **Saved passwords** (Settings → Saved passwords): add a site, username and password (or generate a
+  strong one), list, show, copy, delete. Which site and username are plain GRDB rows
+  (`CredentialStore.swift`, migration `v16_credentials`); each password is its own iOS Keychain item
+  (`KeychainStore`), never in the database. Showing or copying one asks for Face ID / the passcode
+  first (`DeviceAuth.swift`); a copied password leaves the clipboard after a minute and never goes to
+  Universal Clipboard. The password generator and the fill script are pure and unit-tested in VisionCore
+  (`PasswordGenerator`, `AutofillLogic` — same pools and fill technique as desktop and Android).
+- **Autofill** (⋯ menu, next to Save Offline in one row so the menu still fits the screen): matches the
+  open page's exact origin (scheme + host + port — never a domain suffix), asks for Face ID, then fills
+  the username and password with the native-setter technique React/Vue pages need. With no saved login it
+  offers to open Settings. Verified on a real login page.
+- **VISION Memory** (Settings → VISION Memory): facts the user typed, stored in GRDB (`MemoryStore.swift`,
+  `v17_memory`), and — as on desktop — appended to Ask VISION's instructions (`MemoryContext`, newest 20).
+  VISION never writes one itself.
+- **Certificate warnings**: a site whose certificate iOS rejects now shows VISION's own "Your connection
+  isn't private" page (`CertificateErrorPage.swift`) instead of a blank failure. Advanced shows the error,
+  the certificate's subject, issuer and SHA-256; "Proceed" accepts that exact certificate for that host for
+  this run only (`CertificateExceptionStore`, memory only), "Back to safety" goes back or home. Disclosed
+  difference from Android: iOS doesn't expose a certificate's validity dates without parsing it, so the
+  page shows the SHA-256 fingerprint instead.
+- **Plain-http pages now load.** The app had no App Transport Security setting, so iOS blocked every
+  `http://` page (and the certificate override above couldn't take effect either). `App/Info-ATS.plist`
+  sets `NSAllowsArbitraryLoadsInWebContent` — web pages only; the app's own network calls stay under ATS.
+- **Fixed: saved pages and study documents could become unopenable.** Their file locations were stored as
+  absolute paths, and iOS can move the app's data folder (reinstall, update, restore). `StoredFilePath`
+  now finds the file again under the current Application Support folder wherever a stored path is read.
+
+Not ported (still Android-only): remembered per-site permissions, and the Weather pill on the homepage.

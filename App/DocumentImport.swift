@@ -85,7 +85,7 @@ enum DocumentImport {
 
         let text: String
         do {
-            text = try extractor(for: doc.fileType).extract(fileURL: URL(fileURLWithPath: doc.contentPath))
+            text = try extractor(for: doc.fileType).extract(fileURL: StoredFilePath.url(for: doc.contentPath))
         } catch {
             try? store.updateProcessing(id: documentId, status: .failed, processingError: "Couldn't read this file: \(error.localizedDescription)", extractedText: nil)
             return
@@ -104,7 +104,7 @@ enum DocumentImport {
 
     static func remove(documentId: String, store: StudyDocumentStore) {
         guard let doc = try? store.get(id: documentId) else { return }
-        try? FileManager.default.removeItem(at: URL(fileURLWithPath: doc.contentPath).deletingLastPathComponent())
+        try? FileManager.default.removeItem(at: StoredFilePath.url(for: doc.contentPath).deletingLastPathComponent())
         try? store.remove(id: documentId)
     }
 }

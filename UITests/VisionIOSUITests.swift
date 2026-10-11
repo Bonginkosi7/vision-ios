@@ -200,6 +200,194 @@ final class VisionIOSUITests: XCTestCase {
         XCTAssertEqual(XCTWaiter().wait(for: [clearedExpectation], timeout: 5), .completed, "clearing the key should flip status back to Not configured")
     }
 
+    // MARK: - Saved passwords, Autofill, VISION Memory, certificate errors
+
+    /// Scrolls with short drags until the element sits in the upper half of the screen, clear of the keyboard.
+    private func bringToUpperHalf(_ element: XCUIElement, in app: XCUIApplication) {
+        scrollIntoView(element, in: app, maxSwipes: 16)
+        var drags = 0
+        while element.exists && element.frame.minY > 420 && drags < 6 {
+            let from = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.60))
+            let to = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.36))
+            from.press(forDuration: 0.1, thenDragTo: to)
+            drags += 1
+        }
+        if drags > 0 { Thread.sleep(forTimeInterval: 1.0) }
+    }
+
+    private func deleteAllSavedPasswords(_ app: XCUIApplication) {
+        for _ in 0..<6 {
+            let delete = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'credentialDelete_'")).firstMatch
+            guard delete.exists else { return }
+            scrollIntoView(delete, in: app)
+            delete.tap()
+            Thread.sleep(forTimeInterval: 0.5)
+        }
+    }
+
+    private func addSavedPassword(_ app: XCUIApplication, site: String, username: String, password: String?) {
+        let origin = app.textFields["credentialOriginField"]
+        bringToUpperHalf(origin, in: app)
+        focus(origin); origin.typeText(site)
+        let user = app.textFields["credentialUsernameField"]
+        focus(user); user.typeText(username)
+        if let password {
+            let secure = app.secureTextFields["credentialPasswordField"]
+            focus(secure); secure.typeText(password)
+        } else {
+            let generate = app.buttons["credentialGenerateButton"]
+            scrollIntoView(generate, in: app)
+            generate.tap()
+        }
+        let save = app.buttons["credentialSaveButton"]
+        scrollIntoView(save, in: app)
+        save.tap()
+    }
+
+    /// Saved passwords: add one with a generated password, see it listed, reveal it, then delete it.
+    func test_savedPasswordsCanBeAddedRevealedAndDeleted() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-UITestSkipDeviceAuth"]
+        launchApp(app)
+
+        openMenu(app, item: "menu_settings")
+        deleteAllSavedPasswords(app)
+        addSavedPassword(app, site: "example.org", username: "tester@example.org", password: nil)
+
+        let reveal = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'credentialReveal_'")).firstMatch
+        scrollIntoView(reveal, in: app)
+        XCTAssertTrue(reveal.waitForExistence(timeout: 5), "the saved password should be listed")
+        reveal.tap()
+        let shown = app.staticTexts.matching(NSPredicate(format: "identifier BEGINSWITH 'credentialPasswordText_'")).firstMatch
+        let isPlain = NSPredicate(format: "label MATCHES %@", ".{20}")
+        XCTAssertEqual(XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: isPlain, object: shown)], timeout: 5), .completed, "Show should reveal the 20-character generated password")
+
+        deleteAllSavedPasswords(app)
+        XCTAssertFalse(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'credentialDelete_'")).firstMatch.exists)
+    }
+
+    /// Autofill: a saved login fills the username and password on its own site's login page.
+    func test_autofillFillsALoginFormFromASavedPassword() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-UITestSkipDeviceAuth"]
+        launchApp(app)
+
+        openMenu(app, item: "menu_settings")
+        deleteAllSavedPasswords(app)
+        addSavedPassword(app, site: "the-internet.herokuapp.com", username: "tomsmith", password: "SuperSecretPassword!")
+        closeSettings(app)
+
+        let addressField = app.textFields["addressBarField"]
+        XCTAssertTrue(addressField.waitForExistence(timeout: 5))
+        navigate(app: app, addressField: addressField, to: "https://the-internet.herokuapp.com/login")
+        let username = app.webViews.textFields.firstMatch
+        try XCTSkipUnless(username.waitForExistence(timeout: 30), "the demo login page didn't load")
+
+        openMenu(app, item: "menu_autofill")
+        let filled = NSPredicate(format: "value == 'tomsmith'")
+        XCTAssertEqual(XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: filled, object: username)], timeout: 10), .completed, "Autofill should fill the username, got: \(String(describing: username.value))")
+        let password = app.webViews.secureTextFields.firstMatch
+        XCTAssertTrue(password.exists)
+        XCTAssertFalse(((password.value as? String) ?? "").isEmpty, "Autofill should fill the password too")
+
+        openMenu(app, item: "menu_settings")
+        deleteAllSavedPasswords(app)
+    }
+
+    /// Autofill with nothing saved for the site explains what to do instead of doing nothing.
+    func test_autofillWithNoSavedLoginOffersSettings() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-UITestSkipDeviceAuth"]
+        launchApp(app)
+
+        let addressField = app.textFields["addressBarField"]
+        XCTAssertTrue(addressField.waitForExistence(timeout: 5))
+        navigate(app: app, addressField: addressField, to: "example.com")
+        assertAddressBarEventuallyShows(addressField, "https://example.com/", in: self)
+
+        openMenu(app, item: "menu_autofill")
+        XCTAssertTrue(app.alerts["No saved login for this site"].waitForExistence(timeout: 5))
+        app.alerts.buttons["Cancel"].tap()
+    }
+
+    /// VISION Memory: a fact can be added, listed, removed, and everything can be cleared.
+    func test_memoryFactsCanBeAddedRemovedAndCleared() {
+        let app = XCUIApplication()
+        launchApp(app)
+
+        openMenu(app, item: "menu_settings")
+        let input = app.textFields["memoryInput"]
+        bringToUpperHalf(input, in: app)
+        focus(input)
+        input.typeText("I study biology")
+        let add = app.buttons["memoryAddButton"]
+        scrollIntoView(add, in: app)
+        add.tap()
+        // The new row sits above the input, possibly scrolled out of view; "Clear all" only appears once a fact exists.
+        XCTAssertTrue(app.buttons["memoryClearAllButton"].waitForExistence(timeout: 8), "the fact should be listed")
+
+        let clear = app.buttons["memoryClearAllButton"]
+        scrollIntoView(clear, in: app)
+        clear.tap()
+        // The confirmation is a destructive action-sheet button, which doesn't keep a custom identifier — find it by label.
+        let confirm = app.sheets.buttons["Clear all"].firstMatch
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        confirm.tap()
+        let cleared = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: app.buttons["memoryClearAllButton"])
+        XCTAssertEqual(XCTWaiter().wait(for: [cleared], timeout: 5), .completed, "Clear all should empty the list")
+        XCTAssertFalse(app.staticTexts["I study biology"].exists)
+    }
+
+    /// A site with a bad certificate is stopped at VISION's warning page; "Proceed" then loads it.
+    func test_expiredCertificateShowsTheWarningAndProceedLoadsTheSite() throws {
+        let app = XCUIApplication()
+        launchApp(app)
+
+        let addressField = app.textFields["addressBarField"]
+        XCTAssertTrue(addressField.waitForExistence(timeout: 5))
+        navigate(app: app, addressField: addressField, to: "https://expired.badssl.com/")
+        let back = app.webViews.buttons["Back to safety"]
+        try XCTSkipUnless(back.waitForExistence(timeout: 30), "badssl.com unreachable or no warning shown")
+        XCTAssertTrue(app.webViews.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "isn't private")).firstMatch.exists)
+
+        app.webViews.buttons["Advanced"].tap()
+        let proceed = app.webViews.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Proceed to expired.badssl.com'")).firstMatch
+        XCTAssertTrue(proceed.waitForExistence(timeout: 5), "Advanced should offer to proceed")
+        proceed.tap()
+
+        let warningGone = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: app.webViews.buttons["Back to safety"])
+        XCTAssertEqual(XCTWaiter().wait(for: [warningGone], timeout: 30), .completed, "after proceeding, the warning page should be replaced by the real site")
+        XCTAssertTrue(app.webViews.staticTexts.matching(NSPredicate(format: "label CONTAINS 'badssl'")).firstMatch.waitForExistence(timeout: 15), "the real site's own page should be showing")
+    }
+
+    /// A browser has to open plain-http sites too (iOS blocks them for web views unless the app allows it).
+    func test_plainHttpSitesLoad() throws {
+        let app = XCUIApplication()
+        launchApp(app)
+
+        let addressField = app.textFields["addressBarField"]
+        XCTAssertTrue(addressField.waitForExistence(timeout: 5))
+        navigate(app: app, addressField: addressField, to: "http://example.com/")
+        let loaded = NSPredicate(format: "value BEGINSWITH 'http://example.com'")
+        try XCTSkipUnless(XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: loaded, object: addressField)], timeout: 20) == .completed, "the address bar never showed the http address")
+        let body = app.webViews.staticTexts.matching(NSPredicate(format: "label CONTAINS 'documentation examples'")).firstMatch
+        XCTAssertTrue(body.waitForExistence(timeout: 20), "the plain-http page should load")
+    }
+
+    /// "Back to safety" leaves the bad site and returns to the homepage when there is nothing to go back to.
+    func test_certificateWarningBackToSafetyReturnsHome() throws {
+        let app = XCUIApplication()
+        launchApp(app)
+
+        let addressField = app.textFields["addressBarField"]
+        XCTAssertTrue(addressField.waitForExistence(timeout: 5))
+        navigate(app: app, addressField: addressField, to: "https://expired.badssl.com/")
+        let back = app.webViews.buttons["Back to safety"]
+        try XCTSkipUnless(back.waitForExistence(timeout: 30), "badssl.com unreachable or no warning shown")
+        back.tap()
+        XCTAssertTrue(app.staticTexts["newTabGreeting"].waitForExistence(timeout: 10), "Back to safety should return to the homepage")
+    }
+
     /// Settings → About links to the Ann-Connect website, opening it in a new tab.
     func test_settingsPoweredByAnnConnectOpensTheWebsiteInANewTab() {
         let app = XCUIApplication()
@@ -1433,7 +1621,11 @@ final class VisionIOSUITests: XCTestCase {
         if !assistantMessage.waitForExistence(timeout: 10) {
             attachDiagnostics(app: app, name: "newtab-askvision-reply-missing")
         }
-        XCTAssertTrue(assistantMessage.label.contains("no cloud AI is configured"), "a non-URL query from New Tab should auto-ask a real new Ask VISION session, got: \(assistantMessage.label)")
+        // With nothing configured the reply says no cloud AI is set up; a phone that already has the offline model
+        // answers for real instead. Either way the query must have become a real Ask VISION session with a finished reply.
+        let finished = XCTNSPredicateExpectation(predicate: NSPredicate(format: "NOT (label BEGINSWITH 'Asking')"), object: assistantMessage)
+        _ = XCTWaiter().wait(for: [finished], timeout: 90)
+        XCTAssertFalse(assistantMessage.label.isEmpty || assistantMessage.label.hasPrefix("Asking"), "a non-URL query from New Tab should auto-ask a real new Ask VISION session, got: \(assistantMessage.label)")
         // Auto-asking lands straight in the real conversation view (mode
         // .session), which has no "Done" of its own — same real toolbar
         // test_askingVisionWithNoCloudKeyConfigured already exercises:
@@ -1490,7 +1682,21 @@ final class VisionIOSUITests: XCTestCase {
         func open(_ id: String, expect: () -> XCUIElement, done: () -> Void) {
             let card = app.buttons["homeCard_\(id)"]
             XCTAssertTrue(card.waitForExistence(timeout: 8), "\(id) card missing")
-            card.tap()
+            // Scroll the card clear of the bottom toolbar, wait for the previous sheet to finish dismissing,
+            // then tap by coordinate (the cards sit in a scroll view).
+            let barTop = app.buttons["moreMenuButton"].frame.minY
+            var swipes = 0
+            while card.frame.maxY > barTop - 8 && swipes < 8 {
+                // A short drag (~200pt) — a full swipe overshoots and pushes the card off the top.
+                let from = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.60))
+                let to = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.36))
+                from.press(forDuration: 0.1, thenDragTo: to)
+                swipes += 1
+            }
+            let settled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isHittable == true"), object: card)
+            _ = XCTWaiter().wait(for: [settled], timeout: 8)
+            Thread.sleep(forTimeInterval: 0.8)
+            card.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
             let landed = expect()
             if !landed.waitForExistence(timeout: 8) { attachDiagnostics(app: app, name: "home-card-\(id)-missing") }
             XCTAssertTrue(landed.exists, "tapping the \(id) card should open its real screen")
@@ -1514,6 +1720,8 @@ final class VisionIOSUITests: XCTestCase {
         let status = app.staticTexts["homeModeStatus"]
         XCTAssertTrue(status.waitForExistence(timeout: 8))
         try XCTSkipIf(status.label.contains("No internet connection"), "device has no connection; Online can't be selected")
+        // Taps in the first couple of seconds after launch are swallowed while the homepage settles.
+        Thread.sleep(forTimeInterval: 3)
 
         let offline = app.buttons["homeModeOffline"]
         let online = app.buttons["homeModeOnline"]
@@ -1798,6 +2006,8 @@ final class VisionIOSUITests: XCTestCase {
             app.swipeUp()
             swipes += 1
         }
+        // A tap made while the list is still coasting only stops the scroll — let it come to rest first.
+        if swipes > 0 { Thread.sleep(forTimeInterval: 1.0) }
     }
 
     /// History rows are buttons whose id starts with `historyRow_`; this matches the
@@ -1860,6 +2070,9 @@ final class VisionIOSUITests: XCTestCase {
     private func launchApp(_ app: XCUIApplication) {
         app.launchArguments += ["-offline_model_opt_out", "YES", "-offline_model_prompt_dismissed", "YES"]
         app.launch()
+        // Taps in the first couple of seconds after launch can be swallowed while the homepage settles.
+        _ = app.buttons["moreMenuButton"].waitForExistence(timeout: 10)
+        Thread.sleep(forTimeInterval: 2.5)
     }
 
     private func openMenu(_ app: XCUIApplication, item identifier: String) {

@@ -544,7 +544,7 @@ struct NewTabView: View {
                         .accessibilityIdentifier("offlineSavedEmptyText")
                 } else {
                     ForEach(Array(savedPages.enumerated()), id: \.element.id) { index, page in
-                        Button(action: { onOpenSavedPage(URL(fileURLWithPath: page.contentPath)) }) {
+                        Button(action: { onOpenSavedPage(StoredFilePath.url(for: page.contentPath)) }) {
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(page.title).font(.system(size: 15)).foregroundStyle(.white)
                                     .multilineTextAlignment(.leading).lineLimit(2)

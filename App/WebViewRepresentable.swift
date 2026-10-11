@@ -1,5 +1,6 @@
 import SwiftUI
 import WebKit
+import VisionCore
 
 /// Bridges one real WKWebView into SwiftUI — WKWebView has no native
 /// SwiftUI wrapper on any current iOS SDK, so this UIViewRepresentable is
@@ -30,6 +31,8 @@ struct WebViewRepresentable: UIViewRepresentable {
         let controller = tab.webView.configuration.userContentController
         controller.removeScriptMessageHandler(forName: "focusBridge")
         controller.add(context.coordinator, name: "focusBridge")
+        controller.removeScriptMessageHandler(forName: "sslBridge")
+        controller.add(context.coordinator, name: "sslBridge")
 
         // Swipe right from the left edge = back, swipe left from the right
         // edge = forward, with WebKit's own interactive page snapshot.
@@ -69,6 +72,9 @@ struct WebViewRepresentable: UIViewRepresentable {
         let downloadStore: DownloadStore
         let wellbeingStore: WellbeingStore
         private var recordsByDownload: [ObjectIdentifier: DownloadRecord] = [:]
+        /// The certificate problem the warning page on screen is about, so "Proceed" knows what to accept.
+        private var certificateFailure: CertificateFailure?
+        private var showingCertificateWarning = false
         /// Real page-load progress/loading-state observation — the iOS
         /// counterpart of Android's `WebChromeClient.onProgressChanged`.
         /// Kept alive for this Coordinator's own lifetime (itself retained
@@ -118,6 +124,12 @@ struct WebViewRepresentable: UIViewRepresentable {
             let urlString = webView.url?.absoluteString ?? tab?.url ?? ""
             tab?.url = urlString
 
+            // The certificate warning is VISION's own page, not a site visit.
+            if showingCertificateWarning {
+                showingCertificateWarning = false
+                return
+            }
+
             // Real page loads only — never the local blocked-page HTML
             // (loaded via loadHTMLString, so webView.url is nil/about:blank,
             // not a real http(s) URL) or an offline file:// archive, neither
@@ -157,6 +169,68 @@ struct WebViewRepresentable: UIViewRepresentable {
             decisionHandler(.allow)
         }
 
+        // MARK: - Certificate errors
+
+        /// A site whose certificate the system rejects is stopped (the default) and the warning page is shown.
+        /// Only a certificate the user has just chosen to proceed past — same host, same certificate, this
+        /// session — is accepted here.
+        func webView(
+            _ webView: WKWebView,
+            didReceive challenge: URLAuthenticationChallenge,
+            completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
+        ) {
+            guard challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust,
+                  let trust = challenge.protectionSpace.serverTrust,
+                  let fingerprint = CertificateErrorPage.fingerprint(of: trust),
+                  CertificateExceptionStore.shared.isAccepted(host: challenge.protectionSpace.host, fingerprint: fingerprint)
+            else {
+                completionHandler(.performDefaultHandling, nil)
+                return
+            }
+            // The system only honours the user's choice for this certificate if its exceptions are set on the trust.
+            _ = SecTrustEvaluateWithError(trust, nil)
+            if let exceptions = SecTrustCopyExceptions(trust) { SecTrustSetExceptions(trust, exceptions) }
+            completionHandler(.useCredential, URLCredential(trust: trust))
+        }
+
+        func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+            showCertificateWarningIfNeeded(webView, error: error)
+        }
+
+        func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+            showCertificateWarningIfNeeded(webView, error: error)
+        }
+
+        private func showCertificateWarningIfNeeded(_ webView: WKWebView, error: Error) {
+            guard let failure = CertificateFailure(error: error as NSError) else { return }
+            certificateFailure = failure
+            showingCertificateWarning = true
+            tab?.isNewTab = false
+            webView.loadHTMLString(CertificateErrorPage.html(for: failure), baseURL: failure.url)
+        }
+
+        private func handleCertificateBridge(_ action: String?) {
+            guard let webView = tab?.webView else { return }
+            switch action {
+            case "goBack":
+                certificateFailure = nil
+                if webView.canGoBack {
+                    webView.goBack()
+                } else {
+                    tab?.isNewTab = true
+                    tab?.url = ""
+                    webView.load(URLRequest(url: URL(string: "about:blank")!))
+                }
+            case "proceed":
+                guard let failure = certificateFailure, let fingerprint = failure.fingerprint else { return }
+                CertificateExceptionStore.shared.record(host: failure.host, fingerprint: fingerprint)
+                certificateFailure = nil
+                webView.load(URLRequest(url: failure.url))
+            default:
+                break
+            }
+        }
+
         /// New-window requests (target="_blank" links, window.open) load in
         /// the same tab rather than silently doing nothing — WKWebView
         /// drops them entirely unless a UIDelegate handles this, unlike
@@ -178,6 +252,10 @@ struct WebViewRepresentable: UIViewRepresentable {
         /// here via `window.webkit.messageHandlers.focusBridge.postMessage(...)`
         /// instead of Android's addJavascriptInterface.
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+            if message.name == "sslBridge" {
+                handleCertificateBridge(message.body as? String)
+                return
+            }
             guard message.name == "focusBridge", (message.body as? String) == "endSession" else { return }
             FocusManager.shared.stopSession()
             tab?.webView.evaluateJavaScript("""
