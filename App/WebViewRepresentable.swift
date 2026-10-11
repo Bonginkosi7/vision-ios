@@ -46,6 +46,12 @@ struct WebViewRepresentable: UIViewRepresentable {
             tab.webView.scrollView.refreshControl = refresh
         }
 
+        // In split view, touching a page makes its pane the focused one (the address bar and toolbar then act on it).
+        // Observes only — it never cancels or delays the page's own touches.
+        if !(tab.webView.gestureRecognizers ?? []).contains(where: { $0 is FocusTapRecognizer }) {
+            tab.webView.addGestureRecognizer(FocusTapRecognizer(tab: tab))
+        }
+
         return tab.webView
     }
 
@@ -56,6 +62,24 @@ struct WebViewRepresentable: UIViewRepresentable {
 
     func makeCoordinator() -> Coordinator {
         Coordinator(tab: tab, historyStore: historyStore, downloadStore: downloadStore, wellbeingStore: wellbeingStore)
+    }
+
+    /// Tells the tab it was touched, without ever cancelling or delaying the page's own touches. It owns its own
+    /// target (not the Coordinator, which is replaced when a tab moves between panes), and is added once per web view.
+    final class FocusTapRecognizer: UITapGestureRecognizer, UIGestureRecognizerDelegate {
+        private weak var tab: BrowserTab?
+
+        init(tab: BrowserTab) {
+            self.tab = tab
+            super.init(target: nil, action: nil)
+            addTarget(self, action: #selector(touched))
+            cancelsTouchesInView = false
+            delegate = self
+        }
+
+        @objc private func touched() { tab?.onFocus?() }
+
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool { true }
     }
 
     @MainActor

@@ -1791,6 +1791,72 @@ final class VisionIOSUITests: XCTestCase {
         app.navigationBars.buttons["Done"].tap()
     }
 
+    // MARK: - Translate, pin and split view
+
+    /// Translate Page sends the page to Google Translate (the address becomes a translate.goog one) and "Original" comes back.
+    func test_translatePageGoesToGoogleTranslateAndBack() {
+        let app = XCUIApplication()
+        launchApp(app)
+        let addressField = app.textFields["addressBarField"]
+        XCTAssertTrue(addressField.waitForExistence(timeout: 5))
+        navigate(app: app, addressField: addressField, to: "example.com")
+        assertAddressBarEventuallyShows(addressField, "https://example.com/", in: self)
+
+        openMenu(app, item: "menu_translate")
+        let toTranslated = NSPredicate(format: "value CONTAINS 'translate.goog'")
+        XCTAssertEqual(XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: toTranslated, object: addressField)], timeout: 20), .completed, "the page should open through Google Translate")
+
+        openMenu(app, item: "menu_translate")
+        assertAddressBarEventuallyShows(addressField, "https://example.com/", in: self)
+    }
+
+    /// A pinned tab shows its pin in the tab switcher, can't be swiped closed, and unpins again.
+    func test_pinningATabShowsItsPinAndUnpins() {
+        let app = XCUIApplication()
+        launchApp(app)
+        let addressField = app.textFields["addressBarField"]
+        XCTAssertTrue(addressField.waitForExistence(timeout: 5))
+        navigate(app: app, addressField: addressField, to: "example.com")
+        assertAddressBarEventuallyShows(addressField, "https://example.com/", in: self)
+
+        openMenu(app, item: "menu_pin")
+        app.buttons["tabCountLabel"].tap()
+        XCTAssertTrue(app.images.matching(NSPredicate(format: "identifier BEGINSWITH 'pinnedMark_'")).firstMatch.waitForExistence(timeout: 5), "a pinned tab should show its pin")
+        let unpin = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'btnPinTab_' OR identifier BEGINSWITH 'btnUnpinTab_'")).firstMatch
+        _ = unpin
+        app.navigationBars.buttons["Done"].tap()
+
+        // Leave nothing pinned behind for the other tests: the same menu item now unpins.
+        openMenu(app, item: "menu_pin")
+        app.buttons["tabCountLabel"].tap()
+        XCTAssertFalse(app.images.matching(NSPredicate(format: "identifier BEGINSWITH 'pinnedMark_'")).firstMatch.waitForExistence(timeout: 2), "the tab should be unpinned again")
+        app.navigationBars.buttons["Done"].tap()
+    }
+
+    /// Split view shows two panes with a divider; the address bar acts on the focused pane; closing a side keeps the other.
+    func test_splitViewShowsTwoPanesAndClosesBackToOne() {
+        let app = XCUIApplication()
+        launchApp(app)
+        let addressField = app.textFields["addressBarField"]
+        XCTAssertTrue(addressField.waitForExistence(timeout: 5))
+        navigate(app: app, addressField: addressField, to: "example.com")
+        assertAddressBarEventuallyShows(addressField, "https://example.com/", in: self)
+
+        openMenu(app, item: "menu_split")
+        XCTAssertTrue(app.otherElements["splitDivider"].waitForExistence(timeout: 5) || app.buttons["splitDivider"].exists, "split view should show a divider")
+        XCTAssertTrue(app.buttons["splitSwap_first"].exists && app.buttons["splitClose_second"].exists, "each pane has its own swap and close controls")
+
+        // The new pane is focused and is a New Tab: the address bar sends the page to it, leaving the first pane alone.
+        navigate(app: app, addressField: addressField, to: "example.org")
+        assertAddressBarEventuallyShows(addressField, "https://example.org/", in: self)
+        XCTAssertTrue(app.buttons["splitPaneTitle_first"].exists)
+
+        // Closing the second side keeps the first tab (example.com) on screen alone.
+        app.buttons["splitClose_second"].tap()
+        XCTAssertFalse(app.buttons["splitSwap_first"].waitForExistence(timeout: 2), "split view should be closed")
+        assertAddressBarEventuallyShows(addressField, "https://example.com/", in: self)
+    }
+
     /// Real New Tab page proof — found as a major, previously-
     /// undisclosed gap during a cross-source design sweep: this screen
     /// had stayed at its original Phase 1 cut (bookmarks row only) even

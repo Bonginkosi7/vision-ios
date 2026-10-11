@@ -2,7 +2,7 @@ import SwiftUI
 import Darwin
 import VisionCore
 
-/// The same picture as the launch screen (near-black, the VISION mark, "Powered by Ann-Connect"), kept on screen
+/// The same picture as the launch screen (near-black, the VISION mark, "Built by Ann-Connect"), kept on screen
 /// until the splash has been up for [SplashTiming.minimumSeconds] from the moment the app started, so it can actually be seen.
 /// The launch screen itself ends as soon as the app can draw; the real app is already running underneath.
 struct SplashOverlay: View {
@@ -16,11 +16,11 @@ struct SplashOverlay: View {
                 .accessibilityHidden(true)
             VStack {
                 Spacer()
-                Text("Powered by Ann-Connect")
+                Text("Built by Ann-Connect")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(Color.white.opacity(0.5))
                     .padding(.bottom, 24)
-                    .accessibilityIdentifier("splashPoweredBy")
+                    .accessibilityIdentifier("splashBuiltBy")
             }
         }
     }

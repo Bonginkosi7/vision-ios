@@ -96,6 +96,7 @@ struct MainBrowserView: View {
     @State private var askVisionRequest: AskVisionRequest?
     @State private var showVisionReady = false
     @State private var saveOfflineStatus: String?
+    @State private var translateUnavailable = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -133,6 +134,7 @@ struct MainBrowserView: View {
         }
         .onAppear {
             if tabManager.tabs.isEmpty {
+                tabManager.restorePinnedTabs()
                 tabManager.createTab(url: nil)
             }
             // Startup hygiene matching Android's own FocusManager wiring:
@@ -203,6 +205,11 @@ struct MainBrowserView: View {
         }
         .sheet(item: $readerArticle) { article in
             ReaderView(article: article)
+        }
+        .alert("Translate Page", isPresented: $translateUnavailable) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Only public https:// web pages can be translated.")
         }
         .alert("Reader View", isPresented: $readerUnavailable) {
             Button("OK", role: .cancel) {}
@@ -537,6 +544,26 @@ struct MainBrowserView: View {
                 .accessibilityIdentifier("menu_reader")
             }
 
+            // More actions on the open page: translate it (with Google Translate), keep it as a pinned tab, show it beside another tab.
+            ControlGroup {
+                Button(action: translateActivePage) {
+                    Label(isActiveTabTranslated ? "Original" : "Translate", systemImage: "character.bubble")
+                }
+                .disabled(tabManager.activeTab?.isNewTab ?? true)
+                .accessibilityIdentifier("menu_translate")
+
+                Button(action: togglePinActiveTab) {
+                    Label(tabManager.activeTab?.isPinned == true ? "Unpin" : "Pin", systemImage: tabManager.activeTab?.isPinned == true ? "pin.slash" : "pin")
+                }
+                .disabled(tabManager.activeTab.map { $0.isNewTab || $0.isPrivate } ?? true)
+                .accessibilityIdentifier("menu_pin")
+
+                Button(action: toggleSplit) {
+                    Label(tabManager.isSplit ? "Unsplit" : "Split", systemImage: "rectangle.split.2x1")
+                }
+                .accessibilityIdentifier("menu_split")
+            }
+
             Button(action: { askVisionRequest = AskVisionRequest(query: nil) }) {
                 Label("Ask VISION", systemImage: "bubble.left.and.text.bubble.right")
             }
@@ -629,25 +656,38 @@ struct MainBrowserView: View {
             // caught by a real UI test timing out waiting for real
             // navigation to reflect on screen, not spotted by reading the
             // code.
-            ActiveTabContent(
-                tab: tab,
-                bookmarkStore: bookmarkStore,
-                offlineStore: offlineStore,
-                historyStore: historyStore,
-                downloadStore: downloadStore,
-                wellbeingStore: wellbeingStore,
-                rewardStore: rewardStore,
-                shortcutStore: shortcutStore,
-                onNavigate: { destination in tabManager.navigateActiveTab(to: destination) },
-                onAskVision: { query in askVisionRequest = AskVisionRequest(query: query) },
-                onOpen: { destination in openHome(destination) },
-                onOpenSavedPage: { fileURL in tabManager.openOfflineFile(fileURL) }
-            )
+            Group {
+                if tabManager.isSplit {
+                    SplitPanes(tabManager: tabManager, pane: { pane in paneContent(for: pane, isSplit: true) })
+                } else {
+                    paneContent(for: tab, isSplit: false)
+                }
+            }
             .onReceive(tab.$url) { _ in syncAddressBar() }
             .onReceive(tab.$isNewTab) { _ in refreshBookmarkState() }
         } else {
             ProgressView().tint(.white)
         }
+    }
+
+    /// One tab's page — the New Tab homepage or its web view. In split view each pane navigates its own tab.
+    private func paneContent(for tab: BrowserTab, isSplit: Bool) -> some View {
+        ActiveTabContent(
+            tab: tab,
+            bookmarkStore: bookmarkStore,
+            offlineStore: offlineStore,
+            historyStore: historyStore,
+            downloadStore: downloadStore,
+            wellbeingStore: wellbeingStore,
+            rewardStore: rewardStore,
+            shortcutStore: shortcutStore,
+            onNavigate: { destination in
+                if isSplit { tabManager.navigate(tab, to: destination) } else { tabManager.navigateActiveTab(to: destination) }
+            },
+            onAskVision: { query in askVisionRequest = AskVisionRequest(query: query) },
+            onOpen: { destination in openHome(destination) },
+            onOpenSavedPage: { fileURL in tabManager.openOfflineFile(fileURL) }
+        )
     }
 
     /// Every destination the homepage can open is an existing sheet here.
@@ -676,6 +716,33 @@ struct MainBrowserView: View {
         // just overwrite what the user typed with the tab's still-stale
         // empty url. The .onReceive(tab.$url) subscription above is what
         // correctly syncs the address bar once real navigation happens.
+    }
+
+    private var isActiveTabTranslated: Bool {
+        TranslateLogic.isTranslated(tabManager.activeTab?.url ?? "")
+    }
+
+    /// Translates the open page into the device's language with Google Translate, or goes back to the original.
+    private func translateActivePage() {
+        guard let tab = tabManager.activeTab, !tab.isNewTab else { return }
+        let target: String?
+        if TranslateLogic.isTranslated(tab.url) {
+            target = TranslateLogic.originalURL(of: tab.url)
+        } else {
+            let language = Locale.current.language
+            let code = TranslateLogic.targetCode(languageCode: language.languageCode?.identifier, script: language.script?.identifier)
+            target = TranslateLogic.translatedURL(for: tab.url, targetCode: code)
+        }
+        if let target { tabManager.navigateActiveTab(to: target) } else { translateUnavailable = true }
+    }
+
+    private func togglePinActiveTab() {
+        guard let tab = tabManager.activeTab else { return }
+        if tab.isPinned { tabManager.unpin(tab) } else { tabManager.pin(tab) }
+    }
+
+    private func toggleSplit() {
+        if tabManager.isSplit { tabManager.closeSplit() } else { tabManager.openSplit() }
     }
 
     private func goBack() { tabManager.activeTab?.webView.goBack() }
@@ -817,5 +884,107 @@ private struct ActiveTabContent: View {
                 WebViewRepresentable(tab: tab, historyStore: historyStore, downloadStore: downloadStore, wellbeingStore: wellbeingStore)
             }
         }
+    }
+}
+
+
+/// Two tabs on screen at once — side by side when there is room, one above the other on a narrow screen — with a
+/// draggable divider. The focused pane (the one the address bar and toolbar act on) has a white outline; touching a
+/// page, or its header, focuses it. Each header has swap and close-this-side controls.
+private struct SplitPanes<Pane: View>: View {
+    @ObservedObject var tabManager: TabManager
+    let pane: (BrowserTab) -> Pane
+
+    var body: some View {
+        if let tabs = tabManager.splitTabs {
+            GeometryReader { geo in
+                let axis = SplitLayout.axis(width: geo.size.width, height: geo.size.height)
+                let sideBySide = axis == .sideBySide
+                let extent = sideBySide ? geo.size.width : geo.size.height
+                let first = SplitLayout.firstPaneLength(extent: extent, ratio: tabManager.splitRatio)
+                let layout = sideBySide ? AnyLayout(HStackLayout(spacing: 0)) : AnyLayout(VStackLayout(spacing: 0))
+                layout {
+                    SplitPane(tab: tabs.first, name: "first", tabManager: tabManager, content: pane(tabs.first))
+                        .frame(width: sideBySide ? first : nil, height: sideBySide ? nil : first)
+                    divider(sideBySide: sideBySide, extent: extent)
+                    SplitPane(tab: tabs.second, name: "second", tabManager: tabManager, content: pane(tabs.second))
+                }
+                .coordinateSpace(name: "splitArea")
+            }
+        }
+    }
+
+    private func divider(sideBySide: Bool, extent: Double) -> some View {
+        ZStack {
+            Color.clear
+            Capsule()
+                .fill(Color.white.opacity(0.45))
+                .frame(width: sideBySide ? 4 : 44, height: sideBySide ? 44 : 4)
+        }
+        .frame(width: sideBySide ? SplitLayout.dividerThickness : nil, height: sideBySide ? nil : SplitLayout.dividerThickness)
+        .frame(maxWidth: sideBySide ? nil : .infinity, maxHeight: sideBySide ? .infinity : nil)
+        .background(DesignSystem.bgCanvas)
+        .contentShape(Rectangle())
+        .gesture(
+            DragGesture(minimumDistance: 0, coordinateSpace: .named("splitArea")).onChanged { value in
+                let position = sideBySide ? value.location.x : value.location.y
+                tabManager.splitRatio = SplitLayout.ratio(forDividerAt: position, extent: extent)
+            }
+        )
+        .accessibilityElement()
+        .accessibilityLabel("Resize split view")
+        .accessibilityIdentifier("splitDivider")
+    }
+}
+
+private struct SplitPane<Content: View>: View {
+    @ObservedObject var tab: BrowserTab
+    let name: String
+    @ObservedObject var tabManager: TabManager
+    let content: Content
+
+    private var isFocused: Bool { tabManager.activeTab?.id == tab.id }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 4) {
+                Button(action: { tabManager.focus(tab) }) {
+                    Text(tab.isNewTab ? "New Tab" : (tab.title.isEmpty ? (FaviconCache.host(from: tab.url) ?? tab.url) : tab.title))
+                        .font(.system(size: 12, weight: isFocused ? .semibold : .regular))
+                        .foregroundStyle(isFocused ? .white : DesignSystem.textMuted2)
+                        .lineLimit(1)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("splitPaneTitle_\(name)")
+
+                Button(action: { tabManager.swapSplit() }) {
+                    Image(systemName: "arrow.left.arrow.right").font(.system(size: 12)).frame(width: 32, height: 28)
+                }
+                .accessibilityLabel("Swap sides")
+                .accessibilityIdentifier("splitSwap_\(name)")
+
+                Button(action: {
+                    // Closing a side keeps the *other* tab on screen; both stay open in the tab switcher.
+                    if let tabs = tabManager.splitTabs { tabManager.closeSplit(keeping: tabs.first.id == tab.id ? tabs.second : tabs.first) }
+                }) {
+                    Image(systemName: "xmark").font(.system(size: 12, weight: .semibold)).frame(width: 32, height: 28)
+                }
+                .accessibilityLabel("Close this side")
+                .accessibilityIdentifier("splitClose_\(name)")
+            }
+            .foregroundStyle(.white)
+            .padding(.leading, 10)
+            .padding(.trailing, 2)
+            .frame(height: 30)
+            .background(DesignSystem.bgCard)
+
+            content
+                .simultaneousGesture(TapGesture().onEnded { tabManager.focus(tab) })
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .overlay(Rectangle().stroke(isFocused ? Color.white.opacity(0.85) : Color.clear, lineWidth: 2).allowsHitTesting(false))
+        .clipped()
     }
 }

@@ -27,6 +27,21 @@ final class BrowserTab: Identifiable, ObservableObject {
     /// entirely during a cross-source design sweep of the home browser.
     @Published var estimatedProgress: Double = 0
     @Published var isLoading: Bool = false
+    /// Pinned tabs sit first in the tab list and come back at the next launch.
+    @Published var isPinned: Bool = false
+    /// The address this tab was pinned at — what gets reopened next launch.
+    var pinURL: String?
+    /// A pinned tab restored at launch isn't loaded until the first time it's shown, so a handful of pins don't all load at once.
+    var pendingURL: String?
+    /// Called when the user touches this tab's page — in split view that makes its pane the focused one.
+    var onFocus: (() -> Void)?
+
+    /// Loads the page a restored pinned tab was waiting to show.
+    func loadPendingIfNeeded() {
+        guard let pending = pendingURL, let url = URL(string: pending) else { return }
+        pendingURL = nil
+        webView.load(URLRequest(url: url))
+    }
 
     init(id: UUID = UUID(), webView: WKWebView, isPrivate: Bool = false) {
         self.id = id
