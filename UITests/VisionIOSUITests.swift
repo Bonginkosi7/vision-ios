@@ -2122,7 +2122,7 @@ final class VisionIOSUITests: XCTestCase {
     /// test never starts a 650 MB download or sees a progress card it didn't expect. Keeps whatever arguments
     /// the test already set.
     private func launchApp(_ app: XCUIApplication) {
-        app.launchArguments += ["-offline_model_opt_out", "YES", "-offline_model_prompt_dismissed", "YES"]
+        app.launchArguments += ["-offline_model_opt_out", "YES", "-offline_model_prompt_dismissed", "YES", "-UITestSkipSplash"]
         app.launch()
         // Taps in the first couple of seconds after launch can be swallowed while the homepage settles.
         _ = app.buttons["moreMenuButton"].waitForExistence(timeout: 10)
