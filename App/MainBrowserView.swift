@@ -93,7 +93,6 @@ struct MainBrowserView: View {
     @State private var showPerformance = false
     @State private var showStudyPlan = false
     @State private var showPaperReview = false
-    @State private var showHelp = false
     @State private var askVisionRequest: AskVisionRequest?
     @State private var showVisionReady = false
     @State private var saveOfflineStatus: String?
@@ -265,9 +264,6 @@ struct MainBrowserView: View {
         .sheet(isPresented: $showPaperReview) {
             PaperReviewView(studyDocumentStore: studyDocumentStore)
         }
-        .sheet(isPresented: $showHelp) {
-            HelpView()
-        }
         .sheet(item: $askVisionRequest) { request in
             AskVisionView(chatSessionStore: chatSessionStore, initialQuery: request.query)
         }
@@ -432,6 +428,52 @@ struct MainBrowserView: View {
         }
     }
 
+    /// The less-used screens, tucked into a submenu so the main menu fits the screen with Settings fully in view —
+    /// Advisor, Points, the offline library and Offline Readiness are also on the homepage.
+    @ViewBuilder
+    private var moreMenu: some View {
+        Menu {
+            Button(action: { showAdvisor = true }) {
+                Label("Advisor", systemImage: "sparkles")
+            }
+            .accessibilityIdentifier("menu_advisor")
+
+            Button(action: { showTasks = true }) {
+                Label("Tasks", systemImage: "checklist")
+            }
+            .accessibilityIdentifier("menu_tasks")
+
+            Button(action: { showFocus = true }) {
+                Label("Focus Mode", systemImage: "timer")
+            }
+            .accessibilityIdentifier("menu_focus")
+
+            Button(action: { showRewards = true }) {
+                Label("Rewards", systemImage: "star.circle")
+            }
+            .accessibilityIdentifier("menu_rewards")
+
+            Button(action: { showRedeem = true }) {
+                Label("Redeem", systemImage: "gift")
+            }
+            .accessibilityIdentifier("menu_redeem")
+
+            Button(action: { showVisionReady = true }) {
+                Label("VISION Ready", systemImage: "checkmark.shield")
+            }
+            .accessibilityIdentifier("menu_visionReady")
+
+            Button(action: { showOfflineLibrary = true }) {
+                Label("Offline Library", systemImage: "icloud.and.arrow.down")
+            }
+            .accessibilityIdentifier("menu_offlineLibrary")
+
+        } label: {
+            Label("More", systemImage: "ellipsis.circle")
+        }
+        .accessibilityIdentifier("menu_more")
+    }
+
     /// Direct equivalent of MainActivity.kt's showOverflowMenu() — every
     /// action beyond back/forward/bookmark lives here, in the real,
     /// user-specified order Android's own popup uses. The education
@@ -474,36 +516,6 @@ struct MainBrowserView: View {
             }
             .accessibilityIdentifier("menu_bookmarks")
 
-            Button(action: { showFocus = true }) {
-                Label("Focus Mode", systemImage: "timer")
-            }
-            .accessibilityIdentifier("menu_focus")
-
-            Button(action: { showRewards = true }) {
-                Label("Rewards", systemImage: "star.circle")
-            }
-            .accessibilityIdentifier("menu_rewards")
-
-            Button(action: { showRedeem = true }) {
-                Label("Redeem", systemImage: "gift")
-            }
-            .accessibilityIdentifier("menu_redeem")
-
-            Button(action: { showVisionReady = true }) {
-                Label("VISION Ready", systemImage: "checkmark.shield")
-            }
-            .accessibilityIdentifier("menu_visionReady")
-
-            Button(action: { showOfflineLibrary = true }) {
-                Label("Offline Library", systemImage: "icloud.and.arrow.down")
-            }
-            .accessibilityIdentifier("menu_offlineLibrary")
-
-            Button(action: { showTasks = true }) {
-                Label("Tasks", systemImage: "checklist")
-            }
-            .accessibilityIdentifier("menu_tasks")
-
             // Both act on the open page, so they share one row — keeps the menu short enough to fit the screen.
             ControlGroup {
                 Button(action: saveActiveTabOffline) {
@@ -525,11 +537,6 @@ struct MainBrowserView: View {
                 .accessibilityIdentifier("menu_reader")
             }
 
-            Button(action: { showAdvisor = true }) {
-                Label("Advisor", systemImage: "sparkles")
-            }
-            .accessibilityIdentifier("menu_advisor")
-
             Button(action: { askVisionRequest = AskVisionRequest(query: nil) }) {
                 Label("Ask VISION", systemImage: "bubble.left.and.text.bubble.right")
             }
@@ -537,15 +544,12 @@ struct MainBrowserView: View {
 
             educationMenu
 
+            moreMenu
+
             Button(action: { showSettings = true }) {
                 Label("Settings", systemImage: "gearshape")
             }
             .accessibilityIdentifier("menu_settings")
-
-            Button(action: { showHelp = true }) {
-                Label("Help", systemImage: "questionmark.circle")
-            }
-            .accessibilityIdentifier("menu_help")
         } label: {
             // Android's own overflow glyph (ic_menu_more) is plain
             // vertical dots with no circle outline — "ellipsis.circle"

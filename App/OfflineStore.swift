@@ -49,6 +49,7 @@ final class OfflineStore: ObservableObject {
             category: category
         )
         try dbQueue.write { db in try item.insert(db) }
+        LicenceUsageStore.shared.recordSync() // one offline sync, for the licence usage count
         return item
     }
 

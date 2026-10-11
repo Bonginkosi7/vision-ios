@@ -1648,3 +1648,26 @@ Not ported (still Android-only): remembered per-site permissions, and the Weathe
   (Chrome, Edge, Firefox, Safari, Brave), adds the web links VISION doesn't already have, skips non-web
   links (`javascript:`, `place:`) and repeats, and says what it did. iPhone bookmarks are a flat list, so
   the file's folders are not kept. Parser in `Sources/VisionCore/BookmarkImport.swift` with unit tests.
+
+## Privacy & data, and the offline plug-in licence
+
+- **Settings → Privacy & data** (`PrivacyView.swift`): what stays on the phone, what leaves it, and when (wording shared with
+  desktop and Android — `Sources/VisionCore/PrivacyContent.swift`, generated from desktop's `privacyContent.ts`).
+  **Download my data** writes a JSON file of every table (minus saved-page paths and extracted text; passwords live in the
+  Keychain and are never in it) and offers it through the share sheet. **Delete my data** asks the analytics server to erase
+  this installation's statistics and free its licence seat (retried at the next launch if offline), empties every database
+  table, removes saved pages, documents, favicons and the profile photo, clears settings, **every Keychain item**, caches
+  and web data, then asks the person to reopen the app (iOS apps can't restart themselves). Downloaded AI models are kept.
+  Rules in `Sources/VisionCore/PrivacyData.swift`, with tests.
+- **Settings → Licence** (`LicenceSection.swift`, `LicenceManager.swift`): enter the key an organisation gave you; the app
+  activates it, verifies the server's signed certificate (ECDSA P-256 via CryptoKit — verified in tests against a certificate
+  made by the real server), shows the organisation, and reports daily **offline-sync counts** (pages saved for offline use;
+  iOS has no background refresh) for billing. Counts are kept locally for everyone and only sent with an active licence.
+  Needs `VISION_ANALYTICS_URL`, `VISION_ANALYTICS_WRITE_KEY` and `VISION_LICENCE_PUBLIC_KEY` in the build.
+- **Fixed: the build's server settings were never baked in.** Xcode's `INFOPLIST_KEY_*` settings ignore custom names, so the
+  analytics, Firebase, AI-proxy and licence addresses and keys never reached `Info.plist`. They now live in
+  `App/Info-Extra.plist` (which Xcode merges and substitutes `$(VARIABLES)` in).
+- **Menu:** Help moved into Settings, and Focus Mode, Tasks, Rewards, Redeem, VISION Ready, Offline Library and Advisor moved
+  into a **More** submenu — the overflow menu had grown taller than the screen, leaving Settings under the notch.
+- **Verified end to end on a real iPhone** against a local copy of the licence server: activation, certificate check with the
+  real key, usage report (the server stored the device's count), and deactivation freeing the seat.

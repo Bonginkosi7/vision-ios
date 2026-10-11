@@ -13,6 +13,7 @@ struct SettingsView: View {
     /// Opens a link in a new browser tab (Settings → Powered by Ann-Connect).
     var onOpenURL: ((String) -> Void)? = nil
     @Environment(\.dismiss) private var dismiss
+    @State private var showHelp = false
 
     @AppStorage(AppSettings.themeKey) private var themeRaw: String = AppSettings.Theme.system.rawValue
     @AppStorage(AppSettings.searchEngineKey) private var searchEngineRaw: String = AppSettings.SearchEngine.google.rawValue
@@ -73,6 +74,8 @@ struct SettingsView: View {
     @ViewBuilder
     private var aboutSection: some View {
         Section("About") {
+            Button("Help") { showHelp = true }
+                .accessibilityIdentifier("settingsHelpButton")
             Button {
                 onOpenURL?("https://www.ann-connect.com")
                 dismiss()
@@ -196,6 +199,13 @@ struct SettingsView: View {
                 searchEngineSection
                 offlineStorageSection
                 privacySection
+                Section {
+                    NavigationLink("Privacy & data") { PrivacyView() }
+                        .accessibilityIdentifier("privacyDataLink")
+                } footer: {
+                    Text("What VISION keeps, what leaves your phone, and how to download or delete your data.")
+                }
+                LicenceSection()
                 SavedPasswordsSection()
                 MemorySection()
                 cloudAISection
@@ -203,6 +213,7 @@ struct SettingsView: View {
                 aboutSection
             }
             .navigationTitle("Settings")
+            .sheet(isPresented: $showHelp) { HelpView() }
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Done") { dismiss() }

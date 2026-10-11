@@ -18,8 +18,13 @@ struct VisionIOSApp: App {
         // protocol itself (only `body` is) — hopping via Task here is what
         // makes calling the MainActor-isolated AnalyticsClient safe from
         // either case, rather than assuming isolation that may not hold.
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-UITestRecordOneSync") { LicenceUsageStore.shared.recordSync() }
+        #endif
         Task { @MainActor in
             AnalyticsClient.shared.start()
+            LicenceManager.shared.startBackgroundWork()
+            await PrivacyService.retryPendingServerDeletion()
         }
     }
 

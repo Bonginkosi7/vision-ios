@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- A browser has to be able to open any site the user asks for, including plain-http ones. This only
+         applies to web pages shown in the browser's own web views, not to the app's own network calls. -->
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsArbitraryLoadsInWebContent</key>
+        <true/>
+    </dict>
+
+    <!-- Server addresses and keys, baked in at build time from the build's own settings (empty until a build sets
+         them). Xcode's INFOPLIST_KEY_* settings ignore custom names, so they live here, where $(VARIABLES) are
+         substituted when the app is built. -->
+    <key>VisionFirebaseAPIKey</key>
+    <string>$(VISION_FIREBASE_API_KEY)</string>
+    <key>VisionFirebaseProjectID</key>
+    <string>$(VISION_FIREBASE_PROJECT_ID)</string>
+    <key>VisionAIProxyURL</key>
+    <string>$(VISION_AI_PROXY_URL)</string>
+    <key>VisionAIProxyKey</key>
+    <string>$(VISION_AI_PROXY_KEY)</string>
+    <key>VisionAnalyticsURL</key>
+    <string>$(VISION_ANALYTICS_URL)</string>
+    <key>VisionAnalyticsWriteKey</key>
+    <string>$(VISION_ANALYTICS_WRITE_KEY)</string>
+    <key>VisionLicencePublicKey</key>
+    <string>$(VISION_LICENCE_PUBLIC_KEY)</string>
+</dict>
+</plist>

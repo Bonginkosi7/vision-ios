@@ -360,6 +360,139 @@ final class VisionIOSUITests: XCTestCase {
         XCTAssertTrue(app.webViews.staticTexts.matching(NSPredicate(format: "label CONTAINS 'badssl'")).firstMatch.waitForExistence(timeout: 15), "the real site's own page should be showing")
     }
 
+    // MARK: - Privacy & data, Licence
+
+    private func openSettingsLink(_ app: XCUIApplication, _ identifier: String) {
+        openMenu(app, item: "menu_settings")
+        let link = app.buttons[identifier]
+        bringToUpperHalf(link, in: app)
+        XCTAssertTrue(link.waitForExistence(timeout: 8), "Settings should show \(identifier)")
+    }
+
+    /// Privacy & data: says what stays and what leaves, offers a download and a delete — and Cancel leaves everything alone.
+    func test_privacyScreenExplainsAndOffersDownloadAndDelete() {
+        let app = XCUIApplication()
+        launchApp(app)
+        openSettingsLink(app, "privacyDataLink")
+        app.buttons["privacyDataLink"].tap()
+
+        XCTAssertTrue(app.staticTexts["What stays on this device"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.staticTexts["What leaves this device, and when"].exists || app.staticTexts["WHAT LEAVES THIS DEVICE, AND WHEN"].exists || app.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] 'what leaves this device'")).firstMatch.exists)
+
+        let delete = app.buttons["privacyDeleteButton"]
+        bringToUpperHalf(delete, in: app)
+        XCTAssertTrue(delete.exists, "the screen should offer to delete my data")
+        delete.tap()
+        let confirmation = app.sheets.firstMatch
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 5), "deleting should ask first")
+        confirmation.buttons["Cancel"].tap()
+        XCTAssertTrue(app.buttons["privacyDeleteButton"].waitForExistence(timeout: 5), "Cancel should leave everything as it was")
+
+        let export = app.buttons["privacyExportButton"]
+        bringToUpperHalf(export, in: app)
+        export.tap()
+        // The file is made and offered through the system share sheet (which lives outside the app, so the test
+        // checks the app's own confirmation line).
+        let status = app.staticTexts["privacyStatus"]
+        XCTAssertTrue(status.waitForExistence(timeout: 15), "downloading should confirm the file is ready")
+        XCTAssertTrue(status.label.contains("ready"), "got: \(status.label)")
+    }
+
+    /// Licence: with no licence, the section explains itself; a key can't be checked when the server isn't reachable, and says so.
+    func test_licenceSectionExplainsItselfAndReportsAnUnreachableServer() {
+        let app = XCUIApplication()
+        launchApp(app)
+        openMenu(app, item: "menu_settings")
+        let field = app.textFields["licenceKeyField"]
+        bringToUpperHalf(field, in: app)
+        XCTAssertTrue(field.waitForExistence(timeout: 8), "an unlicensed phone should offer to enter a key")
+        XCTAssertTrue(app.staticTexts["licenceUsageText"].exists || app.otherElements["licenceUsageText"].exists)
+        focus(field)
+        field.typeText("VSN-AAAA-BBBB-CCCC-DDDD")
+        let activate = app.buttons["licenceActivateButton"]
+        bringToUpperHalf(activate, in: app)
+        activate.tap()
+        let message = app.staticTexts["licenceMessage"]
+        let said = NSPredicate(format: "label CONTAINS 'licence server' OR label CONTAINS 'recognised'")
+        XCTAssertEqual(XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: said, object: message)], timeout: 20), .completed, "got: \(message.label)")
+    }
+
+    /// End to end against a real licence server: save a page offline (one offline sync), activate a licence key, see
+    /// the organisation and usage, then deactivate. Runs only when a server and key are provided
+    /// (TEST_RUNNER_VISION_E2E_LICENCE_KEY) and the build points at that server.
+    func test_licenceEndToEndAgainstARealServer() throws {
+        let key = ProcessInfo.processInfo.environment["VISION_E2E_LICENCE_KEY"] ?? ""
+        try XCTSkipIf(key.isEmpty, "no end-to-end licence key provided")
+        // Reaching a server on the local network makes iOS ask for permission once.
+        addUIInterruptionMonitor(withDescription: "Local network") { alert in
+            for label in ["Allow", "OK"] where alert.buttons[label].exists { alert.buttons[label].tap(); return true }
+            return false
+        }
+        let app = XCUIApplication()
+        // One offline sync is recorded at launch, standing in for a page saved for offline use.
+        app.launchArguments = ["-UITestRecordOneSync"]
+        launchApp(app)
+        // The local-network permission question (first time only) is a system alert.
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        for label in ["Allow", "OK"] {
+            let button = springboard.alerts.buttons[label]
+            if button.waitForExistence(timeout: 6) { button.tap(); break }
+        }
+
+        openMenu(app, item: "menu_settings")
+        // A licence left over from an earlier run is deactivated first.
+        let leftover = app.buttons["licenceDeactivateButton"]
+        for _ in 0..<16 where !(app.textFields["licenceKeyField"].exists || leftover.exists) { app.swipeUp() }
+        Thread.sleep(forTimeInterval: 1)
+        if leftover.exists {
+            leftover.tap()
+            let confirm = app.sheets.buttons["Deactivate"].firstMatch
+            if confirm.waitForExistence(timeout: 5) { confirm.tap() }
+        }
+        let field = app.textFields["licenceKeyField"]
+        bringToUpperHalf(field, in: app)
+        XCTAssertTrue(field.waitForExistence(timeout: 8))
+        let before = app.staticTexts["licenceUsageText"].label
+        print("E2EDBG usage before activation: \(before)")
+        XCTAssertFalse(before.contains("this month, 0 "), "saving the page should have counted an offline sync, got: \(before)")
+        focus(field)
+        field.typeText(key)
+        let activate = app.buttons["licenceActivateButton"]
+        bringToUpperHalf(activate, in: app)
+        activate.tap()
+        // A permission alert, if one appears, is answered by the monitor above on the next interaction.
+        app.tap()
+
+        let status = app.staticTexts["licenceStatusText"]
+        XCTAssertTrue(status.waitForExistence(timeout: 30), "activation should succeed against the server; message: \(app.staticTexts["licenceMessage"].label)")
+        XCTAssertTrue(status.label.contains("E2E Org"), "got: \(status.label)")
+        let usage = app.staticTexts["licenceUsageText"]
+        XCTAssertTrue(usage.waitForExistence(timeout: 5))
+        XCTAssertTrue(usage.label.contains("R2.00"), "usage should be priced from the licence, got: \(usage.label)")
+        print("E2EDBG usage after activation: \(usage.label)")
+        Thread.sleep(forTimeInterval: 8) // let the immediate usage report reach the server
+        let deactivate = app.buttons["licenceDeactivateButton"]
+        scrollIntoView(deactivate, in: app)
+        deactivate.tap()
+        let confirmDeactivate = app.sheets.buttons["Deactivate"].firstMatch
+        if confirmDeactivate.waitForExistence(timeout: 5) { confirmDeactivate.tap() }
+        XCTAssertTrue(app.textFields["licenceKeyField"].waitForExistence(timeout: 10), "deactivating should offer to enter a key again")
+    }
+
+    /// The offline-sync counter shows up in Settings → Licence.
+    func test_offlineSyncCountAppearsInTheLicenceSection() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-UITestRecordOneSync"]
+        launchApp(app)
+        openMenu(app, item: "menu_settings")
+        let usage = app.staticTexts["licenceUsageText"]
+        bringToUpperHalf(usage, in: app)
+        XCTAssertTrue(usage.waitForExistence(timeout: 8))
+        // "Offline syncs this month, N — …": N counts every sync recorded on this phone this month, so it is at least the one just made.
+        let digits = usage.label.drop(while: { !$0.isNumber }).prefix(while: { $0.isNumber })
+        XCTAssertGreaterThanOrEqual(Int(digits) ?? 0, 1, "got: \(usage.label)")
+    }
+
     /// A browser has to open plain-http sites too (iOS blocks them for web views unless the app allows it).
     func test_plainHttpSitesLoad() throws {
         let app = XCUIApplication()
@@ -1332,7 +1465,10 @@ final class VisionIOSUITests: XCTestCase {
         let app = XCUIApplication()
         launchApp(app)
 
-        openMenu(app, item: "menu_help")
+        openMenu(app, item: "menu_settings")
+        let helpButton = app.buttons["settingsHelpButton"]
+        bringToUpperHalf(helpButton, in: app)
+        helpButton.tap()
 
         let firstCard = app.staticTexts["helpCardTitle_0_0"]
         XCTAssertTrue(firstCard.waitForExistence(timeout: 5), "expected the real first Help card to render")
@@ -1342,7 +1478,9 @@ final class VisionIOSUITests: XCTestCase {
         XCTAssertTrue(lastCard.exists, "expected the real last Help card to render")
         XCTAssertEqual(lastCard.label, "Private Browsing")
 
-        app.navigationBars.buttons["Done"].tap()
+        // Two sheets are up (Help over Settings): close the top one, then Settings.
+        let dones = app.navigationBars.buttons.matching(NSPredicate(format: "label == 'Done'"))
+        dones.element(boundBy: dones.count - 1).tap()
     }
 
     /// Real Ask VISION chat proof — same honest "not configured" path
@@ -2054,7 +2192,7 @@ final class VisionIOSUITests: XCTestCase {
     /// realize the rows near the viewport, so a control further down a long
     /// screen (Settings' Cloud AI keys) simply isn't in the accessibility tree
     /// until it has been scrolled to.
-    private func scrollIntoView(_ element: XCUIElement, in app: XCUIApplication, maxSwipes: Int = 8) {
+    private func scrollIntoView(_ element: XCUIElement, in app: XCUIApplication, maxSwipes: Int = 16) {
         var swipes = 0
         while !(element.exists && element.isHittable) && swipes < maxSwipes {
             app.swipeUp()
@@ -2129,9 +2267,24 @@ final class VisionIOSUITests: XCTestCase {
         Thread.sleep(forTimeInterval: 2.5)
     }
 
+    /// Menu items that live in the "More" submenu rather than the top level of the overflow menu.
+    private static let itemsInMoreSubmenu: Set<String> = [
+        "menu_advisor", "menu_tasks", "menu_focus", "menu_rewards", "menu_redeem", "menu_visionReady", "menu_offlineLibrary",
+    ]
+
     private func openMenu(_ app: XCUIApplication, item identifier: String) {
         XCTAssertTrue(app.buttons["moreMenuButton"].waitForExistence(timeout: 5))
         tapMoreButton(app)
+
+        if Self.itemsInMoreSubmenu.contains(identifier) {
+            let more = app.buttons["menu_more"]
+            XCTAssertTrue(more.waitForExistence(timeout: 5), "expected the More submenu in the overflow menu")
+            more.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+            let nested = app.buttons[identifier]
+            XCTAssertTrue(nested.waitForExistence(timeout: 5), "expected menu item '\(identifier)' in the More submenu")
+            nested.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+            return
+        }
 
         let menuItem = app.buttons[identifier]
         if !menuItem.waitForExistence(timeout: 3) { tapMoreButton(app) }

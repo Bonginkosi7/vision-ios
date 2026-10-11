@@ -32,7 +32,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.vision.browser
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_UILaunchStoryboardName: LaunchScreen
-        INFOPLIST_FILE: App/Info-ATS.plist
+        INFOPLIST_FILE: App/Info-Extra.plist
         MARKETING_VERSION: "0.1.0"
         CURRENT_PROJECT_VERSION: "1"
         # The app icon is the official VISION mark (white V on near-black), in
@@ -66,12 +66,6 @@ targets:
         INFOPLIST_KEY_NSFaceIDUsageDescription: "VISION asks for Face ID before it shows or fills in a saved password."
         INFOPLIST_KEY_NSMicrophoneUsageDescription: "VISION uses the microphone so you can dictate your questions to Ask VISION."
         INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: "VISION turns your speech into text so you can dictate questions to Ask VISION."
-        INFOPLIST_KEY_VisionFirebaseAPIKey: "$(VISION_FIREBASE_API_KEY)"
-        INFOPLIST_KEY_VisionFirebaseProjectID: "$(VISION_FIREBASE_PROJECT_ID)"
-        INFOPLIST_KEY_VisionAIProxyURL: "$(VISION_AI_PROXY_URL)"
-        INFOPLIST_KEY_VisionAIProxyKey: "$(VISION_AI_PROXY_KEY)"
-        INFOPLIST_KEY_VisionAnalyticsURL: "$(VISION_ANALYTICS_URL)"
-        INFOPLIST_KEY_VisionAnalyticsWriteKey: "$(VISION_ANALYTICS_WRITE_KEY)"
 
   # Real behavioral verification — launches the actual built app in a
   # booted simulator and drives it (navigate, bookmark, relaunch, confirm

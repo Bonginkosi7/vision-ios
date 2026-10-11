@@ -382,6 +382,7 @@ enum AppDatabase {
         // Saved passwords and VISION Memory — see CredentialStore.swift and MemoryStore.swift.
         CredentialMigrations.register(&migrator)
         MemoryMigrations.register(&migrator)
+        LicenceMigrations.register(&migrator)
 
         return migrator
     }
