@@ -33,8 +33,8 @@ private struct HomeFeatureCard: Identifiable {
 /// never had one (`bookmarkStore` is read only to compute Offline Readiness);
 /// bookmarks live in the dedicated Bookmarks screen.
 ///
-/// Not ported: Android's Weather pill (a location-permission + API
-/// integration that deserves its own phase).
+/// The Weather pill (under the Online / Offline status) shows current conditions for the approximate location —
+/// only with Settings → New Tab → Show weather on and location allowed (see WeatherService).
 struct NewTabView: View {
     @ObservedObject var bookmarkStore: BookmarkStore
     @ObservedObject var offlineStore: OfflineStore
@@ -67,6 +67,8 @@ struct NewTabView: View {
     @State private var readiness: ReadinessResult?
     @State private var overview = TodayOverviewSnapshot(focusLabel: "0m", breaks: 0, sites: 0, tabs: 0)
     @State private var pointsBalance = 0
+    @AppStorage(AppSettings.weatherEnabledKey) private var weatherEnabled = true
+    @ObservedObject private var weather = WeatherService.shared
 
     /// Shortcut icons: 44pt (they were 52 and read as too large).
     private static let shortcutIconSize: CGFloat = 44
@@ -104,6 +106,9 @@ struct NewTabView: View {
                 modeStatus
                     .padding(.horizontal, 20).padding(.top, 6)
 
+                weatherPill
+                    .padding(.horizontal, 20).padding(.top, 6)
+
                 // Pinned outside the ScrollView on purpose: with the Ask box
                 // inside it, the keyboard's own scroll-into-view adjustment
                 // shifted the submit button out from under an already-computed
@@ -130,7 +135,11 @@ struct NewTabView: View {
         .environment(\.colorScheme, .dark)
         .onAppear {
             refresh()
+            if weatherEnabled { weather.refresh() }
             if !mode.isOffline { Task { await refreshNews() } }
+        }
+        .onChange(of: weatherEnabled) { enabled in
+            if enabled { weather.refresh() }
         }
         .onChange(of: mode.isOffline) { offline in
             refresh()
@@ -198,6 +207,35 @@ struct NewTabView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("homeModeStatus")
+    }
+
+    /// Current weather for the approximate location — shown only with the setting on and location allowed. Until the
+    /// person has chosen, a small "Enable weather" button asks; it is never a placeholder temperature.
+    @ViewBuilder
+    private var weatherPill: some View {
+        if weatherEnabled && !mode.isOffline {
+            switch weather.state {
+            case .ready(let current):
+                Text(WeatherLogic.summary(current))
+                    .font(.system(size: 13, weight: .medium)).foregroundStyle(HomeTheme.textSecondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("homeWeatherPill")
+            case .needsPermission:
+                Button(action: { weather.requestPermission() }) {
+                    Text("☁️ Enable weather — uses your approximate location")
+                        .font(.system(size: 13, weight: .medium)).foregroundStyle(HomeTheme.textSecondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .accessibilityIdentifier("homeWeatherEnable")
+            case .loading:
+                Text("Loading weather…")
+                    .font(.system(size: 13)).foregroundStyle(HomeTheme.textSecondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("homeWeatherLoading")
+            case .hidden:
+                EmptyView()
+            }
+        }
     }
 
     private var greeting: String {

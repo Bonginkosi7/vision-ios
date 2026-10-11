@@ -383,6 +383,7 @@ enum AppDatabase {
         CredentialMigrations.register(&migrator)
         MemoryMigrations.register(&migrator)
         LicenceMigrations.register(&migrator)
+        SitePermissionMigrations.register(&migrator)
 
         return migrator
     }

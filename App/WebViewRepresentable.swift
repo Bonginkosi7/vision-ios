@@ -139,6 +139,62 @@ struct WebViewRepresentable: UIViewRepresentable {
             if webView.url != nil { webView.reload() } else { sender.endRefreshing() }
         }
 
+        /// A page asks to use the camera and/or microphone. A remembered answer for this site is applied silently;
+        /// otherwise the person is asked once, and the answer is remembered per site (never in a private tab).
+        /// Managed in Settings → Site permissions. iOS then asks for the system permission itself if needed.
+        func webView(
+            _ webView: WKWebView,
+            requestMediaCapturePermissionFor origin: WKSecurityOrigin,
+            initiatedByFrame frame: WKFrameInfo,
+            type: WKMediaCaptureType,
+            decisionHandler: @escaping @MainActor (WKPermissionDecision) -> Void
+        ) {
+            let kinds: [SitePermissionKind]
+            switch type {
+            case .camera: kinds = [.camera]
+            case .microphone: kinds = [.microphone]
+            default: kinds = [.camera, .microphone]
+            }
+            guard let key = SitePermissionLogic.origin(scheme: origin.`protocol`, host: origin.host, port: origin.port) else {
+                decisionHandler(.deny)
+                return
+            }
+            let store = SitePermissionStore.shared
+            let isPrivate = tab?.isPrivate ?? false
+            switch SitePermissionLogic.resolve(kinds: kinds, remembered: { store.get(origin: key, kind: $0) }) {
+            case .grant:
+                decisionHandler(.grant)
+            case .deny:
+                decisionHandler(.deny)
+            case .ask:
+                let alert = UIAlertController(
+                    title: SitePermissionLogic.promptText(host: origin.host, kinds: kinds),
+                    message: isPrivate ? nil : "VISION remembers your answer for this site. You can change it in Settings → Site permissions.",
+                    preferredStyle: .alert
+                )
+                alert.addAction(UIAlertAction(title: "Don't Allow", style: .cancel) { _ in
+                    if !isPrivate { for kind in kinds { store.set(origin: key, kind: kind, granted: false) } }
+                    decisionHandler(.deny)
+                })
+                alert.addAction(UIAlertAction(title: "Allow", style: .default) { _ in
+                    if !isPrivate { for kind in kinds { store.set(origin: key, kind: kind, granted: true) } }
+                    decisionHandler(.grant)
+                })
+                guard let presenter = Self.topViewController() else {
+                    decisionHandler(.deny)
+                    return
+                }
+                presenter.present(alert, animated: true)
+            }
+        }
+
+        private static func topViewController() -> UIViewController? {
+            let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first { $0.activationState == .foregroundActive }
+            var top = scene?.windows.first(where: \.isKeyWindow)?.rootViewController
+            while let presented = top?.presentedViewController { top = presented }
+            return top
+        }
+
         func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
             tab?.url = webView.url?.absoluteString ?? tab?.url ?? ""
         }

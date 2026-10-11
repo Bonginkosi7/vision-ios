@@ -1857,6 +1857,61 @@ final class VisionIOSUITests: XCTestCase {
         assertAddressBarEventuallyShows(addressField, "https://example.com/", in: self)
     }
 
+    // MARK: - Site permissions and weather
+
+    /// A remembered camera answer shows up in Settings → Site permissions, and can be taken back for that one site.
+    func test_sitePermissionsListShowsARememberedAnswerAndRemovesIt() {
+        let app = XCUIApplication()
+        launchApp(app, extraArguments: ["-UITestSeedSitePermission"])
+        openMenu(app, item: "menu_settings")
+
+        let link = app.buttons["sitePermissionsLink"]
+        scrollIntoView(link, in: app)
+        XCTAssertTrue(link.waitForExistence(timeout: 5))
+        link.tap()
+
+        let row = app.descendants(matching: .any)["sitePermissionRow_https://uitest-site.example.com|camera"]
+        XCTAssertTrue(row.waitForExistence(timeout: 5), "the remembered answer should be listed")
+        XCTAssertTrue(row.label.contains("Allowed"), "it was remembered as allowed; row says: \(row.label)")
+
+        // Only this one site's answer is removed — never "Reset all", which would wipe real answers on the device.
+        row.swipeLeft()
+        let remove = app.buttons["sitePermissionRemove_https://uitest-site.example.com|camera"]
+        XCTAssertTrue(remove.waitForExistence(timeout: 3))
+        remove.tap()
+        let gone = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: row)
+        XCTAssertEqual(XCTWaiter().wait(for: [gone], timeout: 5), .completed, "removing it should forget the answer")
+    }
+
+    /// Turning "Show weather" off removes the weather pill from New Tab; turning it back on restores the setting.
+    func test_weatherToggleHidesTheWeatherPill() {
+        let app = XCUIApplication()
+        launchApp(app)
+        openMenu(app, item: "menu_settings")
+
+        let toggle = app.switches["weatherEnabledToggle"]
+        scrollIntoView(toggle, in: app)
+        XCTAssertTrue(toggle.waitForExistence(timeout: 5))
+        XCTAssertEqual(toggle.value as? String, "1", "weather is on by default")
+        toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+        XCTAssertEqual(XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == '0'"), object: toggle)], timeout: 5), .completed)
+        closeSettings(app)
+
+        XCTAssertTrue(app.staticTexts["newTabGreeting"].waitForExistence(timeout: 5))
+        for id in ["homeWeatherPill", "homeWeatherEnable", "homeWeatherLoading"] {
+            XCTAssertFalse(app.descendants(matching: .any)[id].exists, "\(id) should be hidden with weather off")
+        }
+
+        // Put the setting back for whatever runs next.
+        openMenu(app, item: "menu_settings")
+        let again = app.switches["weatherEnabledToggle"]
+        scrollIntoView(again, in: app)
+        XCTAssertTrue(again.waitForExistence(timeout: 5))
+        again.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+        XCTAssertEqual(XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == '1'"), object: again)], timeout: 5), .completed)
+        closeSettings(app)
+    }
+
     /// Real New Tab page proof — found as a major, previously-
     /// undisclosed gap during a cross-source design sweep: this screen
     /// had stayed at its original Phase 1 cut (bookmarks row only) even
@@ -2343,8 +2398,8 @@ final class VisionIOSUITests: XCTestCase {
     /// Launches the app with the offline-AI auto-download switched off (and its homepage card dismissed), so a
     /// test never starts a 650 MB download or sees a progress card it didn't expect. Keeps whatever arguments
     /// the test already set.
-    private func launchApp(_ app: XCUIApplication) {
-        app.launchArguments += ["-offline_model_opt_out", "YES", "-offline_model_prompt_dismissed", "YES", "-UITestSkipSplash"]
+    private func launchApp(_ app: XCUIApplication, extraArguments: [String] = []) {
+        app.launchArguments += ["-offline_model_opt_out", "YES", "-offline_model_prompt_dismissed", "YES", "-UITestSkipSplash"] + extraArguments
         app.launch()
         // Taps in the first couple of seconds after launch can be swallowed while the homepage settles.
         _ = app.buttons["moreMenuButton"].waitForExistence(timeout: 10)

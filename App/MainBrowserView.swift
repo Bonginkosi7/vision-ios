@@ -163,6 +163,12 @@ struct MainBrowserView: View {
                 }
             }
             seedMaterialsFixtureIfRequested()
+            #if DEBUG
+            // UI tests can't make a real page ask for the camera, so they ask for one remembered answer to look at.
+            if ProcessInfo.processInfo.arguments.contains("-UITestSeedSitePermission") {
+                SitePermissionStore.shared.set(origin: "https://uitest-site.example.com", kind: .camera, granted: true)
+            }
+            #endif
         }
         .onChange(of: tabManager.activeTabIndex) { _ in syncAddressBar() }
         .sheet(isPresented: $showTabSwitcher) {

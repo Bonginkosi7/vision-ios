@@ -10,6 +10,14 @@
         <true/>
     </dict>
 
+    <!-- Shown the first time a web page (or New Tab's weather) asks for these. -->
+    <key>NSCameraUsageDescription</key>
+    <string>Websites you allow can use your camera, for example for video calls.</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Websites you allow can use your microphone, for example for video calls and voice messages.</string>
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>Your approximate location is used only to show the weather on the New Tab page.</string>
+
     <!-- Server addresses and keys, baked in at build time from the build's own settings (empty until a build sets
          them). Xcode's INFOPLIST_KEY_* settings ignore custom names, so they live here, where $(VARIABLES) are
          substituted when the app is built. -->

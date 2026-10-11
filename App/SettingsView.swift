@@ -18,6 +18,7 @@ struct SettingsView: View {
     @AppStorage(AppSettings.themeKey) private var themeRaw: String = AppSettings.Theme.system.rawValue
     @AppStorage(AppSettings.searchEngineKey) private var searchEngineRaw: String = AppSettings.SearchEngine.google.rawValue
     @AppStorage(AppSettings.offlineStorageLimitMbKey) private var offlineStorageLimitMb: Int = 500
+    @AppStorage(AppSettings.weatherEnabledKey) private var weatherEnabled: Bool = true
     @AppStorage(AppSettings.analyticsEnabledKey) private var analyticsEnabled: Bool = true
     @AppStorage(AppSettings.diagnosticsEnabledKey) private var diagnosticsEnabled: Bool = true
 
@@ -114,6 +115,15 @@ struct SettingsView: View {
     }
 
     @ViewBuilder
+    private var newTabSection: some View {
+        Section("New Tab") {
+            Toggle("Show weather", isOn: $weatherEnabled)
+                .tint(HomeModeToggle.onlineColor)
+                .accessibilityIdentifier("weatherEnabledToggle")
+        }
+    }
+
+    @ViewBuilder
     private var searchEngineSection: some View {
         Section("Default search engine") {
             Picker("Search Engine", selection: $searchEngineRaw) {
@@ -197,6 +207,7 @@ struct SettingsView: View {
                 ProfileSection()
                 themeSection
                 searchEngineSection
+                newTabSection
                 offlineStorageSection
                 privacySection
                 Section {
@@ -205,6 +216,7 @@ struct SettingsView: View {
                 } footer: {
                     Text("What VISION keeps, what leaves your phone, and how to download or delete your data.")
                 }
+                SitePermissionsSection()
                 LicenceSection()
                 SavedPasswordsSection()
                 MemorySection()

@@ -7,7 +7,7 @@ import SwiftUI
 /// Phase 3 ports exactly the two prefs that phase's own scope needs
 /// (search engine, theme); the real offline storage limit lands in the
 /// VISION Ready phase alongside the screen that displays it. Android's
-/// weather/profile/background-refresh prefs stay deferred — background
+/// background-refresh pref stays deferred — background
 /// refresh has no real worker to flip on yet (see README's Smart Cache
 /// scope trim, disclosed as far back as the Phase 2 migration comment).
 enum AppSettings {
@@ -67,6 +67,8 @@ enum AppSettings {
     /// The homepage's Offline Mode choice (see HomeConnectivityMode). Off by
     /// default; read via @AppStorage so the homepage redraws when it changes.
     static let offlineModeKey = "offline_mode_enabled"
+    /// Whether New Tab shows the weather pill. On by default; nothing is fetched until location is allowed.
+    static let weatherEnabledKey = "weather_enabled"
     static let analyticsEnabledKey = "analytics_enabled"
     static let diagnosticsEnabledKey = "diagnostics_enabled"
     private static let analyticsInstallationIDKey = "analytics_installation_id"
