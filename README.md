@@ -1633,3 +1633,18 @@ supersede those notes.
   now finds the file again under the current Application Support folder wherever a stored path is read.
 
 Not ported (still Android-only): remembered per-site permissions, and the Weather pill on the homepage.
+
+## Reader View and bookmark import
+
+- **Reader View** (⋯ menu → Reader, in the same row as Save Offline and Autofill): Mozilla's Readability.js
+  (Apache-2.0, `App/Resources/Readability.js`) runs inside the open page and returns the article; it is shown
+  in a sheet on a dark, comfortable reading page with text-size (A−/A+) and serif/sans controls that are
+  remembered. The reading view's web view has JavaScript off and its own page policy allows images and styles
+  only, since the article is untrusted HTML; a tapped link opens in Safari. The pure parts (the extraction
+  script, result parsing, reading time, the reading document) are in `Sources/VisionCore/ReaderCore.swift`
+  with unit tests. Verified on a real article. Disclosed limit: pages that hide their text until you expand
+  it (some mobile sites) give a shorter article.
+- **Bookmark import** (Bookmarks → Import): reads the standard `bookmarks.html` file every browser exports
+  (Chrome, Edge, Firefox, Safari, Brave), adds the web links VISION doesn't already have, skips non-web
+  links (`javascript:`, `place:`) and repeats, and says what it did. iPhone bookmarks are a flat list, so
+  the file's folders are not kept. Parser in `Sources/VisionCore/BookmarkImport.swift` with unit tests.

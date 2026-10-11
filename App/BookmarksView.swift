@@ -1,4 +1,6 @@
 import SwiftUI
+import UniformTypeIdentifiers
+import VisionCore
 
 /// Real saved bookmarks list — port of `BookmarksActivity.kt`: list, tap to
 /// open, per-entry delete. Each row shows the site's real favicon (cached
@@ -18,6 +20,8 @@ struct BookmarksView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var bookmarks: [Bookmark] = []
+    @State private var showImporter = false
+    @State private var importMessage: String?
 
     var body: some View {
         NavigationStack {
@@ -47,13 +51,56 @@ struct BookmarksView: View {
             }
             .navigationTitle("Bookmarks")
             .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Import") { showImporter = true }
+                        .accessibilityIdentifier("bookmarksImportButton")
+                }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Done") { dismiss() }
                 }
             }
+            .fileImporter(isPresented: $showImporter, allowedContentTypes: [.html]) { result in
+                importBookmarks(from: result)
+            }
+            .alert("Import bookmarks", isPresented: Binding(get: { importMessage != nil }, set: { if !$0 { importMessage = nil } })) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(importMessage ?? "")
+            }
             .visionScreen()
         }
-        .onAppear(perform: refresh)
+        .onAppear {
+            refresh()
+            #if DEBUG
+            // UI tests can't drive the system file picker, so they ask for a small built-in bookmarks file instead.
+            if ProcessInfo.processInfo.arguments.contains("-UITestImportBookmarksFixture") {
+                applyImport(html: "<DL><DT><A HREF=\"https://import-test.example.com/\">Imported One</A><DT><A HREF=\"javascript:alert(1)\">Bad</A></DL>")
+            }
+            #endif
+        }
+    }
+
+    /// Adds the web addresses from a bookmarks.html file exported by another browser (Chrome, Safari, Firefox, Edge…).
+    private func importBookmarks(from result: Result<URL, Error>) {
+        guard case .success(let url) = result else { return }
+        let opened = url.startAccessingSecurityScopedResource()
+        defer { if opened { url.stopAccessingSecurityScopedResource() } }
+        guard let data = try? Data(contentsOf: url), data.count <= 25 * 1024 * 1024,
+              let html = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .isoLatin1)
+        else {
+            importMessage = "That file couldn't be read."
+            return
+        }
+        applyImport(html: html)
+    }
+
+    private func applyImport(html: String) {
+        let plan = BookmarkImport.plan(BookmarkImport.parse(html: html)) { address in
+            ((try? bookmarkStore.isBookmarked(url: address)) ?? nil) != nil
+        }
+        for item in plan.toAdd { _ = try? bookmarkStore.add(title: item.title, url: item.url) }
+        importMessage = BookmarkImport.describe(plan.summary)
+        refresh()
     }
 
     @ViewBuilder

@@ -72,6 +72,8 @@ struct MainBrowserView: View {
     @State private var showDownloads = false
     @State private var showOfflineLibrary = false
     @State private var showSettings = false
+    @State private var readerArticle: ReaderArticle?
+    @State private var readerUnavailable = false
     @State private var autofillChoices: [SavedCredential] = []
     @State private var showAutofillChoices = false
     @State private var autofillNoLoginFor: String?
@@ -199,6 +201,14 @@ struct MainBrowserView: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text("This page doesn't show a password field right now. Open the login form first, then try Autofill again.")
+        }
+        .sheet(item: $readerArticle) { article in
+            ReaderView(article: article)
+        }
+        .alert("Reader View", isPresented: $readerUnavailable) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("This page doesn't look like an article, so there's nothing to simplify.")
         }
         .sheet(isPresented: $showSettings) {
             SettingsView(historyStore: historyStore) { url in
@@ -507,6 +517,12 @@ struct MainBrowserView: View {
                 }
                 .disabled(tabManager.activeTab?.isNewTab ?? true)
                 .accessibilityIdentifier("menu_autofill")
+
+                Button(action: openReaderView) {
+                    Label("Reader", systemImage: "text.justify.left")
+                }
+                .disabled(tabManager.activeTab?.isNewTab ?? true)
+                .accessibilityIdentifier("menu_reader")
             }
 
             Button(action: { showAdvisor = true }) {
@@ -690,6 +706,25 @@ struct MainBrowserView: View {
             // (never claims success on a write that didn't happen) even
             // though it's not yet a great UX. Real error surfacing is a
             // later-phase concern, not invented here.
+        }
+    }
+
+    /// Reader View for the open page: Readability runs inside the page and hands back the article text.
+    private func openReaderView() {
+        guard let tab = tabManager.activeTab, !tab.isNewTab, ReaderCore.canRead(url: tab.url),
+              let source = Bundle.main.url(forResource: "Readability", withExtension: "js").flatMap({ try? String(contentsOf: $0, encoding: .utf8) })
+        else {
+            readerUnavailable = true
+            return
+        }
+        let script = ReaderCore.buildExtractionScript(readabilitySource: source)
+        Task { @MainActor in
+            let raw = try? await tab.webView.evaluateJavaScript(script)
+            if let article = ReaderCore.parseExtraction(raw, id: UUID().uuidString, sourceURL: tab.url) {
+                readerArticle = article
+            } else {
+                readerUnavailable = true
+            }
         }
     }
 

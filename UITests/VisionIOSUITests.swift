@@ -374,6 +374,60 @@ final class VisionIOSUITests: XCTestCase {
         XCTAssertTrue(body.waitForExistence(timeout: 20), "the plain-http page should load")
     }
 
+    /// Reader View: a real article opens as a clean reading page, with text-size controls, and Done returns to the page.
+    func test_readerViewShowsAnArticleAndDoneReturnsToThePage() throws {
+        let app = XCUIApplication()
+        launchApp(app)
+
+        let addressField = app.textFields["addressBarField"]
+        XCTAssertTrue(addressField.waitForExistence(timeout: 5))
+        navigate(app: app, addressField: addressField, to: "https://en.wikipedia.org/wiki/Web_browser")
+        let page = app.webViews.staticTexts.matching(NSPredicate(format: "label CONTAINS 'web browser'")).firstMatch
+        try XCTSkipUnless(page.waitForExistence(timeout: 40), "the article page didn't load")
+
+        openMenu(app, item: "menu_reader")
+        let done = app.buttons["readerDoneButton"]
+        XCTAssertTrue(done.waitForExistence(timeout: 20), "Reader View should open for an article")
+        let meta = app.webViews.staticTexts.matching(NSPredicate(format: "label CONTAINS 'min read'")).firstMatch
+        XCTAssertTrue(meta.waitForExistence(timeout: 10), "the reading page shows the reading time")
+        app.buttons["readerLarger"].tap()
+        app.buttons["readerTypeface"].tap()
+        done.tap()
+        XCTAssertTrue(app.textFields["addressBarField"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["readerDoneButton"].exists)
+    }
+
+    /// The Reader item is off on the homepage, where there is no page to simplify.
+    func test_readerViewIsUnavailableOnTheHomepage() {
+        let app = XCUIApplication()
+        launchApp(app)
+        XCTAssertTrue(app.buttons["moreMenuButton"].waitForExistence(timeout: 5))
+        tapMoreButton(app)
+        let reader = app.buttons["menu_reader"]
+        XCTAssertTrue(reader.waitForExistence(timeout: 5))
+        XCTAssertFalse(reader.isEnabled, "Reader should be disabled on the homepage")
+    }
+
+    /// Bookmark import: a bookmarks file's web links are added (and non-web ones skipped), then listed.
+    func test_importingABookmarksFileAddsItsWebLinks() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-UITestImportBookmarksFixture"]
+        launchApp(app)
+
+        openMenu(app, item: "menu_bookmarks")
+        XCTAssertTrue(app.buttons["bookmarksImportButton"].waitForExistence(timeout: 8), "Bookmarks should offer Import")
+        let alert = app.alerts["Import bookmarks"]
+        XCTAssertTrue(alert.waitForExistence(timeout: 8), "the import should report what it did")
+        let said = alert.staticTexts.allElementsBoundByIndex.map { $0.label }.joined(separator: " ")
+        XCTAssertTrue(said.contains("Imported 1 bookmark") || said.contains("1 already saved"), "got: \(said)")
+        alert.buttons["OK"].tap()
+
+        let delete = app.buttons["btnDeleteBookmark_https://import-test.example.com/"]
+        XCTAssertTrue(delete.waitForExistence(timeout: 5), "the imported bookmark should be listed")
+        XCTAssertFalse(app.buttons.matching(NSPredicate(format: "identifier CONTAINS 'javascript'")).firstMatch.exists, "a javascript: link must not be imported")
+        delete.tap()
+    }
+
     /// "Back to safety" leaves the bad site and returns to the homepage when there is nothing to go back to.
     func test_certificateWarningBackToSafetyReturnsHome() throws {
         let app = XCUIApplication()
