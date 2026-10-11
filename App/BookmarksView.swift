@@ -5,7 +5,10 @@ import VisionCore
 /// Real saved bookmarks list — port of `BookmarksActivity.kt`: list, tap to
 /// open, per-entry delete. Each row shows the site's real favicon (cached
 /// on-device, a grey globe when none was captured), the page title and the
-/// domain. Bookmarks are a flat list on iOS — there are no folders to preserve.
+/// domain and the time it was saved. Like History, bookmarks sit under day
+/// headings (Today, Yesterday, …) and a row of quick ranges (All / Today /
+/// Yesterday / Last 7 days / Last 30 days) narrows the list. There are no
+/// folders to preserve on iOS.
 ///
 /// Accessibility structure below is deliberate and CI-proven, not incidental:
 /// - the open button and the delete button are siblings, each with its own
@@ -22,31 +25,46 @@ struct BookmarksView: View {
     @State private var bookmarks: [Bookmark] = []
     @State private var showImporter = false
     @State private var importMessage: String?
+    @State private var range: BookmarkRange = .all
+
+    private var groups: [DatedGroup<Bookmark>] {
+        DayGrouping.group(bookmarks, range: range, dateOf: \.createdAt)
+    }
 
     var body: some View {
         NavigationStack {
             Group {
                 if bookmarks.isEmpty {
-                    Text("No bookmarks yet — tap the star on any page to save it.")
-                        .font(.system(size: 15))
-                        .foregroundStyle(DesignSystem.textMuted2)
-                        .multilineTextAlignment(.center)
-                        .padding(DesignSystem.Space.xxl)
-                        .accessibilityIdentifier("emptyBookmarksListState")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    emptyText(BookmarkRange.all.emptyText)
                 } else {
-                    List {
-                        ForEach(bookmarks) { bookmark in
-                            row(for: bookmark)
-                                .listRowBackground(DesignSystem.bgCanvas)
-                                .listRowSeparatorTint(DesignSystem.borderCard)
-                                .listRowInsets(EdgeInsets(top: DesignSystem.Space.m, leading: DesignSystem.Space.l, bottom: DesignSystem.Space.m, trailing: DesignSystem.Space.s))
-                                .accessibilityElement(children: .contain)
+                    VStack(spacing: 0) {
+                        rangeChips
+                        if groups.isEmpty {
+                            emptyText(range.emptyText)
+                        } else {
+                            List {
+                                ForEach(groups, id: \.label) { group in
+                                    Section {
+                                        ForEach(group.items) { bookmark in
+                                            row(for: bookmark)
+                                                .listRowBackground(DesignSystem.bgCanvas)
+                                                .listRowSeparatorTint(DesignSystem.borderCard)
+                                                .listRowInsets(EdgeInsets(top: DesignSystem.Space.m, leading: DesignSystem.Space.l, bottom: DesignSystem.Space.m, trailing: DesignSystem.Space.s))
+                                                .accessibilityElement(children: .contain)
+                                        }
+                                    } header: {
+                                        DesignSystem.sectionLabel("\(group.label) · \(group.items.count)")
+                                            .textCase(nil)
+                                            .listRowInsets(EdgeInsets(top: DesignSystem.Space.m, leading: 0, bottom: DesignSystem.Space.xs, trailing: 0))
+                                    }
+                                    .listRowBackground(DesignSystem.bgCanvas)
+                                }
+                            }
+                            .listStyle(.plain)
+                            .scrollContentBackground(.hidden)
+                            .accessibilityIdentifier("bookmarksList")
                         }
                     }
-                    .listStyle(.plain)
-                    .scrollContentBackground(.hidden)
-                    .accessibilityIdentifier("bookmarksList")
                 }
             }
             .navigationTitle("Bookmarks")
@@ -103,6 +121,39 @@ struct BookmarksView: View {
         refresh()
     }
 
+    private func emptyText(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 15))
+            .foregroundStyle(DesignSystem.textMuted2)
+            .multilineTextAlignment(.center)
+            .padding(DesignSystem.Space.xxl)
+            .accessibilityIdentifier("emptyBookmarksListState")
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var rangeChips: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: DesignSystem.Space.s) {
+                ForEach(BookmarkRange.allCases, id: \.self) { option in
+                    let selected = option == range
+                    Button(action: { range = option }) {
+                        Text(option.title)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(selected ? Color.black : Color.white)
+                            .padding(.horizontal, DesignSystem.Space.m).frame(minHeight: 34)
+                            .background(Capsule().fill(selected ? Color.white : DesignSystem.bgCard))
+                            .overlay(Capsule().stroke(DesignSystem.borderCard, lineWidth: selected ? 0 : 1))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityAddTraits(selected ? .isSelected : [])
+                    .accessibilityIdentifier("bookmarkRange_\(option.rawValue)")
+                }
+            }
+            .padding(.horizontal, DesignSystem.Space.l)
+            .padding(.vertical, DesignSystem.Space.s)
+        }
+    }
+
     @ViewBuilder
     private func row(for bookmark: Bookmark) -> some View {
         let host = FaviconCache.host(from: bookmark.url) ?? bookmark.url
@@ -115,7 +166,7 @@ struct BookmarksView: View {
                             .font(.system(size: 15, weight: .medium))
                             .foregroundStyle(.white)
                             .lineLimit(1)
-                        Text(host)
+                        Text("\(host) · \(HistoryGrouping.timeLabel(for: bookmark.createdAt))")
                             .font(.system(size: 12))
                             .foregroundStyle(DesignSystem.textMuted2)
                             .lineLimit(1)

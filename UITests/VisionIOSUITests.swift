@@ -1738,6 +1738,12 @@ final class VisionIOSUITests: XCTestCase {
 
         let bookmarkButton = app.buttons["bookmarkButton"]
         XCTAssertTrue(bookmarkButton.waitForExistence(timeout: 5))
+        // A previous aborted run may have left this page bookmarked; clear it so the test starts clean.
+        if bookmarkButton.label == "Remove bookmark" {
+            bookmarkButton.tap()
+            let clearedExpectation = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "Add bookmark"), object: bookmarkButton)
+            XCTAssertEqual(XCTWaiter().wait(for: [clearedExpectation], timeout: 5), .completed)
+        }
         XCTAssertEqual(bookmarkButton.label, "Add bookmark", "no other test in this suite ever bookmarks example.net")
         bookmarkButton.tap()
         let bookmarkedExpectation = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "Remove bookmark"), object: bookmarkButton)
@@ -1749,6 +1755,18 @@ final class VisionIOSUITests: XCTestCase {
             attachDiagnostics(app: app, name: "bookmarks-screen-row-missing")
         }
         XCTAssertTrue(row.exists, "the real bookmark just saved should show up in the real dedicated Bookmarks screen")
+
+        // Day grouping: a bookmark saved just now is under "Today" and in the
+        // Today / Last 7 days / Last 30 days ranges, but not in "Yesterday".
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Today'")).firstMatch.exists, "a bookmark saved now should sit under a Today heading")
+        app.buttons["bookmarkRange_yesterday"].tap()
+        XCTAssertTrue(app.buttons["bookmarkRange_yesterday"].isSelected, "the tapped range chip should show as selected")
+        // Other bookmarks from earlier runs may legitimately be under Yesterday; this one was saved a moment ago.
+        XCTAssertFalse(app.buttons["bookmarksListRow_https://example.net/"].exists, "a bookmark saved just now must not appear in the Yesterday range")
+        app.buttons["bookmarkRange_last7"].tap()
+        XCTAssertTrue(app.buttons["bookmarksListRow_https://example.net/"].waitForExistence(timeout: 3))
+        app.buttons["bookmarkRange_all"].tap()
+        XCTAssertTrue(app.buttons["bookmarksListRow_https://example.net/"].waitForExistence(timeout: 3))
         row.tap()
 
         // Tapping the row should navigate the real active tab and dismiss,
