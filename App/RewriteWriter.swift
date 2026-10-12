@@ -30,7 +30,7 @@ enum RewriteWriter {
         guard !configured.isEmpty else {
             return RewriteResult(
                 ok: false, text: nil, providerName: nil,
-                error: "No cloud AI provider is configured. Add an API key in Settings to use Rewrite Writer."
+                error: "VISION AI isn't available right now. Check your connection and try again."
             )
         }
 

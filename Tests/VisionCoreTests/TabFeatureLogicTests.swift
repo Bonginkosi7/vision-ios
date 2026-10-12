@@ -95,3 +95,23 @@ final class SplitLayoutTests: XCTestCase {
         XCTAssertEqual(SplitLayout.ratio(forDividerAt: 9999, extent: extent), SplitLayout.maxRatio)
     }
 }
+
+final class AddressDisplayTests: XCTestCase {
+    func test_showsJustTheSite() {
+        XCTAssertEqual(AddressDisplay.text(for: "https://en.wikipedia.org/wiki/Hello_world"), "en.wikipedia.org")
+        XCTAssertEqual(AddressDisplay.text(for: "https://www.bbc.com/news/articles/cj5y?at_medium=RSS"), "bbc.com")
+        XCTAssertEqual(AddressDisplay.text(for: "http://Example.COM:8080/a"), "example.com")
+    }
+
+    func test_translatedPageShowsItsOriginalSite() {
+        let translated = TranslateLogic.translatedURL(for: "https://www.bbc.com/news/a", targetCode: "en") ?? ""
+        XCTAssertEqual(AddressDisplay.text(for: translated), "bbc.com")
+    }
+
+    func test_savedPagesAndOddAddresses() {
+        XCTAssertEqual(AddressDisplay.text(for: "file:///var/mobile/x.webarchive"), AddressDisplay.savedPageLabel)
+        XCTAssertEqual(AddressDisplay.text(for: ""), "")
+        XCTAssertEqual(AddressDisplay.text(for: "about:blank"), "about:blank")
+        XCTAssertEqual(AddressDisplay.text(for: "  https://example.org/  "), "example.org")
+    }
+}

@@ -1,0 +1,4 @@
+// Build settings shared by every build. The values that differ per machine or must stay out of git (the VISION AI
+// server address and app key) live in Local.xcconfig, which is git-ignored. Without it the app builds with no
+// VISION AI server (those features then say they're unavailable), so CI and fresh clones still build.
+#include? "Local.xcconfig"

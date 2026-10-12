@@ -65,6 +65,8 @@ struct MainBrowserView: View {
     }
 
     @State private var addressText: String = ""
+    /// While the address bar is being edited it shows the full address; otherwise just the site, like Safari.
+    @FocusState private var addressFocused: Bool
     @State private var isBookmarked: Bool = false
     @State private var showHistory = false
     @State private var showTabSwitcher = false
@@ -97,6 +99,8 @@ struct MainBrowserView: View {
     @State private var showVisionReady = false
     @State private var saveOfflineStatus: String?
     @State private var translateUnavailable = false
+    /// Whether the focused tab is showing the home page — the bottom address bar is only for pages.
+    @State private var onHomePage = true
 
     var body: some View {
         VStack(spacing: 0) {
@@ -347,42 +351,48 @@ struct MainBrowserView: View {
         // row; the six controls sit below it, spread evenly, each in its
         // own 44pt target.
         VStack(spacing: 2) {
-            HStack(spacing: 8) {
-                TextField("Search or enter address", text: $addressText, onCommit: navigateFromAddressBar)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 15))
-                    .autocapitalization(.none)
-                    .disableAutocorrection(true)
-                    .frame(height: 40)
-                    .padding(.horizontal, 14)
-                    // Direct port of bg_address_bar.xml: a true pill (radius ==
-                    // half the 40dp height) plus its own subtle 1dp stroke
-                    // (?attr/colorSurface fill + #33808080 stroke).
-                    .background(RoundedRectangle(cornerRadius: 20).fill(DesignSystem.addressField))
-                    .overlay(RoundedRectangle(cornerRadius: 20).stroke(DesignSystem.addressFieldBorder, lineWidth: 1))
-                    .accessibilityIdentifier("addressBarField")
-
-                if focusManager.activeSession != nil {
-                    Text("Focus")
-                        .font(.system(size: 11, weight: .semibold))
-                        .fixedSize()
-                        .accessibilityIdentifier("focusActiveIndicator")
+            // The address bar belongs to pages: on the home page the search box up top is where you type, so only
+            // the Focus / Private markers (when they apply) stay down here.
+            if !onHomePage {
+                HStack(spacing: 8) {
+                    TextField("Search or enter address", text: $addressText, onCommit: navigateFromAddressBar)
+                        .focused($addressFocused)
+                        .multilineTextAlignment(addressFocused ? .leading : .center)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 15))
+                        .autocapitalization(.none)
+                        .disableAutocorrection(true)
+                        .frame(height: 40)
+                        .padding(.horizontal, 14)
+                        // Direct port of bg_address_bar.xml: a true pill (radius ==
+                        // half the 40dp height) plus its own subtle 1dp stroke
+                        // (?attr/colorSurface fill + #33808080 stroke).
+                        .background(RoundedRectangle(cornerRadius: 20).fill(DesignSystem.addressField))
+                        .overlay(RoundedRectangle(cornerRadius: 20).stroke(DesignSystem.addressFieldBorder, lineWidth: 1))
+                        .accessibilityIdentifier("addressBarField")
+                        .onChange(of: addressFocused) { focused in
+                            // Tapping the bar shows the whole address, selected so typing replaces it.
+                            syncAddressBar()
+                            if focused {
+                                DispatchQueue.main.async { UIApplication.shared.sendAction(#selector(UIResponder.selectAll(_:)), to: nil, from: nil, for: nil) }
+                            }
+                        }
+                    sessionMarkers
                 }
-
-                if tabManager.activeTab?.isPrivate == true {
-                    Text("Private")
-                        .font(.system(size: 11, weight: .semibold))
-                        .fixedSize()
-                        .accessibilityIdentifier("privateIndicator")
+                .padding(.horizontal, 12)
+            } else if focusManager.activeSession != nil || tabManager.activeTab?.isPrivate == true {
+                HStack(spacing: 8) {
+                    Spacer()
+                    sessionMarkers
                 }
+                .padding(.horizontal, 12)
             }
-            .padding(.horizontal, 12)
 
             HStack(spacing: 0) {
                 Button(action: goBack) {
                     toolbarIcon("chevron.left")
                 }
-                .disabled(!(tabManager.activeTab?.webView.canGoBack ?? false))
+                .disabled(!canGoBack)
                 .accessibilityLabel("Back")
                 .accessibilityIdentifier("backButton")
                 .frame(maxWidth: .infinity)
@@ -390,7 +400,7 @@ struct MainBrowserView: View {
                 Button(action: goForward) {
                     toolbarIcon("chevron.right")
                 }
-                .disabled(!(tabManager.activeTab?.webView.canGoForward ?? false))
+                .disabled(!canGoForward)
                 .accessibilityLabel("Forward")
                 .accessibilityIdentifier("forwardButton")
                 .frame(maxWidth: .infinity)
@@ -438,6 +448,22 @@ struct MainBrowserView: View {
             Button("OK") { saveOfflineStatus = nil }
         } message: {
             Text(saveOfflineStatus ?? "")
+        }
+    }
+
+    @ViewBuilder
+    private var sessionMarkers: some View {
+        if focusManager.activeSession != nil {
+            Text("Focus")
+                .font(.system(size: 11, weight: .semibold))
+                .fixedSize()
+                .accessibilityIdentifier("focusActiveIndicator")
+        }
+        if tabManager.activeTab?.isPrivate == true {
+            Text("Private")
+                .font(.system(size: 11, weight: .semibold))
+                .fixedSize()
+                .accessibilityIdentifier("privateIndicator")
         }
     }
 
@@ -670,7 +696,10 @@ struct MainBrowserView: View {
                 }
             }
             .onReceive(tab.$url) { _ in syncAddressBar() }
-            .onReceive(tab.$isNewTab) { _ in refreshBookmarkState() }
+            .onReceive(tab.$isNewTab) { isHome in
+                onHomePage = isHome
+                refreshBookmarkState()
+            }
         } else {
             ProgressView().tint(.white)
         }
@@ -690,7 +719,7 @@ struct MainBrowserView: View {
             onNavigate: { destination in
                 if isSplit { tabManager.navigate(tab, to: destination) } else { tabManager.navigateActiveTab(to: destination) }
             },
-            onAskVision: { query in askVisionRequest = AskVisionRequest(query: query) },
+            onAskVision: { query in askVisionRequest = AskVisionRequest(query: query.isEmpty ? nil : query) },
             onOpen: { destination in openHome(destination) },
             onOpenSavedPage: { fileURL in tabManager.openOfflineFile(fileURL) }
         )
@@ -751,25 +780,57 @@ struct MainBrowserView: View {
         if tabManager.isSplit { tabManager.closeSplit() } else { tabManager.openSplit() }
     }
 
-    private func goBack() { tabManager.activeTab?.webView.goBack() }
-    private func goForward() { tabManager.activeTab?.webView.goForward() }
+    /// Back from a tab's first page returns to the home page (like Chrome's New Tab page), and Forward goes on to
+    /// that page again — the home page is the start of every tab's history.
+    private var canGoBack: Bool {
+        guard let tab = tabManager.activeTab else { return false }
+        return tab.webView.canGoBack || !onHomePage
+    }
+
+    private var canGoForward: Bool {
+        guard let tab = tabManager.activeTab else { return false }
+        return onHomePage ? tab.webView.url != nil : tab.webView.canGoForward
+    }
+
+    private func goBack() {
+        guard let tab = tabManager.activeTab else { return }
+        if tab.webView.canGoBack {
+            tab.webView.goBack()
+        } else if !tab.isNewTab {
+            tab.isNewTab = true
+            syncAddressBar()
+        }
+    }
+
+    private func goForward() {
+        guard let tab = tabManager.activeTab else { return }
+        if tab.isNewTab, tab.webView.url != nil {
+            tab.isNewTab = false
+            syncAddressBar()
+        } else if tab.webView.canGoForward {
+            tab.webView.goForward()
+        }
+    }
     private func reloadActiveTab() { tabManager.activeTab?.webView.reload() }
 
     private func syncAddressBar() {
-        addressText = tabManager.activeTab?.url ?? ""
+        let url = tabManager.activeTab?.url ?? ""
+        addressText = addressFocused ? url : AddressDisplay.text(for: url)
         refreshBookmarkState()
     }
 
     private func refreshBookmarkState() {
-        guard let url = tabManager.activeTab?.url, !url.isEmpty else {
+        // The home page isn't a page to bookmark, even when the tab still holds the page it came back from.
+        guard let tab = tabManager.activeTab, !tab.isNewTab, !tab.url.isEmpty else {
             isBookmarked = false
             return
         }
+        let url = tab.url
         isBookmarked = (try? bookmarkStore.isBookmarked(url: url)) != nil
     }
 
     private func toggleBookmark() {
-        guard let tab = tabManager.activeTab, !tab.url.isEmpty else { return }
+        guard let tab = tabManager.activeTab, !tab.isNewTab, !tab.url.isEmpty else { return }
         do {
             if let existing = try bookmarkStore.isBookmarked(url: tab.url), let id = existing.id {
                 try bookmarkStore.remove(id: id)

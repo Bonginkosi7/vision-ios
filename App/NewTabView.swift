@@ -93,31 +93,24 @@ struct NewTabView: View {
             )
             .ignoresSafeArea()
 
-            VStack(spacing: 0) {
-                header
-                    .padding(.horizontal, 20).padding(.top, 28)
+            // The whole home page scrolls as one: the header, greeting, search box and cards all move together.
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 0) {
+                    header
+                        .padding(.horizontal, 20).padding(.top, 28)
 
-                Text(greeting)
-                    .font(.system(size: 34, weight: .bold)).foregroundStyle(.white)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 20).padding(.top, 36)
-                    .accessibilityIdentifier("newTabGreeting")
+                    Text(greeting)
+                        .font(.system(size: 26, weight: .bold)).foregroundStyle(.white)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 20).padding(.top, 28)
+                        .accessibilityIdentifier("newTabGreeting")
 
-                modeStatus
-                    .padding(.horizontal, 20).padding(.top, 6)
+                    weatherPill
+                        .padding(.horizontal, 20).padding(.top, 6)
 
-                weatherPill
-                    .padding(.horizontal, 20).padding(.top, 6)
+                    askVisionBox
+                        .padding(.horizontal, 20).padding(.top, 16).padding(.bottom, 8)
 
-                // Pinned outside the ScrollView on purpose: with the Ask box
-                // inside it, the keyboard's own scroll-into-view adjustment
-                // shifted the submit button out from under an already-computed
-                // tap coordinate (a real CI-caught bug — the tap reported
-                // success but the action never ran).
-                askVisionBox
-                    .padding(.horizontal, 20).padding(.top, 16).padding(.bottom, 8)
-
-                ScrollView(showsIndicators: false) {
                     VStack(alignment: .leading, spacing: 22) {
                         shortcutsRow
                         OfflineModelPromptCard().padding(.horizontal, 20)
@@ -130,6 +123,7 @@ struct NewTabView: View {
                     .padding(.bottom, 12)
                 }
             }
+            .scrollDismissesKeyboard(.interactively)
             .frame(maxWidth: 820)
         }
         .environment(\.colorScheme, .dark)
@@ -193,22 +187,6 @@ struct NewTabView: View {
         }
     }
 
-    private var modeStatus: some View {
-        HStack(alignment: .top, spacing: 8) {
-            Circle()
-                .fill(mode.isOffline ? Color.clear : Color.white)
-                .overlay(Circle().stroke(Color.white.opacity(0.75), lineWidth: 1.5))
-                .frame(width: 8, height: 8)
-                .padding(.top, 5)
-            Text(mode.statusText)
-                .font(.system(size: 13)).foregroundStyle(HomeTheme.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityElement(children: .combine)
-        .accessibilityIdentifier("homeModeStatus")
-    }
-
     /// Current weather for the approximate location — shown only with the setting on and location allowed. Until the
     /// person has chosen, a small "Enable weather" button asks; it is never a placeholder temperature.
     @ViewBuilder
@@ -255,52 +233,71 @@ struct NewTabView: View {
     // MARK: - Ask box
 
     private var askVisionBox: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 16, weight: .medium)).foregroundStyle(HomeTheme.textSecondary)
-                .accessibilityHidden(true)
-            TextField(
-                "", text: $askText,
-                prompt: Text("Ask anything or enter a website").foregroundColor(Color.white.opacity(0.5))
-            )
-            .textFieldStyle(.plain)
-            .autocapitalization(.none)
-            .disableAutocorrection(true)
-            .submitLabel(.go)
-            .onSubmit(submitAsk)
-            .foregroundStyle(.white)
-            .accessibilityLabel("Ask anything or enter a website")
-            .accessibilityIdentifier("newTabSearchInput")
-            Button(action: submitAsk) {
-                Image(systemName: "arrow.up")
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(.black)
-                    .frame(width: 36, height: 36)
-                    .background(Circle().fill(Color.white))
+        VStack(spacing: 10) {
+            HStack(spacing: 10) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 16, weight: .medium)).foregroundStyle(HomeTheme.textSecondary)
+                    .accessibilityHidden(true)
+                // The place to type on the home page: a web address opens that site, anything else is a web search —
+                // either way it takes the person into the browser, where the address bar then appears.
+                TextField(
+                    "", text: $askText,
+                    prompt: Text("Search or type URL").foregroundColor(Color.white.opacity(0.5))
+                )
+                .textFieldStyle(.plain)
+                .autocapitalization(.none)
+                .disableAutocorrection(true)
+                .keyboardType(.webSearch)
+                .submitLabel(.go)
+                .onSubmit(submitSearch)
+                .foregroundStyle(.white)
+                .accessibilityLabel("Search or type URL")
+                .accessibilityIdentifier("addressBarField")
+                Button(action: submitSearch) {
+                    Image(systemName: "arrow.up")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(.black)
+                        .frame(width: 36, height: 36)
+                        .background(Circle().fill(Color.white))
+                }
+                .accessibilityLabel("Go")
+                .accessibilityIdentifier("newTabAskSubmit")
             }
-            .accessibilityLabel("Ask")
-            .accessibilityIdentifier("newTabAskSubmit")
+            .padding(.leading, 18).padding(.trailing, 10)
+            .frame(height: 56)
+            .background(Capsule().fill(Color.black.opacity(0.42)))
+            .overlay(Capsule().stroke(HomeTheme.stroke, lineWidth: 1))
+            .shadow(color: .black.opacity(0.3), radius: 12, x: 0, y: 6)
+
+            // Opens Ask VISION — with what was typed as the question, if anything was.
+            Button(action: openAIMode) {
+                HStack(spacing: 8) {
+                    Image(systemName: "sparkles").font(.system(size: 15, weight: .medium)).accessibilityHidden(true)
+                    Text("AI Mode").font(.system(size: 15, weight: .medium))
+                }
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .frame(height: 44)
+                .background(Capsule().fill(Color.black.opacity(0.42)))
+                .overlay(Capsule().stroke(HomeTheme.stroke, lineWidth: 1))
+            }
+            .accessibilityLabel("AI Mode")
+            .accessibilityIdentifier("newTabAIMode")
         }
-        .padding(.leading, 18).padding(.trailing, 10)
-        .frame(height: 56)
-        .background(Capsule().fill(Color.black.opacity(0.42)))
-        .overlay(Capsule().stroke(HomeTheme.stroke, lineWidth: 1))
-        .shadow(color: .black.opacity(0.3), radius: 12, x: 0, y: 6)
     }
 
-    /// A URL or domain navigates, exactly like the address bar. Anything else
-    /// goes to Ask VISION — this box is not the address bar, even though it
-    /// accepts URLs too (port of NewTabController.kt's submitAsk()).
-    private func submitAsk() {
+    /// A web address opens that site; anything else is searched with the chosen search engine.
+    private func submitSearch() {
         let trimmed = askText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         askText = ""
-        if AddressResolver.isDirectUrl(trimmed) {
-            let destination = (trimmed.hasPrefix("http://") || trimmed.hasPrefix("https://")) ? trimmed : "https://\(trimmed)"
-            onNavigate(destination)
-        } else {
-            onAskVision(trimmed)
-        }
+        onNavigate(AddressResolver.resolveDestination(trimmed, searchEngineUrl: AppSettings.searchEngine.queryUrl))
+    }
+
+    private func openAIMode() {
+        let trimmed = askText.trimmingCharacters(in: .whitespacesAndNewlines)
+        askText = ""
+        onAskVision(trimmed)
     }
 
     // MARK: - Shortcuts

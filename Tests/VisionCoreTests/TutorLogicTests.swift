@@ -44,6 +44,7 @@ final class TutorLogicTests: XCTestCase {
     func test_unconfiguredAnswer_isHonestAndUngrounded() {
         XCTAssertFalse(TutorLogic.unconfiguredAnswer.groundedInDocument)
         XCTAssertNil(TutorLogic.unconfiguredAnswer.providerName)
-        XCTAssertTrue(TutorLogic.unconfiguredAnswer.text.contains("Settings"))
+        XCTAssertTrue(TutorLogic.unconfiguredAnswer.text.contains("VISION AI isn't available"))
+        XCTAssertFalse(TutorLogic.unconfiguredAnswer.text.contains("API key"), "users are never asked for a key")
     }
 }

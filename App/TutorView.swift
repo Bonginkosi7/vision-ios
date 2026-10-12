@@ -182,6 +182,6 @@ struct TutorView: View {
     private func sourceLabel(for answer: TutorAnswer) -> String {
         if answer.groundedInDocument { return "Based on your uploaded material" }
         if answer.providerName != nil { return "General AI knowledge" }
-        return "No cloud AI configured"
+        return "VISION AI unavailable"
     }
 }

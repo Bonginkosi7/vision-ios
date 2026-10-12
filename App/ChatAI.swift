@@ -51,7 +51,7 @@ enum ChatAI {
         }
 
         return ChatAnswer(
-            text: "VISION can't answer free-form questions yet: the offline model isn't downloaded and no cloud AI is configured. Download the offline model, or add an OpenAI or Anthropic API key, in Settings.",
+            text: "VISION can't answer free-form questions right now: VISION AI isn't available and the offline model isn't downloaded. Check your connection and try again, or download the offline model in Settings.",
             category: category,
             providerName: nil
         )

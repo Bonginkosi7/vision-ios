@@ -51,7 +51,7 @@ enum StructuredAI {
 
         let error = attemptedAny
             ? "Cloud AI didn't return a usable response — this can happen on a slow connection or a busy provider. Try again."
-            : "Cloud AI isn't configured — add an OpenAI or Anthropic API key in Settings to use this."
+            : "VISION AI isn't available right now. Check your connection and try again."
         return StructuredResult(ok: false, data: nil, error: error, providerName: nil)
     }
 }

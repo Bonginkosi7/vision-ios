@@ -31,7 +31,13 @@ enum VisionAIConfig {
 struct VisionCloudProvider: CloudAIProvider {
     let name = "VISION AI"
 
-    func isAvailable() -> Bool { VisionAIConfig.isConfigured() }
+    func isAvailable() -> Bool {
+        #if DEBUG
+        // UI tests run with this so they never spend the owner's OpenAI credit; one test leaves it off on purpose.
+        if ProcessInfo.processInfo.arguments.contains("-UITestDisableVisionAI") { return false }
+        #endif
+        return VisionAIConfig.isConfigured()
+    }
 
     func generate(systemInstruction: String, userMessage: String, history: [ChatMessage]) async -> AiCallResult {
         guard let url = URL(string: VisionAIConfig.baseURL)?.appendingPathComponent("v1/chat") else {

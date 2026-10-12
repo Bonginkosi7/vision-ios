@@ -22,55 +22,8 @@ struct SettingsView: View {
     @AppStorage(AppSettings.analyticsEnabledKey) private var analyticsEnabled: Bool = true
     @AppStorage(AppSettings.diagnosticsEnabledKey) private var diagnosticsEnabled: Bool = true
 
-    @State private var anthropicInput: String = ""
-    @State private var openAiInput: String = ""
-    @State private var anthropicConfigured: Bool = false
-    @State private var openAiConfigured: Bool = false
     @State private var clearedBrowsingData = false
     @State private var showClearConfirm = false
-
-    @ViewBuilder
-    private var cloudAISection: some View {
-        Section {
-            aiKeyRow(
-                label: "OpenAI (ChatGPT)",
-                configured: openAiConfigured,
-                input: $openAiInput,
-                idPrefix: "openai",
-                onSave: {
-                    AiSettings.setOpenAiKey(openAiInput)
-                    openAiInput = ""
-                    refreshKeyStatus()
-                },
-                onClear: {
-                    AiSettings.clearOpenAiKey()
-                    openAiInput = ""
-                    refreshKeyStatus()
-                }
-            )
-            aiKeyRow(
-                label: "Anthropic (Claude)",
-                configured: anthropicConfigured,
-                input: $anthropicInput,
-                idPrefix: "anthropic",
-                onSave: {
-                    AiSettings.setAnthropicKey(anthropicInput)
-                    anthropicInput = ""
-                    refreshKeyStatus()
-                },
-                onClear: {
-                    AiSettings.clearAnthropicKey()
-                    anthropicInput = ""
-                    refreshKeyStatus()
-                }
-            )
-        } header: {
-            Text("Cloud AI providers")
-        } footer: {
-            Text("Your own API key, used only to call that provider directly from this device. Stored securely in the iOS Keychain, never sent anywhere except the provider itself.")
-        }
-
-    }
 
     @ViewBuilder
     private var aboutSection: some View {
@@ -220,7 +173,6 @@ struct SettingsView: View {
                 LicenceSection()
                 SavedPasswordsSection()
                 MemorySection()
-                cloudAISection
                 offlineModelSection
                 aboutSection
             }
@@ -253,7 +205,6 @@ struct SettingsView: View {
             }
         }
         .onAppear {
-            refreshKeyStatus()
             // Real call site, matching SettingsActivity.kt's own
             // AnalyticsClient.track(this, AnalyticsEvent.SETTINGS_OPENED) —
             // proves the queue/flush plumbing end to end, not just the
@@ -262,45 +213,6 @@ struct SettingsView: View {
             // separate follow-up scope (see AnalyticsEvent.swift).
             AnalyticsClient.shared.track(AnalyticsEvent.settingsOpened)
         }
-    }
-
-    @ViewBuilder
-    private func aiKeyRow(
-        label: String,
-        configured: Bool,
-        input: Binding<String>,
-        idPrefix: String,
-        onSave: @escaping () -> Void,
-        onClear: @escaping () -> Void
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            // Android's setUpAiKeyRow writes this status text in the plain
-            // default TextView color regardless of configured/not-configured
-            // state — no green "success" or muted-dark tint. DesignSystem's
-            // statusSuccess/textMuted2 are Phase-30 dark-card tokens meant for
-            // screens built on bgCanvas/bgCard, not this plain system Form, so
-            // color-coding this label here was an invented divergence.
-            Text("\(label) — \(configured ? "Configured" : "Not configured")")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .accessibilityIdentifier("\(idPrefix)Status")
-
-            SecureField("Paste your API key", text: input)
-                .textFieldStyle(.roundedBorder)
-                .accessibilityIdentifier("\(idPrefix)KeyInput")
-
-            HStack {
-                Button("Save", action: onSave)
-                    .disabled(input.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    .accessibilityIdentifier("\(idPrefix)SaveButton")
-                // Android's Clear button is a plain TextButton (brand-colored,
-                // never red) — matched with a default-role Button here.
-                Button("Clear", action: onClear)
-                    .disabled(!configured)
-                    .accessibilityIdentifier("\(idPrefix)ClearButton")
-            }
-        }
-        .padding(.vertical, 4)
     }
 
     private static let byteCountFormatter: ByteCountFormatter = {
@@ -324,10 +236,5 @@ struct SettingsView: View {
         ) {
             clearedBrowsingData = true
         }
-    }
-
-    private func refreshKeyStatus() {
-        anthropicConfigured = AiSettings.getAnthropicKey() != nil
-        openAiConfigured = AiSettings.getOpenAiKey() != nil
     }
 }

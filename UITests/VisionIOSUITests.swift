@@ -67,6 +67,12 @@ final class VisionIOSUITests: XCTestCase {
 
         let bookmarkButton = app.buttons["bookmarkButton"]
         XCTAssertTrue(bookmarkButton.waitForExistence(timeout: 5))
+        // An earlier aborted run may have left this page bookmarked; clear it so the test starts clean.
+        if bookmarkButton.label == "Remove bookmark" {
+            bookmarkButton.tap()
+            let cleared = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "Add bookmark"), object: bookmarkButton)
+            XCTAssertEqual(XCTWaiter().wait(for: [cleared], timeout: 5), .completed)
+        }
         XCTAssertEqual(bookmarkButton.label, "Add bookmark", "should start unbookmarked for this fresh navigation")
         bookmarkButton.tap()
 
@@ -162,42 +168,6 @@ final class VisionIOSUITests: XCTestCase {
 
         openMenu(app, item: "menu_history")
         XCTAssertFalse(historyRows(app, host: "example.org").firstMatch.exists, "a private tab's real navigation must never be written to History")
-    }
-
-    /// Real Keychain round-trip proof: save a real (fake-value) API key,
-    /// confirm the status flips to Configured, clear it, confirm it flips
-    /// back — exercises AiSettings/KeychainStore's actual
-    /// SecItemAdd/SecItemCopyMatching/SecItemDelete calls, not a mocked
-    /// store.
-    func test_settingsSavesAndClearsAnAiKey() {
-        let app = XCUIApplication()
-        launchApp(app)
-
-        openMenu(app, item: "menu_settings")
-
-        let status = app.staticTexts["anthropicStatus"]
-        scrollIntoView(status, in: app)
-        XCTAssertTrue(status.waitForExistence(timeout: 5))
-        XCTAssertTrue(status.label.contains("Not configured"), "expected a fresh install to start unconfigured, got: \(status.label)")
-
-        let input = app.secureTextFields["anthropicKeyInput"]
-        scrollIntoView(input, in: app)
-        XCTAssertTrue(input.exists)
-        input.tap()
-        input.typeText("sk-ant-test-fake-key-for-ui-testing")
-        scrollIntoView(app.buttons["anthropicSaveButton"], in: app)
-        app.buttons["anthropicSaveButton"].tap()
-
-        let configuredPredicate = NSPredicate(format: "label CONTAINS %@", "Configured")
-        let configuredExpectation = XCTNSPredicateExpectation(predicate: configuredPredicate, object: status)
-        XCTAssertEqual(XCTWaiter().wait(for: [configuredExpectation], timeout: 5), .completed, "saving a real key should flip status to Configured")
-        XCTAssertFalse(status.label.contains("Not configured"))
-
-        scrollIntoView(app.buttons["anthropicClearButton"], in: app)
-        app.buttons["anthropicClearButton"].tap()
-        let clearedPredicate = NSPredicate(format: "label CONTAINS %@", "Not configured")
-        let clearedExpectation = XCTNSPredicateExpectation(predicate: clearedPredicate, object: status)
-        XCTAssertEqual(XCTWaiter().wait(for: [clearedExpectation], timeout: 5), .completed, "clearing the key should flip status back to Not configured")
     }
 
     // MARK: - Saved passwords, Autofill, VISION Memory, certificate errors
@@ -651,8 +621,14 @@ final class VisionIOSUITests: XCTestCase {
 
         let analyticsToggle = app.switches["analyticsEnabledToggle"]
         let diagnosticsToggle = app.switches["diagnosticsEnabledToggle"]
+        scrollIntoView(analyticsToggle, in: app)
         XCTAssertTrue(analyticsToggle.waitForExistence(timeout: 5))
         XCTAssertTrue(diagnosticsToggle.exists)
+        // An earlier aborted run may have left analytics off on this device; put it back to the default first.
+        if analyticsToggle.value as? String == "0" {
+            analyticsToggle.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
+            _ = XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == '1'"), object: analyticsToggle)], timeout: 5)
+        }
         XCTAssertEqual(analyticsToggle.value as? String, "1", "a fresh install should start with analytics on, matching Android/desktop's own real default")
         XCTAssertEqual(diagnosticsToggle.value as? String, "1", "a fresh install should start with diagnostics on, matching Android/desktop's own real default")
 
@@ -668,6 +644,10 @@ final class VisionIOSUITests: XCTestCase {
         let togglesOff = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == '0'"), object: analyticsToggle)
         XCTAssertEqual(XCTWaiter().wait(for: [togglesOff], timeout: 5), .completed, "tapping the toggle should flip it off")
         XCTAssertEqual(diagnosticsToggle.value as? String, "1", "diagnostics should be unaffected by the separate analytics toggle")
+
+        // Leave the person's setting as the default for whatever runs next.
+        analyticsToggle.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
+        XCTAssertEqual(XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == '1'"), object: analyticsToggle)], timeout: 5), .completed, "analytics should be switched back on")
     }
 
     /// Real behavioral proof the search-engine setting actually affects
@@ -695,7 +675,7 @@ final class VisionIOSUITests: XCTestCase {
         XCTAssertTrue(addressField.waitForExistence(timeout: 5))
         navigate(app: app, addressField: addressField, to: "vision ios test query")
 
-        let predicate = NSPredicate(format: "value BEGINSWITH %@", "https://duckduckgo.com/")
+        let predicate = NSPredicate(format: "value BEGINSWITH %@", "duckduckgo.com")
         let expectation = XCTNSPredicateExpectation(predicate: predicate, object: addressField)
         let result = XCTWaiter().wait(for: [expectation], timeout: 15)
         if result != .completed {
@@ -725,61 +705,9 @@ final class VisionIOSUITests: XCTestCase {
         app.buttons["rewriteAction_rewrite"].tap()
 
         let status = app.staticTexts["rewriteStatus"]
-        let configuredPredicate = NSPredicate(format: "label CONTAINS %@", "No cloud AI provider is configured")
+        let configuredPredicate = NSPredicate(format: "label CONTAINS %@", "VISION AI isn't available")
         let expectation = XCTNSPredicateExpectation(predicate: configuredPredicate, object: status)
         XCTAssertEqual(XCTWaiter().wait(for: [expectation], timeout: 5), .completed, "expected the real honest 'no provider configured' message")
-    }
-
-    /// Real end-to-end network proof, without needing a valid (billable)
-    /// API key: save a real but fake Anthropic key via Settings (a real
-    /// Keychain write, same path Phase 3 verified), trigger a rewrite, and
-    /// confirm a real network-derived error comes back from the actual
-    /// Anthropic API (a 401/403 for the invalid key) — proving
-    /// CloudAIProvider's full real request pipeline fires, without ever
-    /// calling it with real, paid credentials. Cleans the key up
-    /// afterward so this doesn't affect other tests' assumptions about a
-    /// fresh, unconfigured install.
-    func test_rewriteWithInvalidKey_reachesRealAnthropicAPIAndShowsError() {
-        let app = XCUIApplication()
-        launchApp(app)
-
-        openMenu(app, item: "menu_settings")
-        let keyInput = app.secureTextFields["anthropicKeyInput"]
-        scrollIntoView(keyInput, in: app)
-        XCTAssertTrue(keyInput.waitForExistence(timeout: 5))
-        keyInput.tap()
-        keyInput.typeText("sk-ant-invalid-fake-key-for-ui-testing")
-        scrollIntoView(app.buttons["anthropicSaveButton"], in: app)
-        app.buttons["anthropicSaveButton"].tap()
-
-        let configuredStatus = app.staticTexts["anthropicStatus"]
-        scrollIntoView(configuredStatus, in: app)
-        let configuredExpectation = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "Configured"), object: configuredStatus)
-        XCTAssertEqual(XCTWaiter().wait(for: [configuredExpectation], timeout: 5), .completed)
-        app.buttons["settingsDoneButton"].tap()
-
-        openEducationMenu(app, item: "menu_rewrite")
-        let input = app.textViews["rewriteInput"]
-        XCTAssertTrue(input.waitForExistence(timeout: 5))
-        input.tap()
-        input.typeText("some real text to rewrite")
-        app.buttons["rewriteAction_rewrite"].tap()
-
-        let status = app.staticTexts["rewriteStatus"]
-        let failedPredicate = NSPredicate(format: "label CONTAINS %@ OR label CONTAINS %@", "API error", "failed")
-        let failedExpectation = XCTNSPredicateExpectation(predicate: failedPredicate, object: status)
-        let result = XCTWaiter().wait(for: [failedExpectation], timeout: 20)
-        if result != .completed {
-            attachDiagnostics(app: app, name: "rewrite-invalid-key-no-real-error")
-        }
-        XCTAssertEqual(result, .completed, "expected a real network-derived error from the actual Anthropic API, status read: \(status.label)")
-
-        // Clean up so a later test (or re-run) doesn't see a key "already configured".
-        app.buttons["rewriteDoneButton"].tap()
-        openMenu(app, item: "menu_settings")
-        scrollIntoView(app.buttons["anthropicClearButton"], in: app)
-        app.buttons["anthropicClearButton"].tap()
-        app.buttons["settingsDoneButton"].tap()
     }
 
     /// Real Focus Mode proof: add a real blocked domain, start a real
@@ -1031,12 +959,12 @@ final class VisionIOSUITests: XCTestCase {
         topicsButton.tap()
 
         let topicsStatus = app.staticTexts["topicsStatus_ui-test-fixture"]
-        let notConfiguredPredicate = NSPredicate(format: "label CONTAINS %@", "Cloud AI isn't configured")
+        let notConfiguredPredicate = NSPredicate(format: "label CONTAINS %@", "VISION AI isn't available")
         let notConfiguredExpectation = XCTNSPredicateExpectation(predicate: notConfiguredPredicate, object: topicsStatus)
         if XCTWaiter().wait(for: [notConfiguredExpectation], timeout: 10) != .completed {
             attachDiagnostics(app: app, name: "material-topics-no-honest-error")
         }
-        XCTAssertTrue(topicsStatus.label.contains("Cloud AI isn't configured"), "expected the real honest 'not configured' message, got: \(topicsStatus.label)")
+        XCTAssertTrue(topicsStatus.label.contains("VISION AI isn't available"), "expected the real honest 'not configured' message, got: \(topicsStatus.label)")
 
         // Clean up so a later run (or the same simulator's persisted
         // database) doesn't see the fixture as already present. Delete
@@ -1056,7 +984,7 @@ final class VisionIOSUITests: XCTestCase {
     /// same `-UITestSeedMaterial` fixture and processing flow Phase 8's
     /// test already proved), confirm the real document picker shows it
     /// once processed, then attempt real flashcard generation with no AI
-    /// provider configured — the same honest "Cloud AI isn't configured"
+    /// provider configured — the same honest "VISION AI isn't available"
     /// message Phase 5/8 already proved, since FlashcardGenerator routes
     /// through the identical CloudAIProvider/StructuredAI plumbing, not a
     /// parallel path. Confirms the real "nothing due"/"none yet" empty
@@ -1096,12 +1024,12 @@ final class VisionIOSUITests: XCTestCase {
 
         let generateStatus = app.staticTexts["flashcardsGenerateStatus"]
         let notConfiguredExpectation = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "label CONTAINS %@", "Cloud AI isn't configured"), object: generateStatus
+            predicate: NSPredicate(format: "label CONTAINS %@", "VISION AI isn't available"), object: generateStatus
         )
         if XCTWaiter().wait(for: [notConfiguredExpectation], timeout: 10) != .completed {
             attachDiagnostics(app: app, name: "flashcards-generate-no-honest-error")
         }
-        XCTAssertTrue(generateStatus.label.contains("Cloud AI isn't configured"), "expected the real honest 'not configured' message, got: \(generateStatus.label)")
+        XCTAssertTrue(generateStatus.label.contains("VISION AI isn't available"), "expected the real honest 'not configured' message, got: \(generateStatus.label)")
 
         XCTAssertTrue(app.staticTexts["flashcardsNothingDue"].waitForExistence(timeout: 5), "no real flashcards exist yet, so nothing should be due")
         XCTAssertTrue(app.staticTexts["flashcardsNoneYet"].waitForExistence(timeout: 5), "a failed generation should leave a genuinely empty flashcard list, not fabricated cards")
@@ -1127,7 +1055,7 @@ final class VisionIOSUITests: XCTestCase {
     ///    AI-only path, Create Exam needs no cloud key configured at all,
     ///    so this is a genuine full-credit real behavioral proof, not just
     ///    an honest-error path.
-    /// 2. The same honest "Cloud AI isn't configured" proof already
+    /// 2. The same honest "VISION AI isn't available" proof already
     ///    established for Rewrite Writer/Topics/Flashcards, exercised here
     ///    through Generate Mock Test — confirming `ExamGenerator` routes
     ///    through the identical `CloudAIProvider`/`StructuredAI` plumbing.
@@ -1212,12 +1140,12 @@ final class VisionIOSUITests: XCTestCase {
 
         let generateStatus = app.staticTexts["generateExamStatus"]
         let notConfiguredExpectation = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "label CONTAINS %@", "Cloud AI isn't configured"), object: generateStatus
+            predicate: NSPredicate(format: "label CONTAINS %@", "VISION AI isn't available"), object: generateStatus
         )
         if XCTWaiter().wait(for: [notConfiguredExpectation], timeout: 10) != .completed {
             attachDiagnostics(app: app, name: "exams-generate-no-honest-error")
         }
-        XCTAssertTrue(generateStatus.label.contains("Cloud AI isn't configured"), "expected the real honest 'not configured' message, got: \(generateStatus.label)")
+        XCTAssertTrue(generateStatus.label.contains("VISION AI isn't available"), "expected the real honest 'not configured' message, got: \(generateStatus.label)")
         app.navigationBars.buttons["Cancel"].tap()
         app.navigationBars.buttons["Done"].tap()
 
@@ -1243,7 +1171,7 @@ final class VisionIOSUITests: XCTestCase {
     /// that risk, and exercises the exact same `ask()`/`TutorAI` code
     /// path. Asks twice to prove `TutorStore` persisted and reloaded the
     /// first real session's messages rather than losing them between
-    /// turns, and confirms the real "No cloud AI configured" source
+    /// turns, and confirms the real "VISION AI unavailable" source
     /// label (no document is selected, so it must not claim to be
     /// grounded or general-AI).
     func test_askingTheAITutorWithNoCloudKeyConfigured() {
@@ -1266,7 +1194,7 @@ final class VisionIOSUITests: XCTestCase {
 
         let firstSource = app.staticTexts.element(matching: NSPredicate(format: "identifier BEGINSWITH 'tutorSource_'"))
         XCTAssertTrue(firstSource.waitForExistence(timeout: 5))
-        XCTAssertEqual(firstSource.label, "No cloud AI configured", "no document is selected, so this must not claim to be grounded or general-AI")
+        XCTAssertEqual(firstSource.label, "VISION AI unavailable", "no document is selected, so this must not claim to be grounded or general-AI")
 
         let questionCards = app.staticTexts.matching(NSPredicate(format: "identifier BEGINSWITH 'tutorQuestion_'"))
         XCTAssertTrue(waitForElementCount(questionCards, toEqual: 1), "expected exactly one exchange after the first ask")
@@ -1438,12 +1366,12 @@ final class VisionIOSUITests: XCTestCase {
 
         let status = app.staticTexts["paperReviewStatus"]
         let notConfiguredExpectation = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "label CONTAINS %@", "Cloud AI isn't configured"), object: status
+            predicate: NSPredicate(format: "label CONTAINS %@", "VISION AI isn't available"), object: status
         )
         if XCTWaiter().wait(for: [notConfiguredExpectation], timeout: 10) != .completed {
             attachDiagnostics(app: app, name: "paper-review-no-honest-error")
         }
-        XCTAssertTrue(status.label.contains("Cloud AI isn't configured"), "expected the real honest 'not configured' message, got: \(status.label)")
+        XCTAssertTrue(status.label.contains("VISION AI isn't available"), "expected the real honest 'not configured' message, got: \(status.label)")
 
         app.navigationBars.buttons["Done"].tap()
 
@@ -1516,7 +1444,7 @@ final class VisionIOSUITests: XCTestCase {
         if !assistantMessage.waitForExistence(timeout: 10) {
             attachDiagnostics(app: app, name: "askvision-assistant-reply-missing")
         }
-        XCTAssertTrue(assistantMessage.label.contains("no cloud AI is configured"), "expected the real honest 'not configured' reply, got: \(assistantMessage.label)")
+        XCTAssertTrue(assistantMessage.label.contains("VISION AI isn't available"), "expected the real honest 'not configured' reply, got: \(assistantMessage.label)")
 
         app.buttons["btnBackToChats"].tap()
 
@@ -1560,7 +1488,12 @@ final class VisionIOSUITests: XCTestCase {
 
         let bookmarkButton = app.buttons["bookmarkButton"]
         XCTAssertTrue(bookmarkButton.waitForExistence(timeout: 5))
-        XCTAssertEqual(bookmarkButton.label, "Add bookmark", "no other test in this suite ever bookmarks example.org")
+        // An earlier run may have left this page bookmarked; clear it so the test starts clean.
+        if bookmarkButton.label == "Remove bookmark" {
+            bookmarkButton.tap()
+            XCTAssertEqual(XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "Add bookmark"), object: bookmarkButton)], timeout: 5), .completed)
+        }
+        XCTAssertEqual(bookmarkButton.label, "Add bookmark", "should start unbookmarked")
         bookmarkButton.tap()
         let bookmarkedExpectation = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "Remove bookmark"), object: bookmarkButton)
         XCTAssertEqual(XCTWaiter().wait(for: [bookmarkedExpectation], timeout: 5), .completed)
@@ -1799,7 +1732,7 @@ final class VisionIOSUITests: XCTestCase {
 
     // MARK: - Translate, pin and split view
 
-    /// Translate Page sends the page to Google Translate (the address becomes a translate.goog one) and "Original" comes back.
+    /// Translate Page sends the page to Google Translate and "Original" comes back.
     func test_translatePageGoesToGoogleTranslateAndBack() {
         let app = XCUIApplication()
         launchApp(app)
@@ -1809,11 +1742,30 @@ final class VisionIOSUITests: XCTestCase {
         assertAddressBarEventuallyShows(addressField, "https://example.com/", in: self)
 
         openMenu(app, item: "menu_translate")
-        let toTranslated = NSPredicate(format: "value CONTAINS 'translate.goog'")
-        XCTAssertEqual(XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: toTranslated, object: addressField)], timeout: 20), .completed, "the page should open through Google Translate")
+
+        // The address bar shows the original site, so the menu is how to tell the page is translated: its
+        // Translate button becomes "Original" once the page has opened through Google Translate.
+        func translateButtonLabel() -> String {
+            tapMoreButton(app)
+            let item = app.buttons["menu_translate"]
+            _ = item.waitForExistence(timeout: 5)
+            let label = item.label
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.12)).tap()   // closes the menu
+            Thread.sleep(forTimeInterval: 1)
+            return label
+        }
+        var label = ""
+        for _ in 0..<6 {
+            Thread.sleep(forTimeInterval: 3)
+            label = translateButtonLabel()
+            if label.contains("Original") { break }
+        }
+        XCTAssertTrue(label.contains("Original"), "the page should open through Google Translate; the menu button read \"\(label)\"")
+        assertAddressBarEventuallyShows(addressField, "https://example.com/", in: self)   // still shows the original site
 
         openMenu(app, item: "menu_translate")
-        assertAddressBarEventuallyShows(addressField, "https://example.com/", in: self)
+        Thread.sleep(forTimeInterval: 3)
+        XCTAssertTrue(translateButtonLabel().contains("Translate"), "choosing Original should go back to the untranslated page")
     }
 
     /// A pinned tab shows its pin in the tab switcher, can't be swiped closed, and unpins again.
@@ -1898,6 +1850,11 @@ final class VisionIOSUITests: XCTestCase {
         let toggle = app.switches["weatherEnabledToggle"]
         scrollIntoView(toggle, in: app)
         XCTAssertTrue(toggle.waitForExistence(timeout: 5))
+        // An earlier aborted run may have left it off; turn it on first so this starts from the default.
+        if toggle.value as? String == "0" {
+            toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+            XCTAssertEqual(XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == '1'"), object: toggle)], timeout: 5), .completed)
+        }
         XCTAssertEqual(toggle.value as? String, "1", "weather is on by default")
         toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
         XCTAssertEqual(XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == '0'"), object: toggle)], timeout: 5), .completed)
@@ -1916,6 +1873,66 @@ final class VisionIOSUITests: XCTestCase {
         again.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
         XCTAssertEqual(XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == '1'"), object: again)], timeout: 5), .completed)
         closeSettings(app)
+    }
+
+    /// End to end through the company's AI server: a question typed on the home page and sent with AI Mode gets a
+    /// real answer — not the "isn't available" reply — with no key of the user's own anywhere. One short question.
+    func test_aiModeAnswersThroughTheVisionAIServer() {
+        let app = XCUIApplication()
+        launchApp(app, realVisionAI: true)
+
+        let field = app.textFields["addressBarField"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        field.tap()
+        field.typeText("Say hello in five words")
+        app.buttons["newTabAIMode"].tap()
+
+        let reply = app.staticTexts.element(matching: NSPredicate(format: "identifier BEGINSWITH 'chatAssistantMessage_'"))
+        XCTAssertTrue(reply.waitForExistence(timeout: 15))
+        let answered = XCTNSPredicateExpectation(predicate: NSPredicate(format: "NOT (label BEGINSWITH 'Asking') AND label != ''"), object: reply)
+        _ = XCTWaiter().wait(for: [answered], timeout: 60)
+        XCTAssertFalse(reply.label.contains("isn't available"), "VISION AI should answer, got: \(reply.label)")
+        XCTAssertFalse(reply.label.hasPrefix("Asking"), "the answer should have arrived, got: \(reply.label)")
+        XCTAssertGreaterThan(reply.label.count, 3)
+    }
+
+    /// Back goes to the previous page, and from a tab's first page back to the home page; Forward undoes each step.
+    /// The bottom address bar appears only once a page is open.
+    func test_backAndForwardWalkThroughPagesAndTheHomePage() {
+        let app = XCUIApplication()
+        launchApp(app)
+
+        let field = app.textFields["addressBarField"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["newTabAIMode"].exists)
+        XCTAssertFalse(app.buttons["forwardButton"].isEnabled, "nothing to go forward to on a fresh home page")
+        XCTAssertFalse(app.buttons["backButton"].isEnabled, "nothing to go back to on a fresh home page")
+
+        navigate(app: app, addressField: field, to: "example.com")
+        assertAddressBarEventuallyShows(field, "https://example.com/", in: self)
+        XCTAssertFalse(app.buttons["newTabAIMode"].exists, "the home page is gone once a page is open")
+        XCTAssertTrue(app.buttons["backButton"].isEnabled, "Back from the first page goes home")
+
+        navigate(app: app, addressField: field, to: "example.org")
+        assertAddressBarEventuallyShows(field, "https://example.org/", in: self)
+
+        app.buttons["backButton"].tap()
+        assertAddressBarEventuallyShows(field, "https://example.com/", in: self)
+        XCTAssertTrue(app.buttons["forwardButton"].isEnabled)
+        app.buttons["forwardButton"].tap()
+        assertAddressBarEventuallyShows(field, "https://example.org/", in: self)
+
+        // Back twice: to the first page, then home.
+        app.buttons["backButton"].tap()
+        assertAddressBarEventuallyShows(field, "https://example.com/", in: self)
+        app.buttons["backButton"].tap()
+        XCTAssertTrue(app.buttons["newTabAIMode"].waitForExistence(timeout: 5), "Back from the first page should show the home page")
+        XCTAssertTrue(app.buttons["forwardButton"].isEnabled, "Forward from home returns to the page")
+        XCTAssertFalse(app.buttons["backButton"].isEnabled)
+
+        app.buttons["forwardButton"].tap()
+        assertAddressBarEventuallyShows(field, "https://example.com/", in: self)
+        XCTAssertFalse(app.buttons["newTabAIMode"].exists)
     }
 
     /// Real New Tab page proof — found as a major, previously-
@@ -1941,18 +1958,21 @@ final class VisionIOSUITests: XCTestCase {
         // these checks confirm each card renders a real, valid state
         // either way, not a specific pristine-install value.
         XCTAssertTrue(app.staticTexts["newTabGreeting"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["homeModeStatus"].waitForExistence(timeout: 5), "the homepage should always state its real Online/Offline mode")
+        XCTAssertTrue(app.buttons["homeModeOnline"].waitForExistence(timeout: 5) && app.buttons["homeModeOffline"].exists, "the homepage should always show its real Online/Offline mode")
+        XCTAssertFalse(app.staticTexts["homeModeStatus"].exists, "the long Online/Offline description is gone")
+        XCTAssertTrue(app.buttons["newTabAIMode"].exists, "AI Mode sits under the search box")
         let readinessShowsRealState = app.staticTexts["newTabReadinessEmpty"].waitForExistence(timeout: 5) || app.staticTexts["newTabReadinessPercent"].waitForExistence(timeout: 5)
         XCTAssertTrue(readinessShowsRealState, "Offline Readiness should show a real empty or real percent state, never neither")
         for card in ["advisor", "settings", "overview", "points"] {
             XCTAssertTrue(app.buttons["homeCard_\(card)"].waitForExistence(timeout: 5), "the \(card) card should be on the homepage")
         }
 
-        let askInput = app.textFields["newTabSearchInput"]
+        // On the home page the address bar is the search box up top (the bottom one only appears on pages).
+        let askInput = app.textFields["addressBarField"]
         XCTAssertTrue(askInput.waitForExistence(timeout: 5))
         askInput.tap()
         askInput.typeText("why is the sky blue")
-        app.buttons["newTabAskSubmit"].tap()
+        app.buttons["newTabAIMode"].tap()
 
         let assistantMessage = app.staticTexts.element(matching: NSPredicate(format: "identifier BEGINSWITH 'chatAssistantMessage_'"))
         if !assistantMessage.waitForExistence(timeout: 10) {
@@ -1972,7 +1992,7 @@ final class VisionIOSUITests: XCTestCase {
 
         // Back on the real New Tab page (the active tab never navigated,
         // only a real Ask VISION session was created alongside it).
-        XCTAssertTrue(app.textFields["newTabSearchInput"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.textFields["addressBarField"].waitForExistence(timeout: 5))
 
         askInput.tap()
         askInput.typeText("example.com")
@@ -2054,15 +2074,13 @@ final class VisionIOSUITests: XCTestCase {
         let app = XCUIApplication()
         launchApp(app)
 
-        let status = app.staticTexts["homeModeStatus"]
-        XCTAssertTrue(status.waitForExistence(timeout: 8))
-        try XCTSkipIf(status.label.contains("No internet connection"), "device has no connection; Online can't be selected")
+        let offline = app.buttons["homeModeOffline"]
+        let online = app.buttons["homeModeOnline"]
+        XCTAssertTrue(offline.waitForExistence(timeout: 8))
+        try XCTSkipIf(!online.isSelected && !offline.isSelected, "mode unknown")
         // Taps in the first couple of seconds after launch are swallowed while the homepage settles.
         Thread.sleep(forTimeInterval: 3)
 
-        let offline = app.buttons["homeModeOffline"]
-        let online = app.buttons["homeModeOnline"]
-        XCTAssertTrue(offline.waitForExistence(timeout: 5))
         // Right after launch the header can still be settling; tap once it is hittable, and again if the mode didn't flip.
         for _ in 0..<3 {
             let settled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isHittable == true"), object: offline)
@@ -2070,7 +2088,7 @@ final class VisionIOSUITests: XCTestCase {
             Thread.sleep(forTimeInterval: 0.6)
             offline.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
             Thread.sleep(forTimeInterval: 1.0)
-            if status.label.contains("Offline Mode") { break }
+            if offline.isSelected { break }
         }
 
         // The section is a container of buttons, which XCUITest doesn't expose as one
@@ -2078,14 +2096,13 @@ final class VisionIOSUITests: XCTestCase {
         let openLibrary = app.buttons["homeOpenOfflineLibrary"]
         scrollIntoView(openLibrary, in: app)
         if !openLibrary.waitForExistence(timeout: 8) { attachDiagnostics(app: app, name: "home-offline-section-missing") }
-        XCTAssertTrue(openLibrary.exists, "Offline Mode should show the saved-content section; status=\(status.label)")
-        XCTAssertTrue(status.label.contains("Offline Mode"), "status should name the mode, got: \(status.label)")
-        XCTAssertTrue(status.label.contains("still use your connection"), "status should be honest that browsing isn't cut off")
+        XCTAssertTrue(openLibrary.exists, "Offline Mode should show the saved-content section")
+        XCTAssertTrue(offline.isSelected, "the toggle should show Offline selected")
         XCTAssertFalse(app.staticTexts["newsStatusText"].exists || app.otherElements["newsHeadlinesList"].exists, "live headlines should not be fetched or shown in Offline Mode")
         XCTAssertTrue(app.buttons["homeOpenOfflineLibrary"].exists)
 
         online.tap()
-        let backOnline = NSPredicate { _, _ in app.staticTexts["homeModeStatus"].label.hasPrefix("Online") }
+        let backOnline = NSPredicate { _, _ in app.buttons["homeModeOnline"].isSelected }
         XCTAssertEqual(XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: backOnline, object: nil)], timeout: 8), .completed, "switching back should restore Online")
         XCTAssertFalse(app.buttons["homeOpenOfflineLibrary"].exists)
     }
@@ -2118,11 +2135,13 @@ final class VisionIOSUITests: XCTestCase {
                 )
             }
         }
+        // On the home page the search box is at the top and there is no address bar at the bottom — only the button row.
         let field = app.textFields["addressBarField"].frame
-        // Safari layout: the field has its own full-width row above the buttons.
-        XCTAssertGreaterThanOrEqual(field.width, window.width - 40, "the address field should span the screen, got \(field.width)")
-        XCTAssertLessThanOrEqual(field.maxY, app.buttons["backButton"].frame.minY + 1, "the address field should sit above the button row")
-        XCTAssertGreaterThan(field.minY, window.height * 0.5, "the address bar should sit at the bottom of the screen, like Safari")
+        let aiMode = app.buttons["newTabAIMode"].frame
+        XCTAssertGreaterThanOrEqual(aiMode.width, window.width - 60, "the AI Mode button should span the screen, got \(aiMode.width)")
+        XCTAssertGreaterThan(aiMode.minY, field.maxY - 8, "AI Mode sits under the search box")
+        XCTAssertLessThan(field.maxY, app.buttons["backButton"].frame.minY, "the home search box sits up top, above the button row")
+        XCTAssertLessThan(field.minY, window.height * 0.5, "the home search box is in the top half of the screen")
 
         // Header: both connection labels on one line, V mark on the same row.
         let online = app.buttons["homeModeOnline"]
@@ -2188,6 +2207,7 @@ final class VisionIOSUITests: XCTestCase {
 
         openMenu(app, item: "menu_settings")
         let clearButton = app.buttons["btnClearBrowsingData"]
+        scrollIntoView(clearButton, in: app)
         XCTAssertTrue(clearButton.waitForExistence(timeout: 5))
         clearButton.tap()
 
@@ -2220,7 +2240,7 @@ final class VisionIOSUITests: XCTestCase {
 
         openMenu(app, item: "menu_newTab")
         let addressField = app.textFields["addressBarField"]
-        XCTAssertTrue(app.textFields["newTabSearchInput"].waitForExistence(timeout: 5), "New Tab should create and switch to a real second, still-blank tab")
+        XCTAssertTrue(app.textFields["addressBarField"].waitForExistence(timeout: 5), "New Tab should create and switch to a real second, still-blank tab")
         navigate(app: app, addressField: addressField, to: "example.com")
         assertAddressBarEventuallyShows(addressField, "https://example.com/", in: self)
 
@@ -2239,7 +2259,7 @@ final class VisionIOSUITests: XCTestCase {
         newTabRow.tap()
         // Switching back to the real first tab should really re-show its
         // own New Tab content, not just dismiss the switcher.
-        XCTAssertTrue(app.textFields["newTabSearchInput"].waitForExistence(timeout: 5), "switching tabs should really change the active tab's own real content")
+        XCTAssertTrue(app.textFields["addressBarField"].waitForExistence(timeout: 5), "switching tabs should really change the active tab's own real content")
 
         tabCountButton.tap()
         let exampleRowAgain = app.buttons.element(matching: NSPredicate(format: "identifier BEGINSWITH 'tabRow_' AND label CONTAINS 'example.com'"))
@@ -2404,8 +2424,9 @@ final class VisionIOSUITests: XCTestCase {
     /// Launches the app with the offline-AI auto-download switched off (and its homepage card dismissed), so a
     /// test never starts a 650 MB download or sees a progress card it didn't expect. Keeps whatever arguments
     /// the test already set.
-    private func launchApp(_ app: XCUIApplication, extraArguments: [String] = []) {
-        app.launchArguments += ["-offline_model_opt_out", "YES", "-offline_model_prompt_dismissed", "YES", "-UITestSkipSplash"] + extraArguments
+    private func launchApp(_ app: XCUIApplication, extraArguments: [String] = [], realVisionAI: Bool = false) {
+        // Tests never call VISION's real AI (it costs the owner money) unless one asks to.
+        app.launchArguments += ["-offline_model_opt_out", "YES", "-offline_model_prompt_dismissed", "YES", "-UITestSkipSplash"] + (realVisionAI ? [] : ["-UITestDisableVisionAI"]) + extraArguments
         app.launch()
         // Taps in the first couple of seconds after launch can be swallowed while the homepage settles.
         _ = app.buttons["moreMenuButton"].waitForExistence(timeout: 10)
@@ -2468,6 +2489,12 @@ final class VisionIOSUITests: XCTestCase {
         addressField.tap()
         // A tap right after a screen change can be swallowed; if the keyboard didn't come up, tap again.
         if !app.keyboards.firstMatch.waitForExistence(timeout: 2) { addressField.tap() }
+        // Typing over a page's address: put the cursor at the end and clear what is there first.
+        if let existing = addressField.value as? String, !existing.isEmpty,
+           existing != "Search or enter address", existing != "Search or type URL" {
+            addressField.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.5)).tap()
+            addressField.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: existing.count))
+        }
         addressField.typeText(text)
 
         let returnKey = app.keyboards.buttons["Return"]
@@ -2485,7 +2512,15 @@ final class VisionIOSUITests: XCTestCase {
     /// failure attaches a screenshot plus the field's actual value to the
     /// test's own failure output — real diagnostics for the next run
     /// instead of a bare timeout with no further information.
+    /// The bar shows just the site while it isn't being edited ("https://example.com/" reads "example.com").
+    private func displayedAddress(_ url: String) -> String {
+        guard let comps = URLComponents(string: url), let scheme = comps.scheme, scheme.hasPrefix("http"), var host = comps.host?.lowercased() else { return url }
+        if host.hasPrefix("www.") { host.removeFirst(4) }
+        return host
+    }
+
     private func assertAddressBarEventuallyShows(_ addressField: XCUIElement, _ expected: String, in testCase: XCTestCase) {
+        let expected = displayedAddress(expected)
         let predicate = NSPredicate(format: "value == %@", expected)
         let expectation = XCTNSPredicateExpectation(predicate: predicate, object: addressField)
         let result = XCTWaiter().wait(for: [expectation], timeout: 15)

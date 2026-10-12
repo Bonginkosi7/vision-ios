@@ -27,7 +27,7 @@ public enum TutorLogic {
     """
 
     public static let unconfiguredAnswer = TutorAnswer(
-        text: "I don't have a cloud AI provider configured right now — add an OpenAI or Anthropic API key in Settings to chat with me.",
+        text: "VISION AI isn't available right now. Check your connection and try again.",
         groundedInDocument: false,
         providerName: nil
     )

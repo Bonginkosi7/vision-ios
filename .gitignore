@@ -6,3 +6,6 @@
 *.xcworkspace/xcuserdata/
 DerivedData/
 .swiftpm/
+
+# Per-machine build settings (VISION AI server address and app key).
+Config/Local.xcconfig
