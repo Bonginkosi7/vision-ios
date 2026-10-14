@@ -13,6 +13,7 @@ private struct ChatBubble: Identifiable {
     let role: String
     let content: String
     let category: TaskCategory?
+    var time: Date = Date()
 }
 
 /// Real Ask VISION chat — port of the scoped-down slice of
@@ -105,6 +106,7 @@ struct AskVisionView: View {
                 }
             }
             .navigationTitle(navigationTitleText)
+            .navigationBarTitleDisplayMode(mode == .sessionList ? .large : .inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     if mode != .sessionList {
@@ -177,7 +179,7 @@ struct AskVisionView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if filteredSessions.isEmpty {
                 Text("No matching chats.")
-                    .font(.system(size: 14)).foregroundStyle(DesignSystem.textMuted2)
+                    .font(.system(size: 11)).foregroundStyle(DesignSystem.textMuted2)
                     .multilineTextAlignment(.center)
                     .padding(32)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -267,13 +269,12 @@ struct AskVisionView: View {
                 // together) with a 24dp bottomMargin between exchanges,
                 // rather than one real Android screen is a flat, evenly
                 // spaced bubble list.
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 16) {
                     ForEach(bubbles) { bubble in
                         bubbleView(bubble)
-                            .padding(.bottom, bubble.role == "assistant" ? 20 : 0)
                     }
                 }
-                .padding(DesignSystem.Space.l)
+                .padding(.horizontal, 20).padding(.vertical, DesignSystem.Space.l)
             }
             .onChange(of: bubbles.count) { _ in
                 if let last = bubbles.last { proxy.scrollTo(last.id, anchor: .bottom) }
@@ -297,23 +298,58 @@ struct AskVisionView: View {
     @ViewBuilder
     private func bubbleView(_ bubble: ChatBubble) -> some View {
         if bubble.role == "user" {
-            Text(bubble.content)
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(.white)
-                .padding(.horizontal, DesignSystem.Space.l).padding(.vertical, DesignSystem.Space.m)
-                .background(RoundedRectangle(cornerRadius: DesignSystem.Radius.card, style: .continuous).fill(DesignSystem.bgRaised))
-                .accessibilityIdentifier("chatUserMessage_\(bubble.id)")
-                .id(bubble.id)
+            // Your messages sit on the right in a dark pill, with the time underneath.
+            VStack(alignment: .trailing, spacing: 5) {
+                Text(bubble.content)
+                    .font(.system(size: 15))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 16).padding(.vertical, 11)
+                    .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(Self.bubbleFill))
+                    .accessibilityIdentifier("chatUserMessage_\(bubble.id)")
+                Text(Self.timeFormatter.string(from: bubble.time))
+                    .font(.system(size: 11)).foregroundStyle(DesignSystem.textMuted2)
+            }
+            .frame(maxWidth: .infinity, alignment: .trailing)
+            .padding(.leading, 48)
+            .id(bubble.id)
         } else {
-            Text(bubble.content)
-                .font(.system(size: 15))
-                .lineSpacing(3)
-                .foregroundStyle(.white)
-                .padding(.horizontal, DesignSystem.Space.s).padding(.vertical, DesignSystem.Space.xs)
-                .accessibilityIdentifier("chatAssistantMessage_\(bubble.id)")
-                .id(bubble.id)
+            // VISION's answers sit on the left beside a small round chatbot mark, time underneath.
+            HStack(alignment: .top, spacing: 10) {
+                VisionMark(height: 12)
+                    .frame(width: 32, height: 32)
+                    .background(Circle().fill(Self.bubbleFill))
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(Self.styled(bubble.content))
+                        .font(.system(size: 15))
+                        .lineSpacing(2)
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 16).padding(.vertical, 11)
+                        .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(Self.bubbleFill))
+                        .accessibilityIdentifier("chatAssistantMessage_\(bubble.id)")
+                    Text(Self.timeFormatter.string(from: bubble.time))
+                        .font(.system(size: 11)).foregroundStyle(DesignSystem.textMuted2)
+                }
+                Spacer(minLength: 20)
+            }
+            .id(bubble.id)
         }
     }
+
+    private static let bubbleFill = Color(white: 0.115)
+
+    /// The AI's markdown tidied for a bubble: headings and **bold** drawn bold, lists as bullets, no stray symbols.
+    private static func styled(_ text: String) -> AttributedString {
+        let prepared = ChatText.prepare(text)
+        let options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+        return (try? AttributedString(markdown: prepared, options: options)) ?? AttributedString(prepared)
+    }
+
+    private static let timeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        return formatter
+    }()
 
     @ViewBuilder
     private var askBar: some View {
@@ -436,7 +472,7 @@ struct AskVisionView: View {
     private func openSession(_ sessionId: String) {
         mode = .session(sessionId)
         let messages = (try? chatSessionStore.messagesForSession(sessionId)) ?? []
-        bubbles = messages.map { ChatBubble(id: $0.id, role: $0.role, content: $0.content, category: $0.category.flatMap { TaskCategory(rawValue: $0) }) }
+        bubbles = messages.map { ChatBubble(id: $0.id, role: $0.role, content: $0.content, category: $0.category.flatMap { TaskCategory(rawValue: $0) }, time: $0.createdAt) }
     }
 
     private func send() {
@@ -494,3 +530,5 @@ struct AskVisionView: View {
         }
     }
 }
+
+

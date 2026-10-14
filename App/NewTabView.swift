@@ -273,7 +273,7 @@ struct NewTabView: View {
             Button(action: openAIMode) {
                 HStack(spacing: 8) {
                     Image(systemName: "sparkles").font(.system(size: 15, weight: .medium)).accessibilityHidden(true)
-                    Text("AI Mode").font(.system(size: 15, weight: .medium))
+                    Text("Offline AI").font(.system(size: 15, weight: .medium))
                 }
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity)
@@ -281,7 +281,7 @@ struct NewTabView: View {
                 .background(Capsule().fill(Color.black.opacity(0.42)))
                 .overlay(Capsule().stroke(HomeTheme.stroke, lineWidth: 1))
             }
-            .accessibilityLabel("AI Mode")
+            .accessibilityLabel("Offline AI")
             .accessibilityIdentifier("newTabAIMode")
         }
     }

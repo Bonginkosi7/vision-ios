@@ -115,3 +115,22 @@ final class AddressDisplayTests: XCTestCase {
         XCTAssertEqual(AddressDisplay.text(for: "  https://example.org/  "), "example.org")
     }
 }
+
+final class ChatTextTests: XCTestCase {
+    func test_headingsBecomeBoldLines() {
+        XCTAssertEqual(ChatText.prepare("### Step 6: Uploading"), "**Step 6: Uploading**")
+        XCTAssertEqual(ChatText.prepare("# Big\n## Smaller"), "**Big**\n**Smaller**")
+        XCTAssertEqual(ChatText.prepare("### **Already bold**"), "**Already bold**")
+    }
+
+    func test_listsBecomeBullets() {
+        XCTAssertEqual(ChatText.prepare("- one\n* two\n   - three"), "• one\n• two\n• three")
+    }
+
+    func test_leavesNormalTextAndBoldAlone() {
+        XCTAssertEqual(ChatText.prepare("1. **Choose a Theme**: Decide on a topic"), "1. **Choose a Theme**: Decide on a topic")
+        XCTAssertEqual(ChatText.prepare("#hashtag is not a heading"), "#hashtag is not a heading")
+        XCTAssertEqual(ChatText.prepare("**Bold start** of a line"), "**Bold start** of a line")
+        XCTAssertEqual(ChatText.prepare("a - b"), "a - b")
+    }
+}
