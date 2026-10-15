@@ -393,8 +393,9 @@ struct AskVisionView: View {
                 .accessibilityLabel("Attach a file")
                 .accessibilityIdentifier("chatAttachButton")
 
-                TextField("", text: $messageText, prompt: Text(attachedFile == nil ? "Ask VISION anything…" : "Ask about this file…").foregroundColor(DesignSystem.textMuted2))
+                TextField("", text: $messageText, prompt: Text(attachedFile == nil ? "Ask VISION anything…" : "Ask about this file…").font(.system(size: 14)).foregroundColor(DesignSystem.textMuted2))
                     .textFieldStyle(.plain)
+                    .font(.system(size: 14))
                     .disabled(sending)
                     .padding(.horizontal, DesignSystem.Space.m).frame(minHeight: 44)
                     .background(RoundedRectangle(cornerRadius: DesignSystem.Radius.control, style: .continuous).fill(DesignSystem.bgRaised))

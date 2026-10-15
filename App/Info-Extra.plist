@@ -10,6 +10,11 @@
         <true/>
     </dict>
 
+    <!-- VISION only uses the encryption built into iOS (HTTPS and the Keychain), which is exempt from export paperwork;
+         saying so here stops App Store Connect asking about it on every upload. -->
+    <key>ITSAppUsesNonExemptEncryption</key>
+    <false/>
+
     <!-- Shown the first time a web page (or New Tab's weather) asks for these. -->
     <key>NSCameraUsageDescription</key>
     <string>Websites you allow can use your camera, for example for video calls.</string>

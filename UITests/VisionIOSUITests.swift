@@ -1896,6 +1896,32 @@ final class VisionIOSUITests: XCTestCase {
         XCTAssertGreaterThan(reply.label.count, 3)
     }
 
+    /// Share, Find and Desktop site are in the menu once a page is open; Desktop site flips to Mobile and back.
+    func test_shareFindAndDesktopSiteAreInTheMenuOnAPage() {
+        let app = XCUIApplication()
+        launchApp(app)
+        let field = app.textFields["addressBarField"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        navigate(app: app, addressField: field, to: "example.com")
+        assertAddressBarEventuallyShows(field, "https://example.com/", in: self)
+
+        tapMoreButton(app)
+        XCTAssertTrue(app.buttons["menu_share"].waitForExistence(timeout: 5), "Share should be in the menu")
+        XCTAssertTrue(app.buttons["menu_share"].isEnabled, "Share is on for a web page")
+        XCTAssertTrue(app.buttons["menu_find"].exists && app.buttons["menu_find"].isEnabled)
+        let desktop = app.buttons["menu_desktopSite"]
+        XCTAssertTrue(desktop.exists)
+        XCTAssertTrue(desktop.label.contains("Desktop"), "starts on the mobile site; the button offers Desktop, got \(desktop.label)")
+        desktop.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+
+        Thread.sleep(forTimeInterval: 2)
+        tapMoreButton(app)
+        let flipped = app.buttons["menu_desktopSite"]
+        XCTAssertTrue(flipped.waitForExistence(timeout: 5))
+        XCTAssertTrue(flipped.label.contains("Mobile"), "after asking for the desktop site the button offers Mobile, got \(flipped.label)")
+        flipped.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()   // leave the tab as it was
+    }
+
     /// Back goes to the previous page, and from a tab's first page back to the home page; Forward undoes each step.
     /// The bottom address bar appears only once a page is open.
     func test_backAndForwardWalkThroughPagesAndTheHomePage() {

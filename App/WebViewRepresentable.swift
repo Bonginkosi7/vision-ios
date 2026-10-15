@@ -233,20 +233,23 @@ struct WebViewRepresentable: UIViewRepresentable {
         func webView(
             _ webView: WKWebView,
             decidePolicyFor navigationAction: WKNavigationAction,
-            decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
+            preferences: WKWebpagePreferences,
+            decisionHandler: @escaping (WKNavigationActionPolicy, WKWebpagePreferences) -> Void
         ) {
+            // "Request Desktop Website": this tab asks sites for their desktop pages until it is switched back.
+            preferences.preferredContentMode = (tab?.requestsDesktopSite ?? false) ? .desktop : .mobile
             if
                 let url = navigationAction.request.url?.absoluteString,
                 let blockedDomain = FocusManager.shared.matchBlockedDomain(url: url)
             {
                 FocusManager.shared.recordBlockedAttempt()
-                decisionHandler(.cancel)
+                decisionHandler(.cancel, preferences)
                 if let session = FocusManager.shared.activeSession {
                     webView.loadHTMLString(FocusBlockedPage.html(domain: blockedDomain, endsAt: session.endsAt), baseURL: nil)
                 }
                 return
             }
-            decisionHandler(.allow)
+            decisionHandler(.allow, preferences)
         }
 
         // MARK: - Certificate errors

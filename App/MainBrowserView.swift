@@ -101,6 +101,8 @@ struct MainBrowserView: View {
     @State private var translateUnavailable = false
     /// Whether the focused tab is showing the home page — the bottom address bar is only for pages.
     @State private var onHomePage = true
+    /// Whether the focused tab asks for the desktop site — kept here so the menu's label follows it.
+    @State private var activeDesktopSite = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -596,6 +598,32 @@ struct MainBrowserView: View {
                 .accessibilityIdentifier("menu_split")
             }
 
+            // Share the open page, search inside it, or ask for the desktop version of the site.
+            ControlGroup {
+                if let url = shareableURL {
+                    ShareLink(item: url, subject: Text(tabManager.activeTab?.title ?? "")) {
+                        Label("Share", systemImage: "square.and.arrow.up")
+                    }
+                    .accessibilityIdentifier("menu_share")
+                } else {
+                    Button(action: {}) { Label("Share", systemImage: "square.and.arrow.up") }
+                        .disabled(true)
+                        .accessibilityIdentifier("menu_share")
+                }
+
+                Button(action: findInPage) {
+                    Label("Find", systemImage: "magnifyingglass")
+                }
+                .disabled(tabManager.activeTab?.isNewTab ?? true)
+                .accessibilityIdentifier("menu_find")
+
+                Button(action: toggleDesktopSite) {
+                    Label(activeDesktopSite ? "Mobile" : "Desktop", systemImage: "desktopcomputer")
+                }
+                .disabled(tabManager.activeTab?.isNewTab ?? true)
+                .accessibilityIdentifier("menu_desktopSite")
+            }
+
             Button(action: { askVisionRequest = AskVisionRequest(query: nil) }) {
                 Label("Ask VISION", systemImage: "bubble.left.and.text.bubble.right")
             }
@@ -696,6 +724,7 @@ struct MainBrowserView: View {
                 }
             }
             .onReceive(tab.$url) { _ in syncAddressBar() }
+            .onReceive(tab.$requestsDesktopSite) { activeDesktopSite = $0 }
             .onReceive(tab.$isNewTab) { isHome in
                 onHomePage = isHome
                 refreshBookmarkState()
@@ -769,6 +798,27 @@ struct MainBrowserView: View {
             target = TranslateLogic.translatedURL(for: tab.url, targetCode: code)
         }
         if let target { tabManager.navigateActiveTab(to: target) } else { translateUnavailable = true }
+    }
+
+    /// The open page's address, when it is a real web page that can be shared.
+    private var shareableURL: URL? {
+        guard let tab = tabManager.activeTab, !tab.isNewTab, let url = URL(string: tab.url),
+              let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" else { return nil }
+        return url
+    }
+
+    /// Opens iOS's own find bar over the page.
+    private func findInPage() {
+        guard let tab = tabManager.activeTab, !tab.isNewTab else { return }
+        tab.webView.isFindInteractionEnabled = true
+        DispatchQueue.main.async { tab.webView.findInteraction?.presentFindNavigator(showingReplace: false) }
+    }
+
+    /// Asks the open page's site for its desktop version (or the phone version again) and reloads it.
+    private func toggleDesktopSite() {
+        guard let tab = tabManager.activeTab, !tab.isNewTab else { return }
+        tab.requestsDesktopSite.toggle()
+        tab.webView.reload()
     }
 
     private func togglePinActiveTab() {

@@ -29,6 +29,8 @@ final class BrowserTab: Identifiable, ObservableObject {
     @Published var isLoading: Bool = false
     /// Pinned tabs sit first in the tab list and come back at the next launch.
     @Published var isPinned: Bool = false
+    /// True while this tab asks sites for their desktop pages ("Request Desktop Website").
+    @Published var requestsDesktopSite: Bool = false
     /// The address this tab was pinned at — what gets reopened next launch.
     var pinURL: String?
     /// A pinned tab restored at launch isn't loaded until the first time it's shown, so a handful of pins don't all load at once.
