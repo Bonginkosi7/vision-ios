@@ -624,6 +624,12 @@ struct MainBrowserView: View {
                 .accessibilityIdentifier("menu_desktopSite")
             }
 
+            Button(action: printPage) {
+                Label("Print", systemImage: "printer")
+            }
+            .disabled(shareableURL == nil)
+            .accessibilityIdentifier("menu_print")
+
             Button(action: { askVisionRequest = AskVisionRequest(query: nil) }) {
                 Label("Ask VISION", systemImage: "bubble.left.and.text.bubble.right")
             }
@@ -812,6 +818,18 @@ struct MainBrowserView: View {
         guard let tab = tabManager.activeTab, !tab.isNewTab else { return }
         tab.webView.isFindInteractionEnabled = true
         DispatchQueue.main.async { tab.webView.findInteraction?.presentFindNavigator(showingReplace: false) }
+    }
+
+    /// Opens iOS's own print sheet (which also saves to PDF) for the page that is open.
+    private func printPage() {
+        guard let tab = tabManager.activeTab, !tab.isNewTab else { return }
+        let info = UIPrintInfo(dictionary: nil)
+        info.outputType = .general
+        info.jobName = tab.title.isEmpty ? "VISION page" : tab.title
+        let controller = UIPrintInteractionController.shared
+        controller.printInfo = info
+        controller.printFormatter = tab.webView.viewPrintFormatter()
+        controller.present(animated: true, completionHandler: nil)
     }
 
     /// Asks the open page's site for its desktop version (or the phone version again) and reloads it.
