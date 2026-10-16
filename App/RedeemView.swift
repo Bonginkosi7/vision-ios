@@ -1,4 +1,5 @@
 import SwiftUI
+import VisionCore
 
 /// UI-layer shape of the fields a catalog entry actually renders (mirrors
 /// RedeemActivity.kt's CachedRewardCatalogEntry). The real data layer lives in
@@ -15,6 +16,8 @@ struct RedeemCatalogItem: Identifiable, Equatable {
     /// real eligibility error (RedemptionEngine.checkEligibility) or the
     /// real "Need N more points" shortfall. nil means redeemable right now.
     let disabledReason: String?
+    /// Picks the card's colours (see RewardCardStyle).
+    var category: String = "lifestyle"
 }
 
 /// Only the fields "My Redemptions" actually shows.
@@ -151,35 +154,57 @@ struct RedeemView: View {
                     .accessibilityIdentifier("redeemCatalogEmptyText")
             } else {
                 ForEach(catalog) { item in
-                    DesignSystem.card {
-                        VStack(alignment: .leading, spacing: DesignSystem.Space.xs) {
-                            Text(item.title)
-                                .font(.system(size: 17, weight: .semibold)).foregroundStyle(.white)
-                            Text(item.description)
-                                .font(.system(size: 14)).foregroundStyle(DesignSystem.textMuted2)
-                                .fixedSize(horizontal: false, vertical: true)
-                            Text("\(item.pointsCost) pts")
-                                .font(.system(size: 14, weight: .semibold)).foregroundStyle(.white)
-                                .padding(.top, DesignSystem.Space.xs)
-
-                            if let disabledReason = item.disabledReason {
-                                Text(disabledReason)
-                                    .font(.system(size: 14, weight: .medium)).foregroundStyle(DesignSystem.textMuted2)
-                                    .frame(maxWidth: .infinity, minHeight: 44)
-                                    .overlay(Capsule().stroke(DesignSystem.borderCard, lineWidth: 1))
-                                    .padding(.top, DesignSystem.Space.m)
-                            } else {
-                                DesignSystem.primaryButton("Redeem for \(item.pointsCost) pts", fullWidth: true) {
-                                    startRedeem(item)
-                                }
-                                .padding(.top, DesignSystem.Space.m)
-                            }
-                        }
-                    }
-                    .accessibilityIdentifier("redeemCatalogCard_\(item.id)")
+                    rewardCard(item)
                 }
             }
         }
+    }
+
+    /// A reward as a coloured card — the category's gradient with a dark fade toward the bottom, like the desktop.
+    private func rewardCard(_ item: RedeemCatalogItem) -> some View {
+        let colors = RewardCardStyle.colors(forCategory: item.category)
+        return VStack(alignment: .leading, spacing: 4) {
+            Spacer(minLength: 0)
+            Text("\(item.pointsCost) pts")
+                .font(.system(size: 24, weight: .bold)).foregroundStyle(.white)
+            Text(item.title)
+                .font(.system(size: 17, weight: .semibold)).foregroundStyle(.white)
+            if !item.description.isEmpty {
+                Text(item.description)
+                    .font(.system(size: 13)).foregroundStyle(.white.opacity(0.8))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if let disabledReason = item.disabledReason {
+                HStack(spacing: 6) {
+                    Image(systemName: "lock.fill").font(.system(size: 12))
+                    Text(disabledReason).font(.system(size: 14, weight: .semibold))
+                }
+                .foregroundStyle(.white.opacity(0.9))
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .background(Capsule().fill(Color.black.opacity(0.35)))
+                .padding(.top, DesignSystem.Space.m)
+            } else {
+                DesignSystem.primaryButton("Redeem for \(item.pointsCost) pts", fullWidth: true) {
+                    startRedeem(item)
+                }
+                .padding(.top, DesignSystem.Space.m)
+            }
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, minHeight: 190, alignment: .leading)
+        .background(
+            ZStack {
+                LinearGradient(colors: [Color(hex: colors.start), Color(hex: colors.end)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                LinearGradient(stops: [
+                    .init(color: .clear, location: 0),
+                    .init(color: .black.opacity(0.35), location: 0.45),
+                    .init(color: .black.opacity(0.82), location: 1),
+                ], startPoint: .top, endPoint: .bottom)
+            }
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("redeemCatalogCard_\(item.id)")
     }
 
     // MARK: - History

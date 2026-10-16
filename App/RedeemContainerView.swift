@@ -73,7 +73,7 @@ struct RedeemContainerView: View {
         return RedeemCatalogItem(
             id: entry.id, title: entry.title, description: entry.entryDescription, pointsCost: entry.pointsCost,
             requiresMobileNumber: entry.requiresMobileNumber, requiresNetwork: entry.requiresNetwork,
-            disabledReason: disabledReason
+            disabledReason: disabledReason, category: entry.category
         )
     }
 
