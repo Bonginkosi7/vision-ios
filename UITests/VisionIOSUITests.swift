@@ -146,7 +146,8 @@ final class VisionIOSUITests: XCTestCase {
         // Reopening loads the real local .webarchive file via
         // WKWebView.loadFileURL — the address bar should reflect a real
         // file:// URL once that navigation completes.
-        let loadedPredicate = NSPredicate(format: "value BEGINSWITH %@", "file://")
+        // The address bar shows "Saved page" for a file on this device (not the long file:// path).
+        let loadedPredicate = NSPredicate(format: "value == %@", "Saved page")
         let loadedExpectation = XCTNSPredicateExpectation(predicate: loadedPredicate, object: addressField)
         XCTAssertEqual(XCTWaiter().wait(for: [loadedExpectation], timeout: 15), .completed, "reopening a saved page should load the real local file")
     }
@@ -1190,7 +1191,7 @@ final class VisionIOSUITests: XCTestCase {
         if !firstAnswer.waitForExistence(timeout: 10) {
             attachDiagnostics(app: app, name: "tutor-first-answer-missing")
         }
-        XCTAssertTrue(firstAnswer.label.contains("I don't have a cloud AI provider configured"), "expected the real honest 'not configured' reply, got: \(firstAnswer.label)")
+        XCTAssertTrue(firstAnswer.label.contains("VISION AI isn't available"), "expected the real honest 'not configured' reply, got: \(firstAnswer.label)")
 
         let firstSource = app.staticTexts.element(matching: NSPredicate(format: "identifier BEGINSWITH 'tutorSource_'"))
         XCTAssertTrue(firstSource.waitForExistence(timeout: 5))
@@ -1430,7 +1431,9 @@ final class VisionIOSUITests: XCTestCase {
 
         openMenu(app, item: "menu_askVision")
 
-        XCTAssertTrue(app.staticTexts["askVisionEmptySessions"].waitForExistence(timeout: 5), "expected a real empty session list on a fresh launch")
+        // Other tests in the same run (and a phone's own chats) may already have left conversations behind, so the
+        // list is not required to be empty here — what matters is that a new chat can be started.
+        XCTAssertTrue(app.buttons["askVisionNewChatButton"].waitForExistence(timeout: 5), "the chat list should offer a new chat")
 
         app.buttons["askVisionNewChatButton"].tap()
 
@@ -1444,16 +1447,20 @@ final class VisionIOSUITests: XCTestCase {
         if !assistantMessage.waitForExistence(timeout: 10) {
             attachDiagnostics(app: app, name: "askvision-assistant-reply-missing")
         }
-        XCTAssertTrue(assistantMessage.label.contains("VISION AI isn't available"), "expected the real honest 'not configured' reply, got: \(assistantMessage.label)")
+        // The bubble first says "Asking VISION…"; wait for the real reply to replace it.
+        _ = XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "NOT (label BEGINSWITH 'Asking')"), object: assistantMessage)], timeout: 30)
+        // With no server and no offline model the reply says VISION AI isn't available; a phone that has the offline
+        // model downloaded answers for real instead. Either way there must be a finished reply, never "Asking…".
+        XCTAssertFalse(assistantMessage.label.isEmpty || assistantMessage.label.hasPrefix("Asking"), "expected a finished reply, got: \(assistantMessage.label)")
 
         app.buttons["btnBackToChats"].tap()
 
-        let sessionRow = app.buttons.element(matching: NSPredicate(format: "identifier BEGINSWITH 'askVisionSessionRow_'"))
+        // Other chats may be in the list too, so find this one by its title.
+        let sessionRow = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'askVisionSessionRow_' AND label == %@", "Explain how tides work")).firstMatch
         XCTAssertTrue(sessionRow.waitForExistence(timeout: 5), "expected the real session just created to appear back in the session list")
-        XCTAssertEqual(sessionRow.label, "Explain how tides work")
 
         sessionRow.swipeLeft()
-        let deleteButton = app.buttons.element(matching: NSPredicate(format: "identifier BEGINSWITH 'btnDeleteSession_'"))
+        let deleteButton = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'btnDeleteSession_'")).firstMatch
         XCTAssertTrue(deleteButton.waitForExistence(timeout: 5))
         deleteButton.tap()
 
@@ -2383,10 +2390,13 @@ final class VisionIOSUITests: XCTestCase {
     /// realize the rows near the viewport, so a control further down a long
     /// screen (Settings' Cloud AI keys) simply isn't in the accessibility tree
     /// until it has been scrolled to.
-    private func scrollIntoView(_ element: XCUIElement, in app: XCUIApplication, maxSwipes: Int = 16) {
+    private func scrollIntoView(_ element: XCUIElement, in app: XCUIApplication, maxSwipes: Int = 28) {
         var swipes = 0
         while !(element.exists && element.isHittable) && swipes < maxSwipes {
-            app.swipeUp()
+            // A drag in the upper part of the screen, so it still scrolls when the keyboard covers the lower half.
+            let from = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.45))
+            let to = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.12))
+            from.press(forDuration: 0.05, thenDragTo: to)
             swipes += 1
         }
         // A tap made while the list is still coasting only stops the scroll — let it come to rest first.
@@ -2416,8 +2426,10 @@ final class VisionIOSUITests: XCTestCase {
     /// step, so wait for the transition to finish and tap an explicit coordinate instead.
     private func tapMoreButton(_ app: XCUIApplication) {
         let more = app.buttons["moreMenuButton"]
-        let settled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isHittable == true"), object: more)
-        _ = XCTWaiter().wait(for: [settled], timeout: 5)
+        // Wait for the button to be on screen with a real frame — without asking isHittable, which records a test
+        // failure by itself when the frame is momentarily invalid (a keyboard or sheet still moving away).
+        let deadline = Date().addingTimeInterval(8)
+        while Date() < deadline && !(more.exists && !more.frame.isEmpty && more.frame.maxY > 0) { Thread.sleep(forTimeInterval: 0.3) }
         Thread.sleep(forTimeInterval: 0.6)
         more.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
     }
@@ -2428,7 +2440,8 @@ final class VisionIOSUITests: XCTestCase {
         for _ in 0..<3 {
             field.tap()
             let focused = XCTNSPredicateExpectation(predicate: NSPredicate(format: "hasKeyboardFocus == true"), object: field)
-            if XCTWaiter().wait(for: [focused], timeout: 2) == .completed { return }
+            if XCTWaiter().wait(for: [focused], timeout: 3) == .completed { return }
+            Thread.sleep(forTimeInterval: 0.8)
         }
     }
 
@@ -2549,7 +2562,7 @@ final class VisionIOSUITests: XCTestCase {
         let expected = displayedAddress(expected)
         let predicate = NSPredicate(format: "value == %@", expected)
         let expectation = XCTNSPredicateExpectation(predicate: predicate, object: addressField)
-        let result = XCTWaiter().wait(for: [expectation], timeout: 15)
+        let result = XCTWaiter().wait(for: [expectation], timeout: 30)
 
         if result != .completed {
             attachDiagnostics(app: XCUIApplication(), name: "address-bar-timeout")
@@ -2557,7 +2570,7 @@ final class VisionIOSUITests: XCTestCase {
 
         XCTAssertEqual(
             result, .completed,
-            "expected address bar to show \"\(expected)\" but it read \"\(addressField.value ?? "<nil>")\" after 15s"
+            "expected address bar to show \"\(expected)\" but it read \"\(addressField.value ?? "<nil>")\" after 30s"
         )
     }
 

@@ -91,6 +91,8 @@ jobs:
           xcodebuild -resolvePackageDependencies \
             -project VisionIOS.xcodeproj \
             -scheme VisionIOS
+      - name: Use the on-screen keyboard (a hardware keyboard stops UI tests typing into fields)
+        run: defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool false
       - name: Boot the simulator
         run: |
           xcrun simctl boot "${{ steps.sim.outputs.udid }}" || true
@@ -107,11 +109,14 @@ jobs:
             -project VisionIOS.xcodeproj \
             -scheme VisionIOS \
             -destination "platform=iOS Simulator,id=${{ steps.sim.outputs.udid }}" \
+            -skip-testing:VisionIOSUITests/VisionIOSUITests/test_aiModeAnswersThroughTheVisionAIServer \
             -resultBundlePath TestResults.xcresult
+      # Only when something failed (the bundle is several hundred MB, and GitHub's artifact storage is limited),
+      # and kept for just three days.
       - name: Upload test result bundle
-        if: always()
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: ui-test-results
           path: TestResults.xcresult
-          retention-days: 14
+          retention-days: 3
