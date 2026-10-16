@@ -43,7 +43,7 @@ enum ChatAI {
             if result.ok, var text = result.text {
                 if composed?.truncated == true {
                     text += isLocal
-                        ? "\n\n(Only the first part of the file fit in the on-device model. For a long document, add a cloud AI key in Settings.)"
+                        ? "\n\n(Only the first part of the file fit in the on-device model. For a long document, connect to the internet so VISION AI can read all of it.)"
                         : "\n\n(The file was very long, so only the first part was read.)"
                 }
                 return ChatAnswer(text: text, category: category, providerName: provider.name)
