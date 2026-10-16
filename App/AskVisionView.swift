@@ -14,6 +14,8 @@ private struct ChatBubble: Identifiable {
     let content: String
     let category: TaskCategory?
     var time: Date = Date()
+    /// Answered by the small on-device model, so a reminder that it can be wrong shows under the reply.
+    var isOffline: Bool = false
 }
 
 /// Real Ask VISION chat — port of the scoped-down slice of
@@ -327,6 +329,11 @@ struct AskVisionView: View {
                         .padding(.horizontal, 16).padding(.vertical, 11)
                         .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(Self.bubbleFill))
                         .accessibilityIdentifier("chatAssistantMessage_\(bubble.id)")
+                    if bubble.isOffline {
+                        Text("Offline AI can be wrong, so check important facts when you're online.")
+                            .font(.system(size: 11)).foregroundStyle(DesignSystem.textMuted2)
+                            .accessibilityIdentifier("chatOfflineNote_\(bubble.id)")
+                    }
                     Text(Self.timeFormatter.string(from: bubble.time))
                         .font(.system(size: 11)).foregroundStyle(DesignSystem.textMuted2)
                 }
@@ -473,7 +480,7 @@ struct AskVisionView: View {
     private func openSession(_ sessionId: String) {
         mode = .session(sessionId)
         let messages = (try? chatSessionStore.messagesForSession(sessionId)) ?? []
-        bubbles = messages.map { ChatBubble(id: $0.id, role: $0.role, content: $0.content, category: $0.category.flatMap { TaskCategory(rawValue: $0) }, time: $0.createdAt) }
+        bubbles = messages.map { ChatBubble(id: $0.id, role: $0.role, content: $0.content, category: $0.category.flatMap { TaskCategory(rawValue: $0) }, time: $0.createdAt, isOffline: $0.role == "assistant" && $0.providerName == LocalModelProvider().name) }
     }
 
     private func send() {
@@ -524,9 +531,9 @@ struct AskVisionView: View {
 
             sending = false
             if let pendingIndex = bubbles.firstIndex(where: { $0.id == pendingBubbleId }) {
-                bubbles[pendingIndex] = ChatBubble(id: pendingBubbleId, role: "assistant", content: answer.text, category: answer.category)
+                bubbles[pendingIndex] = ChatBubble(id: pendingBubbleId, role: "assistant", content: answer.text, category: answer.category, isOffline: answer.providerName == LocalModelProvider().name)
             } else {
-                bubbles.append(ChatBubble(id: UUID().uuidString, role: "assistant", content: answer.text, category: answer.category))
+                bubbles.append(ChatBubble(id: UUID().uuidString, role: "assistant", content: answer.text, category: answer.category, isOffline: answer.providerName == LocalModelProvider().name))
             }
         }
     }

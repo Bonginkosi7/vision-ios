@@ -1,21 +1,28 @@
 import Foundation
 
 /// Where the on-device model lives and what it is. One file, one model:
-/// Qwen2.5-0.5B-Instruct (Apache-2.0, ungated) in 8-bit GGUF — the same
-/// model family and size class the Android app ships.
+/// Qwen2.5-1.5B-Instruct (Apache-2.0, ungated) in 4-bit GGUF — the same
+/// model the desktop app ships. The earlier 0.5B model was too small to be
+/// reliable (wrong facts, needless refusals), so it was replaced.
 enum LocalModelFile {
-    static let displayName = "Qwen2.5 0.5B Instruct"
-    static let downloadURL = URL(string: "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q8_0.gguf")!
+    static let displayName = "Qwen2.5 1.5B Instruct"
+    static let downloadURL = URL(string: "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf")!
     /// Exact byte size reported by the server — a finished file of any other
     /// size is treated as corrupt and thrown away, never loaded.
-    static let expectedBytes: Int64 = 675_710_816
+    static let expectedBytes: Int64 = 1_117_320_736
 
     static var url: URL {
         let base = (try? FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true))
             ?? FileManager.default.temporaryDirectory
         let dir = base.appendingPathComponent("local-models", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir.appendingPathComponent("qwen2.5-0.5b-instruct-q8_0.gguf")
+        return dir.appendingPathComponent("qwen2.5-1.5b-instruct-q4_k_m.gguf")
+    }
+
+    /// The old, smaller model — removed once its replacement has downloaded so it doesn't waste space.
+    static func removeLegacyModel() {
+        let legacy = url.deletingLastPathComponent().appendingPathComponent("qwen2.5-0.5b-instruct-q8_0.gguf")
+        try? FileManager.default.removeItem(at: legacy)
     }
 
     static var isDownloaded: Bool {
@@ -84,6 +91,11 @@ final class LocalModelManager: NSObject, ObservableObject, URLSessionDownloadDel
 
     func start() {
         guard !isBusy, !LocalModelFile.isDownloaded else { return }
+        // The 1.5B model needs about 1.5 GB of working memory; phones with 2 GB of RAM would have it killed mid-answer.
+        guard ProcessInfo.processInfo.physicalMemory >= 3_000_000_000 else {
+            state = .failed("This iPhone doesn't have enough memory to run the offline AI model.")
+            return
+        }
         setOptedOut(false)
         UserDefaults.standard.set(false, forKey: Self.pausedKey)
         let free = (try? URL(fileURLWithPath: NSHomeDirectory()).resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]))?
@@ -165,6 +177,7 @@ final class LocalModelManager: NSObject, ObservableObject, URLSessionDownloadDel
                 values.isExcludedFromBackup = true // re-downloadable, keep it out of iCloud backups
                 var mutableURL = destination
                 try? mutableURL.setResourceValues(values)
+                LocalModelFile.removeLegacyModel()
             }
         } catch {
             failure = "The download failed (\(error.localizedDescription)). Please try again."

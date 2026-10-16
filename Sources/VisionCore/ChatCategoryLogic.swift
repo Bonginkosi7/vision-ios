@@ -60,7 +60,7 @@ public enum ChatCategoryLogic {
         return .general
     }
 
-    private static let baseInstruction = "You are VISION, an offline-capable browser assistant. Be direct and genuinely useful. Never claim to have browsed the live web, saved a file, or done anything you have not actually done in this response."
+    private static let baseInstruction = "You are VISION, an offline-capable browser assistant. Be direct and genuinely useful. Never claim to have browsed the live web, saved a file, or done anything you have not actually done in this response. If you are not sure of a fact, say so instead of guessing, and never refuse a harmless question."
 
     private static func taskInstruction(_ category: TaskCategory) -> String {
         switch category {

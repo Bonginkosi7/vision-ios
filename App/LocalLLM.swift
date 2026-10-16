@@ -176,7 +176,7 @@ struct LocalModelProvider: CloudAIProvider {
 
     func generate(systemInstruction: String, userMessage: String, history: [ChatMessage]) async -> AiCallResult {
         do {
-            // A 0.5B model takes "never claim to have browsed the web" too
+            // A small model takes "never claim to have browsed the web" too
             // literally and refuses plain factual questions as "no live
             // data". This steers it to just answer from what it knows.
             let localInstruction = systemInstruction
