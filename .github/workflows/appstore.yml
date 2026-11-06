@@ -1,0 +1,130 @@
+name: iOS App Store build
+
+# Builds VISION for iPhone on a GitHub Mac with the newest Xcode (Apple only accepts apps built with Xcode 26 or later),
+# signs it in the cloud with an App Store Connect API key, and uploads it to App Store Connect (it then appears in
+# TestFlight and can be chosen for an App Store release).
+#
+# Start it from the Actions tab → "iOS App Store build" → Run workflow.
+#
+# Secrets needed (Settings → Secrets and variables → Actions). None of them is ever printed:
+#   APPLE_TEAM_ID        10-character Team ID (developer.apple.com → Membership details)
+#   ASC_KEY_ID           App Store Connect API key ID
+#   ASC_ISSUER_ID        App Store Connect issuer ID
+#   ASC_KEY_P8_BASE64    the downloaded AuthKey_XXXX.p8 file, base64-encoded (base64 -i AuthKey_XXXX.p8 | pbcopy)
+# and the same app settings the other builds use (any left empty simply builds that feature as unconfigured):
+#   VISION_AI_PROXY_URL, VISION_AI_PROXY_KEY, VISION_FIREBASE_API_KEY, VISION_FIREBASE_PROJECT_ID,
+#   VISION_ANALYTICS_URL, VISION_ANALYTICS_WRITE_KEY, VISION_LICENCE_PUBLIC_KEY
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "App version shown in the App Store (for example 1.0.0)"
+        default: "1.0.0"
+      upload:
+        description: "Upload to App Store Connect (turn off to only check that it builds and signs)"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  appstore:
+    runs-on: macos-26
+    timeout-minutes: 60
+    env:
+      TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select the newest Xcode (must be 26 or later)
+        run: |
+          LATEST_XCODE=$(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -1)
+          echo "Selecting: $LATEST_XCODE"
+          sudo xcode-select -s "$LATEST_XCODE/Contents/Developer"
+          xcodebuild -version
+          MAJOR=$(xcodebuild -version | head -1 | sed -E 's/Xcode ([0-9]+).*/\1/')
+          if [ "$MAJOR" -lt 26 ]; then echo "::error::Xcode $MAJOR is too old; the App Store needs Xcode 26 or later."; exit 1; fi
+
+      - name: Check the secrets are present
+        run: |
+          for name in TEAM_ID ASC_KEY_ID ASC_ISSUER_ID; do
+            if [ -z "${!name}" ]; then echo "::error::Secret for $name is missing."; exit 1; fi
+          done
+          if [ -z "${{ secrets.ASC_KEY_P8_BASE64 }}" ]; then echo "::error::Secret ASC_KEY_P8_BASE64 is missing."; exit 1; fi
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Write the app settings (kept out of git)
+        env:
+          AI_URL: ${{ secrets.VISION_AI_PROXY_URL }}
+          AI_KEY: ${{ secrets.VISION_AI_PROXY_KEY }}
+          ANALYTICS_URL: ${{ secrets.VISION_ANALYTICS_URL }}
+          ANALYTICS_KEY: ${{ secrets.VISION_ANALYTICS_WRITE_KEY }}
+          LICENCE_KEY: ${{ secrets.VISION_LICENCE_PUBLIC_KEY }}
+          FIREBASE_KEY: ${{ secrets.VISION_FIREBASE_API_KEY }}
+          FIREBASE_PROJECT: ${{ secrets.VISION_FIREBASE_PROJECT_ID }}
+        run: |
+          # In an .xcconfig file "//" starts a comment, so web addresses are written as https:/$()/host.
+          xc() { printf '%s' "$1" | sed 's#//#/$()/#'; }
+          {
+            echo "VISION_AI_PROXY_URL = $(xc "$AI_URL")"
+            echo "VISION_AI_PROXY_KEY = $AI_KEY"
+            echo "VISION_ANALYTICS_URL = $(xc "$ANALYTICS_URL")"
+            echo "VISION_ANALYTICS_WRITE_KEY = $ANALYTICS_KEY"
+            echo "VISION_LICENCE_PUBLIC_KEY = $LICENCE_KEY"
+            echo "VISION_FIREBASE_API_KEY = $FIREBASE_KEY"
+            echo "VISION_FIREBASE_PROJECT_ID = $FIREBASE_PROJECT"
+          } > Config/Local.xcconfig
+
+      - name: Generate the Xcode project
+        run: xcodegen generate
+
+      - name: Put the App Store Connect key in place
+        run: |
+          mkdir -p "$RUNNER_TEMP/keys"
+          echo "${{ secrets.ASC_KEY_P8_BASE64 }}" | base64 --decode > "$RUNNER_TEMP/keys/AuthKey_${ASC_KEY_ID}.p8"
+          chmod 600 "$RUNNER_TEMP/keys/AuthKey_${ASC_KEY_ID}.p8"
+
+      - name: Archive (signed in the cloud)
+        run: |
+          xcodebuild archive \
+            -project VisionIOS.xcodeproj -scheme VisionIOS -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/VisionIOS.xcarchive" \
+            DEVELOPMENT_TEAM="$TEAM_ID" CODE_SIGN_STYLE=Automatic \
+            MARKETING_VERSION="${{ inputs.version }}" CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$RUNNER_TEMP/keys/AuthKey_${ASC_KEY_ID}.p8" \
+            -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            | tail -40
+
+      - name: Export, sign for the App Store and upload
+        run: |
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>${{ inputs.upload && 'upload' || 'export' }}</string>
+            <key>teamID</key><string>${TEAM_ID}</string>
+            <key>signingStyle</key><string>automatic</string>
+            <key>uploadSymbols</key><true/>
+          </dict></plist>
+          PLIST
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/VisionIOS.xcarchive" \
+            -exportPath "$RUNNER_TEMP/export" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$RUNNER_TEMP/keys/AuthKey_${ASC_KEY_ID}.p8" \
+            -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            | tail -40
+          echo "Done. Build ${{ github.run_number }} of version ${{ inputs.version }}."
+
+      - name: Remove the key
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/keys" Config/Local.xcconfig

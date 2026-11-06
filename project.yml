@@ -33,6 +33,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.vision.browser
+        # iPhone only for the first App Store release (the iPad layout has never been run on an iPad).
+        TARGETED_DEVICE_FAMILY: "1"
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_UILaunchStoryboardName: LaunchScreen
         INFOPLIST_FILE: App/Info-Extra.plist
