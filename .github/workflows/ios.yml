@@ -18,7 +18,7 @@ on:
 jobs:
   visioncore-tests:
     name: VisionCore unit tests (real swift test, not the standalone harness)
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
       - name: Show toolchain
@@ -31,7 +31,7 @@ jobs:
 
   ios-app-uitests:
     name: Build + real UI tests in a booted Simulator
-    runs-on: macos-14
+    runs-on: macos-15
     # Real Firebase values, baked into the build the same way
     # vision-android's CI passes them to Gradle and desktop's CI passes
     # them to esbuild — set here so xcodebuild's own `$(VAR)` build-setting
