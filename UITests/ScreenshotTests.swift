@@ -20,16 +20,7 @@ final class ScreenshotTests: XCTestCase {
 
     func test_02_aWebPage() {
         let app = launch()
-        go(app, to: "https://en.wikipedia.org/wiki/South_Africa")
-        // Wait for the page to really load: the address bar shows the address once it has.
-        let field = app.textFields["addressBarField"]
-        let deadline = Date().addingTimeInterval(40)
-        while Date() < deadline, !((field.value as? String) ?? "").contains("wikipedia") { settle(1) }
-        settle(4)
-        // Wikipedia puts an "install our app" banner on top; its close button is at the banner's top right.
-        let close = app.webViews.buttons.matching(NSPredicate(format: "label IN {'Close', 'Dismiss', 'close'}")).firstMatch
-        if close.exists { close.tap() } else { app.coordinate(withNormalizedOffset: CGVector(dx: 0.936, dy: 0.093)).tap() }
-        settle(3)
+        openWikipediaArticle(app)
         diagnose(app, "web-page")
         shot("02-web-page")
     }
@@ -74,15 +65,33 @@ final class ScreenshotTests: XCTestCase {
         shot("06-rewards")
     }
 
-    func test_07_redeem() {
+    /// The offline promise: save the article, then show the Offline Library holding it.
+    func test_07_offlineLibrary() {
         let app = launch()
-        openInMore(app, "menu_redeem")
-        // The reward catalogue is fetched when the screen opens.
-        settle(10)
-        shot("07-redeem")
+        openWikipediaArticle(app)
+        tapMore(app)
+        let save = element(app, "menu_saveOffline")
+        if save.waitForExistence(timeout: 6) { save.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap() } else { diagnose(app, "menu-missing-saveOffline") }
+        settle(8)
+        openInMore(app, "menu_offlineLibrary")
+        settle(4)
+        diagnose(app, "offline-library")
+        shot("07-offline-library")
     }
 
     // MARK: Helpers
+
+    /// Loads the demo article and closes Wikipedia's "install our app" banner.
+    private func openWikipediaArticle(_ app: XCUIApplication) {
+        go(app, to: "https://en.wikipedia.org/wiki/South_Africa")
+        let field = app.textFields["addressBarField"]
+        let deadline = Date().addingTimeInterval(40)
+        while Date() < deadline, !((field.value as? String) ?? "").contains("wikipedia") { settle(1) }
+        settle(4)
+        let close = app.webViews.buttons.matching(NSPredicate(format: "label IN {'Close', 'Dismiss', 'close'}")).firstMatch
+        if close.exists { close.tap() } else { app.coordinate(withNormalizedOffset: CGVector(dx: 0.936, dy: 0.093)).tap() }
+        settle(3)
+    }
 
     private func launch(realVisionAI: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
