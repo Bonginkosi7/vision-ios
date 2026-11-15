@@ -50,6 +50,15 @@ jobs:
       - name: Generate the Xcode project
         run: xcodegen generate
 
+      - name: Can this machine reach the internet and VISION AI? (status codes only)
+        env:
+          AI_URL: ${{ secrets.VISION_AI_PROXY_URL }}
+          AI_KEY: ${{ secrets.VISION_AI_PROXY_KEY }}
+        run: |
+          echo "wikipedia: $(curl -s -m 20 -o /dev/null -w '%{http_code}' https://en.wikipedia.org/wiki/South_Africa)"
+          echo "vision ai health: $(curl -s -m 20 -o /dev/null -w '%{http_code}' "$AI_URL/health")"
+          echo "vision ai chat: $(curl -s -m 40 -o /dev/null -w '%{http_code}' -H 'content-type: application/json' -H "x-vision-app-key: $AI_KEY" -H 'x-vision-install: ci-check' -d '{"system":"Reply with one word.","messages":[{"role":"user","content":"Say hi"}]}' "$AI_URL/v1/chat")"
+
       - name: Pick a 6.9-inch iPhone simulator
         id: sim
         run: |
@@ -87,12 +96,14 @@ jobs:
           manifest = json.load(open("raw/manifest.json"))
           for test in manifest:
               for a in test.get("attachments", []):
-                  name = re.match(r"(\d\d-[a-z-]+)", a.get("suggestedHumanReadableName", ""))
+                  label = a.get("suggestedHumanReadableName", "")
+                  name = re.match(r"((?:\d\d|diag)-[A-Za-z0-9_.-]+?)_\d+_", label)
                   if name:
-                      shutil.copy(os.path.join("raw", a["exportedFileName"]), os.path.join("out", name.group(1) + ".png"))
+                      ext = os.path.splitext(a["exportedFileName"])[1] or ".png"
+                      shutil.copy(os.path.join("raw", a["exportedFileName"]), os.path.join("out", name.group(1) + ext))
           PY
           ls -l out
-          for f in out/*.png; do echo "$f $(sips -g pixelWidth -g pixelHeight "$f" | awk '/pixel/ {printf $2 " "}')"; done
+          for f in out/[0-9]*.png; do echo "$f $(sips -g pixelWidth -g pixelHeight "$f" | awk '/pixel/ {printf $2 " "}')"; done
 
       - name: Keep them in a private draft release
         if: always()

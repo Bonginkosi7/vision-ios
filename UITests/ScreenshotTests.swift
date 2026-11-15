@@ -22,6 +22,7 @@ final class ScreenshotTests: XCTestCase {
         let app = launch()
         go(app, to: "https://en.wikipedia.org/wiki/South_Africa")
         settle(12)
+        diagnose(app, "web-page")
         shot("02-web-page")
     }
 
@@ -38,14 +39,15 @@ final class ScreenshotTests: XCTestCase {
             _ = XCTWaiter().wait(for: [answered], timeout: 60)
         }
         settle(3)
+        diagnose(app, "ask-vision")
         shot("03-ask-vision")
     }
 
     func test_04_studyTools() {
         let app = launch()
         tapMore(app)
-        let education = app.buttons["menu_education"]
-        if education.waitForExistence(timeout: 6) { education.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap() }
+        let education = element(app, "menu_education")
+        if education.waitForExistence(timeout: 6) { education.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap() } else { diagnose(app, "menu-missing-education") }
         settle(2)
         shot("04-study-tools")
     }
@@ -91,6 +93,19 @@ final class ScreenshotTests: XCTestCase {
         return app
     }
 
+    /// Any element with this identifier, whatever its type (iOS 26 menus don't always report items as buttons).
+    private func element(_ app: XCUIApplication, _ identifier: String) -> XCUIElement {
+        app.descendants(matching: .any).matching(identifier: identifier).firstMatch
+    }
+
+    /// What the app showed, as text, for working out why a scene didn't reach its screen.
+    private func diagnose(_ app: XCUIApplication, _ name: String) {
+        let attachment = XCTAttachment(string: app.debugDescription)
+        attachment.name = "diag-" + name
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
     private func settle(_ seconds: TimeInterval) {
         Thread.sleep(forTimeInterval: seconds)
     }
@@ -116,7 +131,7 @@ final class ScreenshotTests: XCTestCase {
     }
 
     private func tapMore(_ app: XCUIApplication) {
-        let more = app.buttons["moreMenuButton"]
+        let more = element(app, "moreMenuButton")
         let deadline = Date().addingTimeInterval(8)
         while Date() < deadline && !(more.exists && !more.frame.isEmpty && more.frame.maxY > 0) { settle(0.3) }
         settle(0.6)
@@ -126,11 +141,11 @@ final class ScreenshotTests: XCTestCase {
     /// Opens an item that lives in the overflow menu's "More" submenu.
     private func openInMore(_ app: XCUIApplication, _ identifier: String) {
         tapMore(app)
-        let more = app.buttons["menu_more"]
-        guard more.waitForExistence(timeout: 6) else { return }
+        let more = element(app, "menu_more")
+        guard more.waitForExistence(timeout: 6) else { return diagnose(app, "menu-missing-\(identifier)-no-more") }
         more.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
-        let item = app.buttons[identifier]
-        guard item.waitForExistence(timeout: 6) else { return }
+        let item = element(app, identifier)
+        guard item.waitForExistence(timeout: 6) else { return diagnose(app, "menu-missing-\(identifier)") }
         item.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
     }
 }
