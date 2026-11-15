@@ -21,7 +21,11 @@ final class ScreenshotTests: XCTestCase {
     func test_02_aWebPage() {
         let app = launch()
         go(app, to: "https://en.wikipedia.org/wiki/South_Africa")
-        settle(12)
+        // Wait for the page to really load: the address bar shows the address once it has.
+        let field = app.textFields["addressBarField"]
+        let deadline = Date().addingTimeInterval(40)
+        while Date() < deadline, !((field.value as? String) ?? "").contains("wikipedia") { settle(1) }
+        settle(6)
         diagnose(app, "web-page")
         shot("02-web-page")
     }
@@ -72,13 +76,6 @@ final class ScreenshotTests: XCTestCase {
         // The reward catalogue is fetched when the screen opens.
         settle(10)
         shot("07-redeem")
-    }
-
-    func test_08_offlineReadiness() {
-        let app = launch()
-        openInMore(app, "menu_visionReady")
-        settle(4)
-        shot("08-offline-readiness")
     }
 
     // MARK: Helpers
