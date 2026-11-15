@@ -71,7 +71,7 @@ let helpSections: [HelpSection] = [
     HelpSection(label: "Privacy", cards: [
         HelpCard(
             title: "What VISION iOS does and doesn't collect",
-            body: "Your history, bookmarks, downloads, and saved pages stay on this device. VISION iOS doesn't send usage analytics anywhere — that's simply not built, not a setting you have to find and turn off."
+            body: "Your history, bookmarks, downloads, saved pages, passwords and chats stay on this device; VISION never sends the pages you visit to its servers. Anonymous usage statistics (which features get used, never what you browse) and crash reports are on by default and can be switched off in Settings. Questions to VISION AI go to VISION's service and on to OpenAI, and the weather and rewards features contact their own services when you use them. Settings → Privacy & data explains everything and can delete it."
         ),
         HelpCard(
             title: "Private Browsing",

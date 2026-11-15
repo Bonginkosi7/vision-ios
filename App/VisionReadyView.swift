@@ -5,16 +5,13 @@ import VisionCore
 /// VisionReadyActivity.kt, itself the Android counterpart of desktop's
 /// vision-ready page: real connectivity, the same Offline Readiness numbers as
 /// the homepage card (percent of bookmarks also saved offline, real storage used
-/// against the real configurable limit, a per-category breakdown), plus honest
-/// "not available yet" notes for what this port can't back with a real
-/// capability.
+/// against the real configurable limit, a per-category breakdown).
 ///
 /// Deliberately different from Android, not a missed port: Android's "Keeping
 /// Pages Up to Date" has a real `Switch` because it ships a Smart Cache
-/// background-refresh worker to flip on. iOS never has — disclosed as a scope
-/// trim since the Phase 2 migration comment in `AppDatabase.swift` — so a
-/// switch here would control nothing. It states that plainly instead, like
-/// Sports (no live data provider on any platform) and Maps (not built on iOS).
+/// background-refresh worker to flip on, and it lists Sports and Maps. iOS has
+/// none of those, so this screen leaves them out rather than show notes about
+/// features that aren't there (a switch here would control nothing).
 struct VisionReadyView: View {
     @ObservedObject var bookmarkStore: BookmarkStore
     @ObservedObject var offlineStore: OfflineStore
@@ -38,7 +35,6 @@ struct VisionReadyView: View {
                 VStack(alignment: .leading, spacing: DesignSystem.Space.l) {
                     connectivityRow
                     offlineReadinessCard
-                    notAvailableCard
                 }
                 .padding(DesignSystem.Space.l)
             }
@@ -149,40 +145,6 @@ struct VisionReadyView: View {
             Text(label).font(.system(size: 12)).foregroundStyle(DesignSystem.textMuted2)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    /// Three honest "not available on this build" notes in one quiet card,
-    /// instead of three separate bordered cards.
-    private var notAvailableCard: some View {
-        DesignSystem.card {
-            note(
-                title: "Keeping pages up to date",
-                body: "Background refresh for saved pages isn't built on VISION for iOS yet — pages you save offline stay exactly as they were when you saved them. Reopen a page and save it again for a current copy.",
-                id: "visionReadyUpToDateBody"
-            )
-            DesignSystem.divider().padding(.vertical, DesignSystem.Space.m)
-            note(
-                title: "Sports",
-                body: "Sports requires configuration — no live data provider is connected.",
-                id: "visionReadySportsBody"
-            )
-            DesignSystem.divider().padding(.vertical, DesignSystem.Space.m)
-            note(
-                title: "Maps",
-                body: "Offline maps aren't available on VISION for iOS yet.",
-                id: "visionReadyMapsBody"
-            )
-        }
-    }
-
-    private func note(title: String, body: String, id: String) -> some View {
-        VStack(alignment: .leading, spacing: DesignSystem.Space.xs) {
-            Text(title).font(.system(size: 15, weight: .semibold)).foregroundStyle(.white)
-            Text(body)
-                .font(.system(size: 14)).foregroundStyle(DesignSystem.textMuted2)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityIdentifier(id)
-        }
     }
 
     private func load() {
