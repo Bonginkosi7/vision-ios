@@ -11,15 +11,17 @@ permissions:
 
 jobs:
   screenshots:
-    runs-on: macos-26
+    runs-on: macos-15
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
-      - name: Select the newest Xcode
+      - name: Select Xcode 16 (iOS 18 simulator, where the menu tests are known to work)
         run: |
-          LATEST_XCODE=$(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -1)
-          sudo xcode-select -s "$LATEST_XCODE/Contents/Developer"
+          ls -d /Applications/Xcode_*.app
+          PICK=$(ls -d /Applications/Xcode_16*.app 2>/dev/null | sort -V | tail -1)
+          [ -z "$PICK" ] && PICK=$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)
+          sudo xcode-select -s "$PICK/Contents/Developer"
           xcodebuild -version
 
       - name: Install XcodeGen
@@ -57,7 +59,7 @@ jobs:
         run: |
           echo "wikipedia: $(curl -s -m 20 -o /dev/null -w '%{http_code}' https://en.wikipedia.org/wiki/South_Africa)"
           echo "vision ai health: $(curl -s -m 20 -o /dev/null -w '%{http_code}' "$AI_URL/health")"
-          echo "vision ai chat: $(curl -s -m 40 -o /dev/null -w '%{http_code}' -H 'content-type: application/json' -H "x-vision-app-key: $AI_KEY" -H 'x-vision-install: ci-check' -d '{"system":"Reply with one word.","messages":[{"role":"user","content":"Say hi"}]}' "$AI_URL/v1/chat")"
+          echo "vision ai chat: $(curl -s -m 40 -o /dev/null -w '%{http_code}' -H 'content-type: application/json' -H "x-vision-app-key: $AI_KEY" -H 'x-vision-install: 00000000-0000-4000-8000-000000000001' -d '{"system":"Reply with one word.","messages":[{"role":"user","content":"Say hi"}]}' "$AI_URL/v1/chat")"
 
       - name: Pick a 6.9-inch iPhone simulator
         id: sim
@@ -90,6 +92,7 @@ jobs:
         shell: bash
         run: |
           xcrun xcresulttool export attachments --path Screenshots.xcresult --output-path raw
+          head -c 2500 raw/manifest.json; echo
           mkdir -p out
           python3 - <<'PY'
           import json, os, re, shutil
@@ -97,7 +100,7 @@ jobs:
           for test in manifest:
               for a in test.get("attachments", []):
                   label = a.get("suggestedHumanReadableName", "")
-                  name = re.match(r"((?:\d\d|diag)-[A-Za-z0-9_.-]+?)_\d+_", label)
+                  name = re.match(r"((?:\d\d|diag)-[A-Za-z0-9_.-]+?)(?:_\d+_[0-9A-Fa-f-]+)?(?:\.[a-z]+)?$", label)
                   if name:
                       ext = os.path.splitext(a["exportedFileName"])[1] or ".png"
                       shutil.copy(os.path.join("raw", a["exportedFileName"]), os.path.join("out", name.group(1) + ext))
