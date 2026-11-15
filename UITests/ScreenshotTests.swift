@@ -25,7 +25,11 @@ final class ScreenshotTests: XCTestCase {
         let field = app.textFields["addressBarField"]
         let deadline = Date().addingTimeInterval(40)
         while Date() < deadline, !((field.value as? String) ?? "").contains("wikipedia") { settle(1) }
-        settle(6)
+        settle(4)
+        // Wikipedia puts an "install our app" banner on top; its close button is at the banner's top right.
+        let close = app.webViews.buttons.matching(NSPredicate(format: "label IN {'Close', 'Dismiss', 'close'}")).firstMatch
+        if close.exists { close.tap() } else { app.coordinate(withNormalizedOffset: CGVector(dx: 0.936, dy: 0.093)).tap() }
+        settle(3)
         diagnose(app, "web-page")
         shot("02-web-page")
     }
