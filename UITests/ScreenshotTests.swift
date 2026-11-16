@@ -88,8 +88,10 @@ final class ScreenshotTests: XCTestCase {
         let deadline = Date().addingTimeInterval(40)
         while Date() < deadline, !((field.value as? String) ?? "").contains("wikipedia") { settle(1) }
         settle(4)
-        let close = app.webViews.buttons.matching(NSPredicate(format: "label IN {'Close', 'Dismiss', 'close'}")).firstMatch
-        if close.exists { close.tap() } else { app.coordinate(withNormalizedOffset: CGVector(dx: 0.936, dy: 0.093)).tap() }
+        // Only when the banner is actually there (it isn't always); a blind tap would open Wikipedia's account menu.
+        if app.webViews.buttons["Download the Wikipedia app"].exists {
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.936, dy: 0.093)).tap()
+        }
         settle(3)
     }
 
