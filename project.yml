@@ -68,6 +68,8 @@ targets:
         # with GENERATE_INFOPLIST_FILE's auto-generated one above) is how
         # this same file already injects a key into that auto-generated
         # plist, e.g. INFOPLIST_KEY_UILaunchScreen_Generation above.
+        # The name under the icon on the Home Screen. Without this iOS uses the target name ("VisionIOS").
+        INFOPLIST_KEY_CFBundleDisplayName: "VISION"
         INFOPLIST_KEY_NSFaceIDUsageDescription: "VISION asks for Face ID before it shows or fills in a saved password."
         INFOPLIST_KEY_NSMicrophoneUsageDescription: "VISION uses the microphone so you can dictate your questions to Ask VISION."
         INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: "VISION turns your speech into text so you can dictate questions to Ask VISION."
